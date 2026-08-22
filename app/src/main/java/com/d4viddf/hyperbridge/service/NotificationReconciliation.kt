@@ -5,7 +5,7 @@ data class ReconciliationInput(
     val currentSourceKeys: Set<String>,
     val trackedBridgeIds: Set<Int>,
     val postedBridgeIds: Set<Int>,
-    val eligibleSourceKeys: Set<String>,
+    val recoverableSourceKeys: Set<String>,
     val mappedSourceKeys: Set<String>
 )
 
@@ -21,6 +21,6 @@ object NotificationReconciliation {
             .filterValues { it !in input.currentSourceKeys }
             .keys,
         orphanBridgeIds = input.postedBridgeIds - input.trackedBridgeIds,
-        missingSourceKeys = input.eligibleSourceKeys - input.mappedSourceKeys
+        missingSourceKeys = input.recoverableSourceKeys - input.mappedSourceKeys
     )
 }

@@ -1,0 +1,81 @@
+package com.d4viddf.hyperbridge.service
+
+data class ExpiredIslandRecord(
+    val logicalId: String,
+    val sourceKey: String,
+    val sourceFingerprint: Int,
+    val expiredAt: Long
+)
+
+enum class ExpiredSourceDecision {
+    NOT_EXPIRED,
+    SUPPRESS_IDENTICAL,
+    NEW_GENERATION
+}
+
+/** Bounded memory of ephemeral source generations that have intentionally reached their TTL. */
+class ExpiredIslandRegistry(
+    private val maxEntries: Int = 256,
+    private val retentionMs: Long = 6 * 60 * 60 * 1000L
+) {
+    private val records = LinkedHashMap<String, ExpiredIslandRecord>(16, 0.75f, true)
+
+    @Synchronized
+    fun record(record: ExpiredIslandRecord) {
+        prune(record.expiredAt)
+        records[record.sourceKey] = record
+        while (records.size > maxEntries) {
+            records.entries.iterator().run {
+                if (hasNext()) {
+                    next()
+                    remove()
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    fun evaluate(sourceKey: String, sourceFingerprint: Int, now: Long): ExpiredSourceDecision {
+        prune(now)
+        val record = records[sourceKey] ?: return ExpiredSourceDecision.NOT_EXPIRED
+        if (record.sourceFingerprint == sourceFingerprint) {
+            return ExpiredSourceDecision.SUPPRESS_IDENTICAL
+        }
+        return ExpiredSourceDecision.NEW_GENERATION
+    }
+
+    /** Clear only after the changed source generation was successfully posted. */
+    @Synchronized
+    fun acceptNewGeneration(sourceKey: String, sourceFingerprint: Int) {
+        val record = records[sourceKey] ?: return
+        if (record.sourceFingerprint != sourceFingerprint) records.remove(sourceKey)
+    }
+
+    @Synchronized
+    fun removeSource(sourceKey: String) {
+        records.remove(sourceKey)
+    }
+
+    @Synchronized
+    fun clear() = records.clear()
+
+    @Synchronized
+    fun size(): Int = records.size
+
+    @Synchronized
+    fun prune(now: Long) {
+        records.entries.removeIf { now - it.value.expiredAt > retentionMs }
+    }
+}
+
+fun sourceGenerationFingerprint(contentHash: Int, sourcePostTime: Long): Int =
+    listOf(contentHash, sourcePostTime).hashCode()
+
+object IslandTimeoutPolicy {
+    fun isCurrent(
+        activeGeneration: Long?,
+        activeBridgeId: Int?,
+        scheduledGeneration: Long,
+        scheduledBridgeId: Int
+    ): Boolean = activeGeneration == scheduledGeneration && activeBridgeId == scheduledBridgeId
+}

@@ -79,8 +79,4 @@ object NotificationLifecyclePolicy {
     ): Boolean {
         return activeSourceKey == removedSourceKey && activeSourcePostTime <= removedSourcePostTime
     }
-
-    fun disableFirstFloat(json: String): String {
-        return json.replace(Regex("\"islandFirstFloat\"\\s*:\\s*true"), "\"islandFirstFloat\":false")
-    }
 }

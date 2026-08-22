@@ -117,16 +117,6 @@ class IslandUpdateResolverTest {
     }
 
     @Test
-    fun durablePayloadClearsOneShotFirstFloat() {
-        val json = """{"islandFirstFloat":true,"enableFloat":true}"""
-
-        assertEquals(
-            """{"islandFirstFloat":false,"enableFloat":true}""",
-            NotificationLifecyclePolicy.disableFirstFloat(json)
-        )
-    }
-
-    @Test
     fun repeatedMessageUpdatesKeepOneBridgeAndNeverReFloat() {
         val first = IslandUpdateResolver.decide(
             logicalId = "conversation-a",
