@@ -802,7 +802,10 @@ class NotificationReaderService : NotificationListenerService() {
         }
 
         val sourceKey = sbn.key
-        val processingGeneration = sourceProcessingGeneration.next(sourceKey)
+        val quality = sourceCandidateQuality(sbn)
+        val processingGeneration = sourceProcessingGeneration.next(sourceKey, quality)
+        logSanitizedWhatsappCallback(sbn, quality, processingGeneration ?: sourceProcessingGeneration.current(sourceKey))
+        if (processingGeneration == null) return
         processingPostTimes[sourceKey] = sbn.postTime
         val job = serviceScope.launch {
             notificationLifecycleMutex.withLock {
@@ -1219,6 +1222,65 @@ class NotificationReaderService : NotificationListenerService() {
             bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
             messages = extractMessageContent(notification),
             isMessageStyle = isMessageStyle
+        )
+    }
+
+    private fun sourceCandidateQuality(sbn: StatusBarNotification): SourceCandidateQuality {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
+        val hasPersistentState = notification.category == Notification.CATEGORY_CALL ||
+                notification.category == Notification.CATEGORY_TRANSPORT ||
+                notification.category == Notification.CATEGORY_NAVIGATION ||
+                notification.category == Notification.CATEGORY_ALARM ||
+                template.contains("MediaStyle") ||
+                extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0 ||
+                extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false) ||
+                extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
+        return NotificationCandidatePolicy.quality(
+            NotificationCandidateSignals(
+                hasTitle = extras.getCharSequence(Notification.EXTRA_TITLE).isMeaningfulFor(sbn.packageName),
+                hasText = extras.getCharSequence(Notification.EXTRA_TEXT).isMeaningfulFor(sbn.packageName),
+                hasBigTitle = extras.getCharSequence(Notification.EXTRA_TITLE_BIG).isMeaningfulFor(sbn.packageName),
+                hasBigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT).isMeaningfulFor(sbn.packageName),
+                hasMessagingStyleMessage = extractMessageContent(notification).any { it.text.isMeaningful() },
+                hasSupportedPersistentState = hasPersistentState
+            )
+        )
+    }
+
+    private fun CharSequence?.isMeaningful(): Boolean = !this?.toString()?.trim().isNullOrEmpty()
+
+    private fun String?.isMeaningful(): Boolean = !this?.trim().isNullOrEmpty()
+
+    private fun CharSequence?.isMeaningfulFor(packageName: String): Boolean {
+        val value = this?.toString()?.trim().orEmpty()
+        return value.isNotEmpty() && !value.equals(packageName, ignoreCase = true)
+    }
+
+    private fun logSanitizedWhatsappCallback(
+        sbn: StatusBarNotification,
+        quality: SourceCandidateQuality,
+        processingGeneration: Long?
+    ) {
+        if (sbn.packageName != "com.whatsapp" && sbn.packageName != "com.whatsapp.w4b") return
+        val notification = sbn.notification
+        val extras = notification.extras
+        val messagesPresent = extractMessageContent(notification).any { it.text.isMeaningful() }
+        Log.d(
+            TAG,
+            "WHATSAPP_CALLBACK pkg=${sbn.packageName} sourceKeyHash=${sbn.key.hashCode()} id=${sbn.id} " +
+                    "tagHash=${sbn.tag?.hashCode()?.toString() ?: "none"} postTime=${sbn.postTime} " +
+                    "category=${notification.category ?: "none"} " +
+                    "template=${extras.getString(Notification.EXTRA_TEMPLATE) ?: "none"} " +
+                    "channelIdHash=${notification.channelId?.hashCode()?.toString() ?: "none"} " +
+                    "groupSummary=${if ((notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) "yes" else "no"} " +
+                    "title=${if (extras.containsKey(Notification.EXTRA_TITLE)) "yes" else "no"} " +
+                    "text=${if (extras.containsKey(Notification.EXTRA_TEXT)) "yes" else "no"} " +
+                    "bigTitle=${if (extras.containsKey(Notification.EXTRA_TITLE_BIG)) "yes" else "no"} " +
+                    "bigText=${if (extras.containsKey(Notification.EXTRA_BIG_TEXT)) "yes" else "no"} " +
+                    "messages=${if (messagesPresent) "yes" else "no"} quality=$quality " +
+                    "generation=${processingGeneration ?: "none"}"
         )
     }
 
@@ -1889,17 +1951,18 @@ class NotificationReaderService : NotificationListenerService() {
         val hasProgress = hasProgressNotification(sbn, title, text)
         val isSpecial = notification.category == Notification.CATEGORY_TRANSPORT || callClassifier.classify(buildCallSignals(sbn)).isCall ||
                 notification.category == Notification.CATEGORY_NAVIGATION || extras.getString(Notification.EXTRA_TEMPLATE)?.contains("MediaStyle") == true
-        if (hasProgress || isSpecial) return false
-        if (title.isEmpty() && text.isEmpty() && !content.hasMessageContent) return true
-        if (title.equals(pkg, ignoreCase = true) || text.equals(pkg, ignoreCase = true)) return true
-        if (globalBlockedTerms.any { "$title $text".contains(it, true) }) return true
-
-        if ((notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) {
-            if (type != NotificationType.MESSAGE) return true
-            if ((text.isEmpty() || title.isEmpty()) && !content.hasMessageContent) return true
-        }
-
-        return false
+        return NotificationAcceptancePolicy.isJunk(
+            NotificationAcceptanceSignals(
+                packageName = pkg,
+                title = title,
+                text = text,
+                hasMessageContent = content.hasMessageContent,
+                hasProgressOrSpecialState = hasProgress || isSpecial,
+                containsBlockedTerm = globalBlockedTerms.any { "$title $text".contains(it, true) },
+                isGroupSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
+                isMessageType = type == NotificationType.MESSAGE
+            )
+        )
     }
 
     private fun getCachedAppLabel(pkg: String): String {
@@ -2050,46 +2113,35 @@ class NotificationReaderService : NotificationListenerService() {
                     } catch (_: Exception) {}
                 }
 
-                // Reconciliation is deliberately for ongoing state only. MESSAGE and STANDARD are
-                // ephemeral presentations: an entry lingering in the shade is not a fresh event,
-                // whether this sync came from the periodic tick, screen-on, or listener reconnect.
-                // Orphan bridge entries are removed first so ongoing recovery cannot duplicate them.
-                val eligibleSources = currentNotifications.filter {
-                    it.packageName != packageName &&
-                            it.packageName in selectedPackages &&
-                            !shouldIgnore(it.packageName)
-                }
-                val mappedSourceKeys = sourceToLogicalKeys.keys + activeIslands.values.map { it.sourceKey }
-                val typedEligibleSources = eligibleSources.map { it to detectNotificationType(it) }
-                val recoverableSources = typedEligibleSources
-                    .filter { (_, type) -> type != NotificationType.MESSAGE && type != NotificationType.STANDARD }
-                    .map { it.first }
-                val reconciliation = NotificationReconciliation.plan(
-                    ReconciliationInput(
-                        activeLogicalSources = activeIslands.mapValues { it.value.sourceKey },
-                        currentSourceKeys = systemNotificationKeys,
-                        trackedBridgeIds = reverseTranslations.keys,
-                        postedBridgeIds = currentNotifications.filter { it.packageName == packageName }.map { it.id }.toSet(),
-                        recoverableSourceKeys = recoverableSources.map { it.key }.toSet(),
-                        mappedSourceKeys = mappedSourceKeys
+                // Full type detection can inspect actions, content and app metadata. Run it only
+                // for discrete recovery passes, never for the ordinary 60-second bookkeeping tick.
+                if (OngoingRecoveryPolicy.shouldClassifyShadeNotifications(refresh)) {
+                    val eligibleSources = currentNotifications.filter {
+                        it.packageName != packageName &&
+                                it.packageName in selectedPackages &&
+                                !shouldIgnore(it.packageName)
+                    }
+                    val mappedSourceKeys = sourceToLogicalKeys.keys + activeIslands.values.map { it.sourceKey }
+                    val recoverableSources = eligibleSources.map { it to detectNotificationType(it) }
+                        .filter { (_, type) -> type != NotificationType.MESSAGE && type != NotificationType.STANDARD }
+                    val reconciliation = NotificationReconciliation.plan(
+                        ReconciliationInput(
+                            activeLogicalSources = activeIslands.mapValues { it.value.sourceKey },
+                            currentSourceKeys = systemNotificationKeys,
+                            trackedBridgeIds = reverseTranslations.keys,
+                            postedBridgeIds = currentNotifications.filter { it.packageName == packageName }.map { it.id }.toSet(),
+                            recoverableSourceKeys = recoverableSources.map { it.first.key }.toSet(),
+                            mappedSourceKeys = mappedSourceKeys
+                        )
                     )
-                )
-                typedEligibleSources
-                    .filter { (source, type) ->
-                        source.key !in mappedSourceKeys &&
-                                (type == NotificationType.MESSAGE || type == NotificationType.STANDARD)
-                    }
-                    .forEach { (source, _) ->
-                        Log.d(TAG, "RECONCILE SKIP_EPHEMERAL sourceKey=${source.key.hashCode()}")
-                        DiagnosticsStore.record("RECONCILE", "skip-ephemeral", source.packageName)
-                    }
-                recoverableSources
-                    .filter { it.key in reconciliation.missingSourceKeys }
-                    .forEach {
-                        Log.d(TAG, "RECONCILE RECOVER_ONGOING sourceKey=${it.key.hashCode()}")
-                        DiagnosticsStore.record(detectNotificationType(it).name, "recover-ongoing", it.packageName)
-                        enqueueSourceNotification(it, recovery = true)
-                    }
+                    recoverableSources
+                        .filter { (source, _) -> source.key in reconciliation.missingSourceKeys }
+                        .forEach { (source, type) ->
+                            Log.d(TAG, "RECONCILE RECOVER_ONGOING sourceKey=${source.key.hashCode()}")
+                            DiagnosticsStore.record(type.name, "recover-ongoing", source.packageName)
+                            enqueueSourceNotification(source, recovery = true)
+                        }
+                }
 
                 val islandPresent = currentNotifications.any {
                     it.packageName == packageName && it.id == PermanentIslandManager.PERMANENT_BRIDGE_ID
