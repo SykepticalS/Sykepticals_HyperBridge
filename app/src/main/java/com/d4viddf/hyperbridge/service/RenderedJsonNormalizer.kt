@@ -6,11 +6,15 @@ import com.google.gson.JsonParser
 /** Removes one-shot presentation metadata before semantic content comparison. */
 object RenderedJsonNormalizer {
     private val presentationOnlyKeys = setOf("islandFirstFloat", "reopen", "presentationReason")
+    private val generatedIdentity = Regex("""(pic_|bridge_|act_)-?\d+""")
 
     fun normalize(json: String?): String? {
         if (json == null) return null
         return try {
-            JsonParser.parseString(json).also(::removePresentationMetadata).toString()
+            JsonParser.parseString(json)
+                .also(::removePresentationMetadata)
+                .toString()
+                .replace(generatedIdentity, "$1<id>")
         } catch (_: Exception) {
             json
         }

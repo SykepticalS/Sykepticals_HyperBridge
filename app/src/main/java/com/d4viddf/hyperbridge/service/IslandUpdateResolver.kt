@@ -1,5 +1,8 @@
 package com.d4viddf.hyperbridge.service
 
+import com.d4viddf.hyperbridge.models.NotificationType
+import java.util.LinkedHashMap
+
 enum class IslandPresentationKind {
     NEW,
     UPDATE,
@@ -36,6 +39,7 @@ object IslandUpdateResolver {
         candidateBridgeId: Int,
         contentHash: Int,
         previous: PreviousIslandPresentation?,
+        notificationType: NotificationType = NotificationType.STANDARD,
         presentationReason: IslandPresentationReason = if (previous == null || previous.logicalId != logicalId) {
             IslandPresentationReason.NEW_EVENT
         } else {
@@ -51,17 +55,92 @@ object IslandUpdateResolver {
             )
         }
 
+        if (previous.contentHash == contentHash) {
+            return IslandUpdateDecision(
+                kind = IslandPresentationKind.UNCHANGED,
+                bridgeId = previous.bridgeId,
+                onlyAlertOnce = true,
+                presentationReason = presentationReason
+            )
+        }
+
+        if (notificationType == NotificationType.MESSAGE) {
+            return IslandUpdateDecision(
+                kind = IslandPresentationKind.NEW,
+                bridgeId = candidateBridgeId,
+                onlyAlertOnce = false,
+                presentationReason = IslandPresentationReason.NEW_EVENT,
+                cancelBeforeNotify = true
+            )
+        }
+
         return IslandUpdateDecision(
-            kind = if (previous.contentHash == contentHash) {
-                IslandPresentationKind.UNCHANGED
-            } else {
-                IslandPresentationKind.UPDATE
-            },
+            kind = IslandPresentationKind.UPDATE,
             bridgeId = previous.bridgeId,
             onlyAlertOnce = true,
             presentationReason = presentationReason
         )
     }
+}
+
+object MessageBridgeIdPolicy {
+    private const val RANGE_START = -1_900_000_000
+    private const val RANGE_SIZE = 800_000_000
+
+    /** Message replacements use a private negative band, away from permanent/widget/watch ids. */
+    fun candidate(logicalId: String, generation: Long, contentHash: Int, attempt: Int = 0): Int {
+        val mixed = listOf(logicalId, generation, contentHash, attempt).hashCode().toLong()
+        return RANGE_START + Math.floorMod(mixed, RANGE_SIZE.toLong()).toInt()
+    }
+}
+
+data class InternalBridgeReplacement(
+    val logicalId: String,
+    val generation: Long,
+    val markedAt: Long
+)
+
+class InternalBridgeReplacementRegistry(
+    private val ttlMs: Long = 10_000L,
+    private val maxEntries: Int = 64
+) {
+    private val entries = LinkedHashMap<Int, InternalBridgeReplacement>()
+
+    @Synchronized
+    fun mark(bridgeId: Int, logicalId: String, generation: Long, now: Long) {
+        prune(now)
+        entries[bridgeId] = InternalBridgeReplacement(logicalId, generation, now)
+        while (entries.size > maxEntries) {
+            entries.remove(entries.entries.first().key)
+        }
+    }
+
+    @Synchronized
+    fun consume(bridgeId: Int, now: Long): InternalBridgeReplacement? {
+        prune(now)
+        return entries.remove(bridgeId)
+    }
+
+    @Synchronized
+    fun prune(now: Long) {
+        entries.entries.removeIf { now - it.value.markedAt > ttlMs }
+    }
+
+    @Synchronized
+    fun clear() = entries.clear()
+}
+
+object PermanentIslandVisibilityPolicy {
+    fun desiredActive(
+        enabled: Boolean,
+        realNotificationCount: Int,
+        hasNativeIsland: Boolean,
+        hideInLandscape: Boolean,
+        isLandscape: Boolean
+    ): Boolean = enabled &&
+            realNotificationCount == 0 &&
+            !hasNativeIsland &&
+            !(hideInLandscape && isLandscape)
 }
 
 object NotificationLifecyclePolicy {

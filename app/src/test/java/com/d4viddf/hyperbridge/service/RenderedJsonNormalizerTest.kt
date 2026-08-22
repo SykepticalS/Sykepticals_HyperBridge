@@ -22,4 +22,12 @@ class RenderedJsonNormalizerTest {
         assertEquals(IslandPresentationKind.UNCHANGED, decision.kind)
         assertEquals(42, decision.bridgeId)
     }
+
+    @Test
+    fun generatedBridgeAndPictureIdsDoNotChangeSemanticPayload() {
+        val first = """{"business":"bridge_42","picture":"pic_42","action":"act_42_0","text":"hello"}"""
+        val replacement = """{"business":"bridge_-1500000000","picture":"pic_-1500000000","action":"act_-1500000000_0","text":"hello"}"""
+
+        assertEquals(RenderedJsonNormalizer.normalize(first), RenderedJsonNormalizer.normalize(replacement))
+    }
 }

@@ -104,6 +104,7 @@ class NotificationReaderService : NotificationListenerService() {
     private val activeIslands = ConcurrentHashMap<String, ActiveIsland>()
     private val activeTranslations = ConcurrentHashMap<String, Int>()
     private val reverseTranslations = ConcurrentHashMap<Int, String>()
+    private val internalBridgeReplacements = InternalBridgeReplacementRegistry()
     private val sourceToLogicalKeys = ConcurrentHashMap<String, String>()
     private val processingJobs = ConcurrentHashMap<String, Job>()
     private val processingPostTimes = ConcurrentHashMap<String, Long>()
@@ -398,6 +399,18 @@ class NotificationReaderService : NotificationListenerService() {
             val notifId = it.id
             val notifKey = it.key
 
+            if (isOurApp) {
+                val replacement = internalBridgeReplacements.consume(notifId, System.currentTimeMillis())
+                if (replacement != null) {
+                    Log.d(
+                        TAG,
+                        "MESSAGE REPLACE removal ignored logicalId=${replacement.logicalId.hashCode()} " +
+                                "oldBridgeId=$notifId generation=${replacement.generation}"
+                    )
+                    return
+                }
+            }
+
             if (intentionallyRemovedKeys.remove(notifKey) != null) {
                 return
             }
@@ -644,20 +657,23 @@ class NotificationReaderService : NotificationListenerService() {
         isLiveUpdate: Boolean,
         sbn: StatusBarNotification? = null,
         title: String = "",
-        text: String = ""
+        text: String = "",
+        isMessageReplacement: Boolean = false
     ) {
-        presentationController.applyPostEffects(
-            NotificationPresentationRequest(
-                originalKey = sourceKey,
-                bridgeId = bridgeId,
-                config = config,
-                type = type,
-                isLiveUpdate = isLiveUpdate,
-                sbn = sbn,
-                title = title,
-                text = text
+        if (!isMessageReplacement) {
+            presentationController.applyPostEffects(
+                NotificationPresentationRequest(
+                    originalKey = sourceKey,
+                    bridgeId = bridgeId,
+                    config = config,
+                    type = type,
+                    isLiveUpdate = isLiveUpdate,
+                    sbn = sbn,
+                    title = title,
+                    text = text
+                )
             )
-        )
+        }
 
         // 2. Schedule timeout ONLY for Live Update notifications
         if (isLiveUpdate) {
@@ -733,6 +749,11 @@ class NotificationReaderService : NotificationListenerService() {
         DiagnosticsStore.setActiveIslands(activeIslands.size)
         val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         logStateChange(isLandscape)
+    }
+
+    private fun suppressPermanentIslandForPost(previous: ActiveIsland?) {
+        val pendingCount = activeIslands.size + activeWidgets.size + if (previous == null) 1 else 0
+        permanentIslandManager.onActiveNotificationsChanged(pendingCount, nativeIslands.isNotEmpty())
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -882,9 +903,15 @@ class NotificationReaderService : NotificationListenerService() {
                 hasPrevious = previous != null,
                 recovery = recovery
             )
-            val isUpdate = !presentationReason.mayAutoExpand
-            val bridgeId = previous?.id ?: effectiveKey.hashCode()
             val generation = (previous?.generation ?: 0L) + 1L
+            // MESSAGE generations are rendered as fresh presentations. An identical repost is
+            // still rejected by the semantic hash before anything is cancelled or posted.
+            val isUpdate = !presentationReason.mayAutoExpand && !(type == NotificationType.MESSAGE && previous != null)
+            val bridgeId = if (type == NotificationType.MESSAGE && previous != null) {
+                allocateMessageBridgeId(effectiveKey, generation, previous.lastContentHash, previous.id)
+            } else {
+                previous?.id ?: effectiveKey.hashCode()
+            }
 
             val appIslandConfig = preferences.getAppIslandConfigSync(sbn.packageName)
             val globalConfig = preferences.getGlobalConfigSync()
@@ -952,6 +979,7 @@ class NotificationReaderService : NotificationListenerService() {
                     candidateBridgeId = bridgeId,
                     contentHash = newContentHash,
                     previous = previous?.toPreviousPresentation(),
+                    notificationType = type,
                     presentationReason = presentationReason
                 )
                 if (decision.kind == IslandPresentationKind.UNCHANGED) {
@@ -963,6 +991,8 @@ class NotificationReaderService : NotificationListenerService() {
 
                 logMessageLifecycle(sbn, type, effectiveKey, decision, previous)
                 if (!sourceProcessingGeneration.isCurrent(rawSbn.key, processingGeneration)) return
+                suppressPermanentIslandForPost(previous)
+                prepareMessageReplacement(effectiveKey, previous, decision, generation)
                 dispatchIslandNotification(decision.bridgeId, notification, decision.onlyAlertOnce)
                 expiredIslands.acceptNewGeneration(
                     sbn.key,
@@ -983,7 +1013,8 @@ class NotificationReaderService : NotificationListenerService() {
                 logUpdateDecision(sbn, type, effectiveKey, decision)
                 handlePostNotificationSideEffects(
                     effectiveKey, sbn.key, decision.bridgeId, generation, finalConfig,
-                    type, true, sbn, effectiveTitle, effectiveText
+                    type, true, sbn, effectiveTitle, effectiveText,
+                    isMessageReplacement = decision.cancelBeforeNotify
                 )
                 return
             }
@@ -1023,6 +1054,7 @@ class NotificationReaderService : NotificationListenerService() {
                 candidateBridgeId = bridgeId,
                 contentHash = newContentHash,
                 previous = previous?.toPreviousPresentation(),
+                notificationType = type,
                 presentationReason = presentationReason
             )
             if (decision.kind == IslandPresentationKind.UNCHANGED) {
@@ -1046,6 +1078,8 @@ class NotificationReaderService : NotificationListenerService() {
 
             logMessageLifecycle(sbn, type, effectiveKey, decision, previous)
             if (!sourceProcessingGeneration.isCurrent(rawSbn.key, processingGeneration)) return
+            suppressPermanentIslandForPost(previous)
+            prepareMessageReplacement(effectiveKey, previous, decision, generation)
             Log.i(TAG, "UPDATE post pkg=${sbn.packageName} type=$type logical=${effectiveKey.hashCode()} id=${decision.bridgeId} kind=${decision.kind}")
             postStandardNotification(
                 sbn, effectiveKey, decision.bridgeId, data, decision.onlyAlertOnce
@@ -1069,10 +1103,14 @@ class NotificationReaderService : NotificationListenerService() {
             logUpdateDecision(sbn, type, effectiveKey, decision)
             handlePostNotificationSideEffects(
                 effectiveKey, sbn.key, decision.bridgeId, generation, finalConfig,
-                type, false, sbn, effectiveTitle, effectiveText
+                type, false, sbn, effectiveTitle, effectiveText,
+                isMessageReplacement = decision.cancelBeforeNotify
             )
 
         } catch (e: Exception) {
+            // Undo any predictive permanent-island suppression if posting failed before the
+            // active maps were committed. Existing active islands still keep it suppressed.
+            updatePermanentIsland()
             Log.e(TAG, "Error processing standard notification", e)
             DiagnosticsStore.record("ERROR", "processing-failed", rawSbn.packageName, e.javaClass.simpleName)
         }
@@ -1398,6 +1436,44 @@ class NotificationReaderService : NotificationListenerService() {
 
     private fun ActiveIsland.toPreviousPresentation(): PreviousIslandPresentation {
         return PreviousIslandPresentation(logicalId, id, lastContentHash)
+    }
+
+    private fun allocateMessageBridgeId(
+        logicalKey: String,
+        generation: Long,
+        contentHashSeed: Int,
+        previousBridgeId: Int
+    ): Int {
+        var attempt = 0
+        while (true) {
+            val candidate = MessageBridgeIdPolicy.candidate(logicalKey, generation, contentHashSeed, attempt++)
+            if (candidate != previousBridgeId && !reverseTranslations.containsKey(candidate)) return candidate
+        }
+    }
+
+    private fun prepareMessageReplacement(
+        logicalKey: String,
+        previous: ActiveIsland?,
+        decision: IslandUpdateDecision,
+        generation: Long
+    ) {
+        if (previous?.type != NotificationType.MESSAGE || !decision.cancelBeforeNotify) return
+
+        timeoutJobs.remove(logicalKey)?.cancel()
+        internalBridgeReplacements.mark(
+            bridgeId = previous.id,
+            logicalId = logicalKey,
+            generation = generation,
+            now = System.currentTimeMillis()
+        )
+        reverseTranslations.remove(previous.id, logicalKey)
+        NotificationManagerCompat.from(this).cancel(previous.id)
+        Log.d(
+            TAG,
+            "MESSAGE REPLACE logicalId=${logicalKey.hashCode()} oldBridgeId=${previous.id} " +
+                    "newBridgeId=${decision.bridgeId} generation=$generation"
+        )
+        DiagnosticsStore.record(NotificationType.MESSAGE.name, "replace", previous.packageName)
     }
 
     private fun ensureIslandCapacity(
@@ -1866,6 +1942,7 @@ class NotificationReaderService : NotificationListenerService() {
         val now = System.currentTimeMillis()
         recentlyRemovedKeys.entries.removeIf { now - it.value.observedAt > 10000 }
         intentionallyRemovedKeys.entries.removeIf { now - it.value > 10_000 }
+        internalBridgeReplacements.prune(now)
         expiredIslands.prune(now)
         callSessionTracker.pruneStale(now)
         sourceToLogicalKeys.entries.removeIf { !activeIslands.containsKey(it.value) }
@@ -2063,6 +2140,7 @@ class NotificationReaderService : NotificationListenerService() {
         sourceToLogicalKeys.clear()
         recentlyRemovedKeys.clear()
         intentionallyRemovedKeys.clear()
+        internalBridgeReplacements.clear()
         nativeIslands.clear()
         widgetUpdateDebouncer.clear()
         dismissedWidgetIds.clear()
