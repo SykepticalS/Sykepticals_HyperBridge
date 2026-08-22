@@ -85,7 +85,9 @@ fun InfoScreen(
     onGlobalSettingsClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onBlocklistClick: () -> Unit,
-    onBackupClick: () -> Unit
+    onBackupClick: () -> Unit,
+    onFloatingSetupClick: () -> Unit,
+    onDiagnosticsClick: () -> Unit
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -173,6 +175,8 @@ fun InfoScreen(
                 title = stringResource(R.string.group_configuration),
                 items = listOf(
                     SettingsItemData(Icons.Default.SettingsSuggest, stringResource(R.string.system_setup), stringResource(R.string.system_setup_subtitle), onSetupClick),
+                    SettingsItemData(Icons.Default.SettingsSuggest, stringResource(R.string.floating_setup_title), stringResource(R.string.floating_setup_settings_subtitle), onFloatingSetupClick),
+                    SettingsItemData(Icons.Default.Code, stringResource(R.string.diagnostics_title), stringResource(R.string.diagnostics_subtitle), onDiagnosticsClick),
                     SettingsItemData(Icons.Default.Tune, stringResource(R.string.island_behavior), stringResource(R.string.limit_strategy), onBehaviorClick),
                     SettingsItemData(Icons.Default.Palette, stringResource(R.string.global_settings), stringResource(R.string.island_appearance), onGlobalSettingsClick),
                     SettingsItemData(Icons.Default.Block, stringResource(R.string.blocked_terms), stringResource(R.string.spoiler_subtitle), onBlocklistClick),

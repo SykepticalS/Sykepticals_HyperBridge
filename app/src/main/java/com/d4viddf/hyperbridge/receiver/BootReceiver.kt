@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.util.Log
 import com.d4viddf.hyperbridge.service.NotificationReaderService
@@ -63,8 +62,8 @@ class BootReceiver : BroadcastReceiver() {
                             val now = System.currentTimeMillis()
                             if (now - lastToggleTime > 5000) {
                                 lastToggleTime = now
-                                Log.d("HyperBridge", "Major trigger: Toggling NLS component state.")
-                                toggleNotificationListener(context)
+                                Log.d("HyperBridge", "Major trigger: Requesting notification-listener rebind.")
+                                requestRebind(context)
                             } else {
                                 Log.d("HyperBridge", "Major trigger: Cooldown active, skipping toggle.")
                             }
@@ -89,22 +88,4 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun toggleNotificationListener(context: Context) {
-        val pm = context.packageManager
-        val componentName = ComponentName(context, NotificationReaderService::class.java)
-
-        // Disable
-        pm.setComponentEnabledSetting(
-            componentName,
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
-
-        // Enable
-        pm.setComponentEnabledSetting(
-            componentName,
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-            PackageManager.DONT_KILL_APP
-        )
-    }
 }

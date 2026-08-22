@@ -185,7 +185,7 @@
     <string name="warning_cn_rom_desc">Votre appareil semble exécuter un firmware chinois. Xiaomi modifie considérablement le système de notification interne sur les ROMs CN. Les fonctionnalités peuvent être instables ou ne pas fonctionner du tout.</string>
     <string name="shizuku_workaround_title">Activer la solution Shizuku</string>
     <string name="shizuku_enable_workaround">Activer le contournement</string>
-    <string name="shizuku_workaround_desc">Si vous êtes sur une ROM CN, vous devez activer la fonction Shizuku pour que les notifications soient activées correctement.</string>
+    <string name="shizuku_workaround_desc">Optional compatibility workaround for existing advanced setups. Normal HyperBridge operation does not require Shizuku; prefer public system settings or the native Live Update engine.</string>
     <string name="shizuku_status_running">Shizuku en cours d\'exécution</string>
     <string name="shizuku_permission_granted">Permission accordée</string>
     <string name="shizuku_permission_denied">Permission refusée</string>

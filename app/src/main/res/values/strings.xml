@@ -231,9 +231,9 @@
     <string name="warning_cn_rom_title">China ROM Detected</string>
     <string name="warning_cn_rom_desc">Your device appears to be running a Chinese firmware. Xiaomi modifies notification internals significantly on CN ROMs. Features might be unstable or not work at all.</string>
 
-    <string name="shizuku_workaround_title">Enable Shizuku Workaround</string>
+    <string name="shizuku_workaround_title">Optional Shizuku workaround</string>
     <string name="shizuku_enable_workaround">Enable Workaround</string>
-    <string name="shizuku_workaround_desc">If you are on a CN ROM, you must enable the Shizuku Workaround for notifications to trigger correctly.</string>
+    <string name="shizuku_workaround_desc">Optional compatibility workaround for existing advanced setups. Normal HyperBridge operation does not require Shizuku; prefer public system settings or the native Live Update engine.</string>
     <string name="shizuku_status_running">Shizuku is running</string>
     <string name="shizuku_permission_granted">Permission Granted</string>
     <string name="shizuku_permission_denied">Permission Denied</string>
@@ -244,6 +244,10 @@
 
     <string name="call_incoming">Incoming Call</string>
     <string name="call_ongoing">Active Call</string>
+    <string name="call_calling">Calling…</string>
+    <string name="call_ringing">Ringing…</string>
+    <string name="call_connecting">Connecting…</string>
+    <string name="call_ended">Call ended</string>
 
     <string-array name="call_keywords_hangup">
         <item>hang</item>
@@ -784,8 +788,8 @@
     <string name="featured_notifications_open_settings">Open System Settings</string>
     <string name="featured_notifications_troubleshoot_title">Why is this not an island?</string>
     <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap "Open System Settings"\n2. Scroll down to "Featured Notifications" (or similar)\n3. Enable it for HyperBridge.</string>
-    <string name="featured_notifications_shizuku_alternative">Alternative: Shizuku Override</string>
-    <string name="featured_notifications_shizuku_desc">If your system doesn\'t show the setting or it\'s restricted, you can bypass the Xiaomi whitelist entirely by setting up Shizuku. HyperBridge will use Shizuku to post islands directly.</string>
+    <string name="featured_notifications_shizuku_alternative">Optional legacy workaround</string>
+    <string name="featured_notifications_shizuku_desc">Shizuku support remains available for existing advanced setups, but it is not required for normal HyperBridge operation. Prefer the public system settings or the native Live Update engine.</string>
 
     <string name="migration_title">HyperBridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
@@ -798,4 +802,48 @@
 
     <string name="perm_display_title">Display over other apps</string>
     <string name="perm_display_onboard_desc">Required to show the custom inline reply overlay.</string>
+
+    <string name="floating_setup_title" translatable="false">Floating notification setup</string>
+    <string name="floating_setup_settings_subtitle" translatable="false">Avoid duplicate native banners for selected apps</string>
+    <string name="floating_setup_intro" translatable="false">HyperBridge presents selected notifications in the Island. The source app still owns sound, vibration, and its useful notification-center entry.</string>
+    <string name="floating_setup_limitation" translatable="false">Android does not let HyperBridge verify or change another app’s floating-notification switch. Open each app’s settings, disable its native floating banner, then confirm the step here.</string>
+    <string name="floating_setup_no_apps" translatable="false">Select apps from the Library first. This setup remains available later.</string>
+    <string name="floating_status_user_confirmed" translatable="false">User confirmed</string>
+    <string name="floating_status_needs_review" translatable="false">Needs review</string>
+    <string name="floating_status_not_required" translatable="false">Not required on this device</string>
+    <string name="floating_disabled_confirmation" translatable="false">I disabled floating notifications for this app</string>
+    <string name="open_notification_settings" translatable="false">Open notification settings</string>
+    <string name="settings_not_available" translatable="false">No compatible settings screen was found</string>
+    <string name="finish_notification_setup" translatable="false">Finish notification setup</string>
+    <string name="finish_notification_setup_desc" translatable="false">Review native floating banners for your selected apps. This is optional and can be revisited.</string>
+    <string name="floating_setup_onboarding_title" translatable="false">Avoid duplicate floating banners</string>
+    <string name="floating_setup_onboarding_desc" translatable="false">After selecting apps, HyperBridge can take you directly to each app’s notification settings. This optional step never requires root, Shizuku, or ADB.</string>
+
+    <string name="diagnostics_title" translatable="false">Diagnostics</string>
+    <string name="diagnostics_subtitle" translatable="false">Permissions, service health, and sanitized recent events</string>
+    <string name="diagnostic_notification_access" translatable="false">Notification access</string>
+    <string name="diagnostic_post_notifications" translatable="false">Post notifications</string>
+    <string name="diagnostic_focus_support" translatable="false">HyperOS Island support</string>
+    <string name="diagnostic_featured_permission" translatable="false">Featured notifications</string>
+    <string name="diagnostic_selected_apps" translatable="false">Selected apps</string>
+    <string name="diagnostic_floating_review" translatable="false">Apps needing floating review</string>
+    <string name="diagnostic_active_islands" translatable="false">Active Islands</string>
+    <string name="diagnostic_last_classification" translatable="false">Last classification</string>
+    <string name="diagnostic_last_call_state" translatable="false">Last call state</string>
+    <string name="diagnostic_service" translatable="false">Service</string>
+    <string name="diagnostic_recent_events" translatable="false">Recent sanitized events</string>
+    <string name="diagnostic_privacy_note" translatable="false">Message text, caller details, and notification content are never stored in this log.</string>
+    <string name="copy_sanitized_diagnostics" translatable="false">Copy sanitized diagnostics</string>
+    <string name="diagnostic_export_header" translatable="false">HyperBridge sanitized diagnostics</string>
+    <string name="connected" translatable="false">Connected</string>
+    <string name="disconnected" translatable="false">Disconnected</string>
+    <string name="granted" translatable="false">Granted</string>
+    <string name="not_granted" translatable="false">Not granted</string>
+
+    <string name="channel_active_islands_desc" translatable="false">Silent visual Island translations; source apps retain alert ownership</string>
+    <string name="channel_widgets" translatable="false">Widgets</string>
+    <string name="channel_widgets_desc" translatable="false">Silent Island widget overlays</string>
+    <string name="channel_live_updates_desc" translatable="false">Silent native Live Update translations</string>
+    <string name="channel_watch_relay" translatable="false">Watch relay</string>
+    <string name="channel_watch_relay_desc" translatable="false">Short-lived silent compatibility relays</string>
 </resources>

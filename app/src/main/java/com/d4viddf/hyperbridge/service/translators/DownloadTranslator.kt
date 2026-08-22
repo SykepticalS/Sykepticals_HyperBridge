@@ -38,13 +38,13 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
 
         val customTick = getThemeBitmap(theme, "tick_icon")
 
-        val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         builder.setShowNotification(config.isShowShade ?: true)
         
         val isFloatEnabled = config.isFloat ?: false
-        builder.setEnableFloat(isFloatEnabled && !isUpdate)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
+        builder.setEnableFloat(isFloatEnabled)
+        builder.setIslandFirstFloat(!isUpdate && isFloatEnabled)
 
         val extras = sbn.notification.extras
         val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
@@ -65,7 +65,7 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         val tickKey = "${picKey}_tick"
         val hiddenKey = "hidden_pixel"
 
-        builder.addPicture(resolveIcon(sbn, picKey))
+        builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = true))
         builder.addPicture(getTransparentPicture(hiddenKey))
 
         if (isFinished) {

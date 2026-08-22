@@ -15,7 +15,9 @@ class RulesEngine {
     private val TAG = "HyperRules"
 
     // [New] Cache regex patterns to avoid compiling them 100 times a second
-    private val regexCache = mutableMapOf<String, Regex>()
+    private val regexCache = object : LinkedHashMap<String, Regex>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Regex>?): Boolean = size > 128
+    }
 
     /**
      * Main Entry Point.
@@ -80,8 +82,8 @@ class RulesEngine {
 
     private fun safeRegexMatch(pattern: String, input: String): Boolean {
         return try {
-            val regex = regexCache.getOrPut(pattern) {
-                Regex(pattern, RegexOption.IGNORE_CASE)
+            val regex = synchronized(regexCache) {
+                regexCache.getOrPut(pattern) { Regex(pattern, RegexOption.IGNORE_CASE) }
             }
             regex.containsMatchIn(input)
         } catch (e: Exception) {

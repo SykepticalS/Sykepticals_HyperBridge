@@ -17,47 +17,59 @@ import com.d4viddf.hyperbridge.models.WidgetRenderMode
 import com.d4viddf.hyperbridge.models.WidgetSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
 private val Context.legacyDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class AppPreferences(context: Context) {
 
-    private val dao = AppDatabase.getDatabase(context).settingsDao()
-    private val legacyDataStore = context.applicationContext.legacyDataStore
+    private val appContext = context.applicationContext
+    private val dao = AppDatabase.getDatabase(appContext).settingsDao()
+    private val legacyDataStore = appContext.legacyDataStore
 
-    private val memoryCache = ConcurrentHashMap<String, String>()
+    private val memoryCache: ConcurrentHashMap<String, String>
+        get() = sharedMemoryCache
+
+    companion object {
+        private val sharedMemoryCache = ConcurrentHashMap<String, String>()
+        private val sharedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val cacheObserverLock = Any()
+        private val migrationMutex = Mutex()
+        @Volatile private var cacheObserverStarted = false
+    }
 
     init {
-        // --- MEMORY CACHE LOGIC ---
-        CoroutineScope(Dispatchers.IO).launch {
-            dao.getAllFlow().collect { list ->
-                val newCache = ConcurrentHashMap<String, String>()
-                list.forEach { newCache[it.key] = it.value }
-                memoryCache.clear()
-                memoryCache.putAll(newCache)
+        // One application-scoped observer backs every lightweight AppPreferences facade.
+        synchronized(cacheObserverLock) {
+            if (!cacheObserverStarted) {
+                cacheObserverStarted = true
+                sharedScope.launch {
+                    dao.getAllFlow().collect { list ->
+                        val newCache = ConcurrentHashMap<String, String>()
+                        list.forEach { newCache[it.key] = it.value }
+                        sharedMemoryCache.clear()
+                        sharedMemoryCache.putAll(newCache)
+                    }
+                }
             }
         }
 
         // --- MIGRATION LOGIC ---
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
+        sharedScope.launch {
+            migrationMutex.withLock {
+                try {
                 // Wait for user unlock before attempting to migrate from legacy DataStore (CE storage)
-                val userManager = context.getSystemService(Context.USER_SERVICE) as android.os.UserManager
+                val userManager = appContext.getSystemService(Context.USER_SERVICE) as android.os.UserManager
                 if (!userManager.isUserUnlocked) {
-                    return@launch 
-                }
-
-                // Force Onboarding reset for new permissions
-                val lastResetVersion = dao.getSetting("onboarding_reset_version")?.toIntOrNull() ?: 0
-                if (lastResetVersion < 19) {
-                    dao.insert(AppSetting(SettingsKeys.SETUP_COMPLETE, "false"))
-                    dao.insert(AppSetting("onboarding_reset_version", "19"))
+                    return@withLock
                 }
 
                 val isMigrated = dao.getSetting(SettingsKeys.MIGRATION_COMPLETE) == "true"
@@ -74,6 +86,36 @@ class AppPreferences(context: Context) {
                         legacyDataStore.edit { it.clear() }
                     }
                     dao.insert(AppSetting(SettingsKeys.MIGRATION_COMPLETE, "true"))
+                }
+
+                // Pass 1/2 builds could force established users back through the full onboarding.
+                // Repair only profiles that clearly pre-date that reset; fresh, unfinished installs
+                // must remain in onboarding.
+                val resetVersion = dao.getSetting("onboarding_reset_version")?.toIntOrNull() ?: 0
+                val repairComplete = dao.getSetting("final_pass_onboarding_repair") == "true"
+                if (resetVersion == 19 && !repairComplete) {
+                    val hasExistingProfile = !dao.getSetting(SettingsKeys.ALLOWED_PACKAGES).isNullOrBlank() ||
+                            (dao.getSetting(SettingsKeys.LAST_VERSION)?.toIntOrNull() ?: 0) > 0
+                    if (OnboardingMigrationPolicy.shouldRestoreCompletedSetup(
+                            resetVersion = resetVersion,
+                            repairComplete = repairComplete,
+                            setupComplete = dao.getSetting(SettingsKeys.SETUP_COMPLETE).toBoolean(false),
+                            hasExistingProfile = hasExistingProfile
+                        )) {
+                        dao.insert(AppSetting(SettingsKeys.SETUP_COMPLETE, "true"))
+                    }
+                    dao.insert(AppSetting("final_pass_onboarding_repair", "true"))
+                }
+
+                if (dao.getSetting(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING) == null) {
+                    val setupComplete = dao.getSetting(SettingsKeys.SETUP_COMPLETE).toBoolean(false)
+                    val hasSelectedApps = !dao.getSetting(SettingsKeys.ALLOWED_PACKAGES).isNullOrBlank()
+                    dao.insert(
+                        AppSetting(
+                            SettingsKeys.FLOATING_SETUP_NOTICE_PENDING,
+                            (setupComplete && hasSelectedApps).toString()
+                        )
+                    )
                 }
 
                 // Grant DOWNLOAD notification type if PROGRESS was previously enabled
@@ -133,8 +175,9 @@ class AppPreferences(context: Context) {
 
                     dao.insert(AppSetting("download_message_migration_complete", "true"))
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+                } catch (e: Exception) {
+                    android.util.Log.e("AppPreferences", "Preference migration failed", e)
+                }
             }
         }
     }
@@ -168,11 +211,29 @@ class AppPreferences(context: Context) {
     val featuredPermissionWarningFlow: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.FEATURED_PERMISSION_WARNING).map { it.toBoolean(false) }
     suspend fun setFeaturedPermissionWarning(show: Boolean) = save(SettingsKeys.FEATURED_PERMISSION_WARNING, show.toString())
 
+    val floatingSetupNoticePendingFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING).map { it.toBoolean(false) }
+
+    val floatingSetupConfirmedPackagesFlow: Flow<Set<String>> =
+        dao.getSettingFlow(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).map { it.deserializeSet() }
+
+    suspend fun setFloatingSetupNoticePending(show: Boolean) =
+        save(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING, show.toString())
+
+    suspend fun setFloatingSetupConfirmed(packageName: String, confirmed: Boolean) {
+        val current = dao.getSetting(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).deserializeSet()
+        val updated = if (confirmed) current + packageName else current - packageName
+        save(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES, updated.serialize())
+    }
+
     suspend fun toggleApp(packageName: String, isEnabled: Boolean) {
         val currentString = dao.getSetting(SettingsKeys.ALLOWED_PACKAGES)
         val currentSet = currentString.deserializeSet()
         val newSet = if (isEnabled) currentSet + packageName else currentSet - packageName
         save(SettingsKeys.ALLOWED_PACKAGES, newSet.serialize())
+        if (isEnabled && packageName !in dao.getSetting(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).deserializeSet()) {
+            save(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING, "true")
+        }
     }
 
     // ========================================================================

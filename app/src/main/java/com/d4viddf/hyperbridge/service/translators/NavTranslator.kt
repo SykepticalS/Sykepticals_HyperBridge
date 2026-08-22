@@ -29,7 +29,8 @@ class NavTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(co
         config: IslandConfig,
         leftLayout: NavContent,
         rightLayout: NavContent,
-        theme: HyperTheme?
+        theme: HyperTheme?,
+        isUpdate: Boolean
     ): HyperIslandData {
 
         // 1. Resolve Theme Colors
@@ -79,10 +80,10 @@ class NavTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(co
         if (instruction.isEmpty()) instruction = context.getString(R.string.maps_title)
 
         // 4. Build Notification
-        val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", instruction)
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), instruction)
         builder.setEnableFloat(config.isFloat ?: false)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
+        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
         val hiddenKey = "hidden_pixel"
         val navStartKey = "nav_start_icon"

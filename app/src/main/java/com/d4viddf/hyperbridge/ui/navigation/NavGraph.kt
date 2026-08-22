@@ -14,6 +14,8 @@ import com.d4viddf.hyperbridge.ui.screens.settings.BackupSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.BlocklistAppListScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ChangelogHistoryScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.EngineSettingsScreen
+import com.d4viddf.hyperbridge.ui.screens.settings.DiagnosticsScreen
+import com.d4viddf.hyperbridge.ui.screens.settings.FloatingNotificationSetupScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalBlocklistScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ImportPreviewScreen
@@ -48,7 +50,8 @@ fun mainNavGraph(
     entry<Screen.Home> {
         HomeScreen(
             onSettingsClick = { navigator.navigate(Screen.Info) },
-            onNavConfigClick = { pkg -> navigator.navigate(Screen.NavCustomization(pkg)) }
+            onNavConfigClick = { pkg -> navigator.navigate(Screen.NavCustomization(pkg)) },
+            onFloatingSetupClick = { navigator.navigate(Screen.FloatingSetup) }
         )
     }
     entry<Screen.Info> {
@@ -60,7 +63,9 @@ fun mainNavGraph(
             onGlobalSettingsClick = { navigator.navigate(Screen.GlobalSettings) },
             onHistoryClick = { navigator.navigate(Screen.History) },
             onBlocklistClick = { navigator.navigate(Screen.GlobalBlocklist) },
-            onBackupClick = { navigator.navigate(Screen.Backup) }
+            onBackupClick = { navigator.navigate(Screen.Backup) },
+            onFloatingSetupClick = { navigator.navigate(Screen.FloatingSetup) },
+            onDiagnosticsClick = { navigator.navigate(Screen.Diagnostics) }
         )
     }
     entry<Screen.GlobalSettings> {
@@ -94,6 +99,12 @@ fun mainNavGraph(
     }
     entry<Screen.Setup> {
         SetupHealthScreen(onBack = { navigator.goBack() })
+    }
+    entry<Screen.FloatingSetup> {
+        FloatingNotificationSetupScreen(onBack = { navigator.goBack() })
+    }
+    entry<Screen.Diagnostics> {
+        DiagnosticsScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.Licenses> {
         LicensesScreen(onBack = { navigator.goBack() })

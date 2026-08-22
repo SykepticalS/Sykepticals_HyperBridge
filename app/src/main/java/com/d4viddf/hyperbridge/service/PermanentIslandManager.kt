@@ -1,14 +1,14 @@
 package com.d4viddf.hyperbridge.service
 
-import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
-import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.util.ShizukuManager
+import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
 import io.github.d4viddf.hyperisland_kit.models.TextInfo
@@ -159,8 +159,9 @@ class PermanentIslandManager(
             }
         }
     }
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    @SuppressLint("MissingPermission") // Guarded below before posting.
     private fun dispatchPermanentIsland() {
+        if (!isPostNotificationsEnabled(context)) return
         try {
             Log.d(TAG, "Dispatching permanent island")
             
@@ -184,12 +185,16 @@ class PermanentIslandManager(
 
             val data = HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
 
-            val notifBuilder = NotificationCompat.Builder(context, "hyper_bridge_notification_channel")
+            val notifBuilder = NotificationCompat.Builder(context, BridgeNotificationChannels.ACTIVE)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("Permanent Island")
                 .setContentText("Empty Island")
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setDefaults(0)
+                .setSound(null)
+                .setVibrate(null)
 
             notifBuilder.addExtras(data.resources)
 

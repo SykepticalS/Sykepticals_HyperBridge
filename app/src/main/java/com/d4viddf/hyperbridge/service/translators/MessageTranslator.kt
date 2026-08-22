@@ -26,7 +26,8 @@ class MessageTranslator(
         text: String,
         picKey: String,
         config: IslandConfig,
-        theme: HyperTheme?
+        theme: HyperTheme?,
+        isUpdate: Boolean
     ): HyperIslandData {
         val extras = sbn.notification.extras
         val template = extras.getString(Notification.EXTRA_TEMPLATE) ?: ""
@@ -44,14 +45,14 @@ class MessageTranslator(
 
         val highlightColor = resolveColor(theme, sbn.packageName, "#FFFFFF")
 
-        val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         // --- CONFIGURATION ---
         builder.setEnableFloat(config.isFloat ?: false)
         builder.setIslandConfig(timeout = config.timeout , dismissible = true, highlightColor = highlightColor, expandedTimeMs = config.floatTimeout)
         builder.setShowNotification(config.isShowShade ?: false)
-        builder.setReopen(true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
+        if (!isUpdate) builder.setReopen(true)
+        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
         val hiddenKey = "hidden_pixel"
         builder.addPicture(resolveIcon(sbn, picKey))

@@ -10,6 +10,8 @@ import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.NavContent
 import com.d4viddf.hyperbridge.models.NotificationType
+import com.d4viddf.hyperbridge.service.call.CallSession
+import com.d4viddf.hyperbridge.service.call.CallState
 
 class LiveUpdateTranslator(
     context: Context,
@@ -21,13 +23,26 @@ class LiveUpdateTranslator(
         channelId: String,
         type: NotificationType,
         navRight: NavContent? = null,
-        config: com.d4viddf.hyperbridge.models.IslandConfig? = null
+        config: com.d4viddf.hyperbridge.models.IslandConfig? = null,
+        callSession: CallSession? = null
     ): NotificationCompat.Builder {
         val original = sbn?.notification
         val extras = original?.extras
 
         val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val sourceText = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val text = if (type == NotificationType.CALL && callSession != null) {
+            when (callSession.state) {
+                CallState.INCOMING_RINGING -> context.getString(R.string.call_incoming)
+                CallState.OUTGOING_CALLING -> context.getString(R.string.call_calling)
+                CallState.OUTGOING_RINGING -> context.getString(R.string.call_ringing)
+                CallState.CONNECTING -> context.getString(R.string.call_connecting)
+                CallState.ACTIVE -> context.getString(R.string.call_ongoing)
+                CallState.ENDED -> context.getString(R.string.call_ended)
+            }
+        } else {
+            sourceText
+        }
 
         val progressMax = extras?.getInt(Notification.EXTRA_PROGRESS_MAX, 0) ?: 0
         val progress = extras?.getInt(Notification.EXTRA_PROGRESS, 0) ?: 0
@@ -40,6 +55,14 @@ class LiveUpdateTranslator(
             .setCategory(original?.category)
 
         original?.contentIntent?.let { builder.setContentIntent(it) }
+
+        if (type == NotificationType.CALL && callSession != null) {
+            val connectedAt = callSession.connectedAt
+            val isActive = callSession.state == CallState.ACTIVE && connectedAt != null
+            builder.setShowWhen(isActive)
+            builder.setUsesChronometer(isActive)
+            if (isActive) builder.setWhen(connectedAt)
+        }
 
         // --- THEME COLOR & ICON INJECTION ---
         val theme = repository?.activeTheme?.value

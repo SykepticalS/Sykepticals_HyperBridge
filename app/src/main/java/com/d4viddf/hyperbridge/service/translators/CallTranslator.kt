@@ -12,6 +12,10 @@ import com.d4viddf.hyperbridge.models.BridgeAction
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
+import com.d4viddf.hyperbridge.service.call.CallActionSignal
+import com.d4viddf.hyperbridge.service.call.CallNotificationClassifier
+import com.d4viddf.hyperbridge.service.call.CallSession
+import com.d4viddf.hyperbridge.service.call.CallState
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.HyperPicture
 import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
@@ -28,51 +32,55 @@ class CallTranslator(
     private val hangUpKeywords by lazy { context.resources.getStringArray(R.array.call_keywords_hangup).toList() }
     private val answerKeywords by lazy { context.resources.getStringArray(R.array.call_keywords_answer).toList() }
     private val speakerKeywords by lazy { context.resources.getStringArray(R.array.call_keywords_speaker).toList() }
+    private val classifier by lazy {
+        CallNotificationClassifier(
+            answerKeywords = answerKeywords,
+            declineKeywords = hangUpKeywords,
+            hangUpKeywords = hangUpKeywords,
+            speakerKeywords = speakerKeywords
+        )
+    }
 
     fun translate(
         sbn: StatusBarNotification,
         picKey: String,
         config: IslandConfig,
-        theme: HyperTheme?
+        theme: HyperTheme?,
+        session: CallSession,
+        isUpdate: Boolean
     ): HyperIslandData {
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "Call"
-
-        val isChronometerShown = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)
-        val baseTime = sbn.notification.`when`
         val now = System.currentTimeMillis()
 
-        val actions = sbn.notification.actions ?: emptyArray()
-        val hasAnswerAction = actions.any { action ->
-            val txt = action.title.toString().lowercase()
-            answerKeywords.any { k -> txt.contains(k) }
-        }
+        val isIncoming = session.state == CallState.INCOMING_RINGING
 
-        val isIncoming = !isChronometerShown && hasAnswerAction
-
-        val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
         builder.setEnableFloat(config.isFloat ?: false)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
+        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
         val hiddenKey = "hidden_pixel"
-        builder.addPicture(resolveIcon(sbn, picKey))
+        builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = true))
         builder.addPicture(getTransparentPicture(hiddenKey))
 
-        val bridgeActions = getFilteredCallActions(sbn, isIncoming, theme)
+        val bridgeActions = getFilteredCallActions(sbn, picKey, isIncoming, theme)
         val actionKeys = bridgeActions.map { it.action.key }
 
         val rightText: String
         var timerInfo: TimerInfo? = null
 
-        if (isIncoming) {
-            rightText = context.getString(R.string.call_incoming)
-        } else {
-            rightText = context.getString(R.string.call_ongoing)
-            if (baseTime > 0) {
-                val duration = if (now > baseTime) now - baseTime else 0L
-                timerInfo = TimerInfo(1, baseTime, duration, now)
-            }
+        rightText = when (session.state) {
+            CallState.INCOMING_RINGING -> context.getString(R.string.call_incoming)
+            CallState.OUTGOING_CALLING -> context.getString(R.string.call_calling)
+            CallState.OUTGOING_RINGING -> context.getString(R.string.call_ringing)
+            CallState.CONNECTING -> context.getString(R.string.call_connecting)
+            CallState.ACTIVE -> context.getString(R.string.call_ongoing)
+            CallState.ENDED -> context.getString(R.string.call_ended)
+        }
+        if (session.state == CallState.ACTIVE && session.connectedAt != null) {
+            val duration = (now - session.connectedAt).coerceAtLeast(0L)
+            timerInfo = TimerInfo(1, session.connectedAt, duration, now)
         }
 
         bridgeActions.forEach {
@@ -107,8 +115,8 @@ class CallTranslator(
                 )
             )
         } else {
-            if (baseTime > 0) {
-                builder.setBigIslandCountUp(baseTime, picKey)
+            if (session.state == CallState.ACTIVE && session.connectedAt != null) {
+                builder.setBigIslandCountUp(session.connectedAt, picKey)
             } else {
                 builder.setBigIslandInfo(
                     left = ImageTextInfoLeft(
@@ -129,6 +137,7 @@ class CallTranslator(
 
     private fun getFilteredCallActions(
         sbn: StatusBarNotification,
+        picKey: String,
         isIncoming: Boolean,
         theme: HyperTheme?
     ): List<BridgeAction> {
@@ -152,10 +161,19 @@ class CallTranslator(
         var speakerIndex = -1
 
         rawActions.forEachIndexed { index, action ->
-            val txt = action.title.toString().lowercase()
-            if (answerKeywords.any { txt.contains(it) }) answerIndex = index
-            else if (hangUpKeywords.any { txt.contains(it) }) hangUpIndex = index
-            else if (speakerKeywords.any { txt.contains(it) }) speakerIndex = index
+            val role = classifier.roleForAction(
+                CallActionSignal(
+                    title = action.title?.toString().orEmpty(),
+                    semanticAction = action.semanticAction,
+                    hasPendingIntent = action.actionIntent != null
+                )
+            )
+            when (role) {
+                com.d4viddf.hyperbridge.service.call.CallActionRole.ANSWER -> answerIndex = index
+                com.d4viddf.hyperbridge.service.call.CallActionRole.DECLINE_OR_HANG_UP -> hangUpIndex = index
+                com.d4viddf.hyperbridge.service.call.CallActionRole.SPEAKER -> speakerIndex = index
+                com.d4viddf.hyperbridge.service.call.CallActionRole.OTHER -> Unit
+            }
         }
 
         val indicesToShow = mutableListOf<Int>()
@@ -174,7 +192,7 @@ class CallTranslator(
 
         indicesToShow.take(2).forEach { index ->
             val action = rawActions[index]
-            val uniqueKey = "act_${sbn.key.hashCode()}_$index"
+            val uniqueKey = "act_${picKey.removePrefix("pic_")}_$index"
             val isHangUp = index == hangUpIndex
             val isAnswer = index == answerIndex
 

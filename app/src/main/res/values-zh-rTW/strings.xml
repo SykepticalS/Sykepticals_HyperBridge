@@ -185,7 +185,7 @@
     <string name="warning_cn_rom_desc">您的裝置似乎正在執行中國版韌體。小米在中國版 ROM 上大幅修改了通知系統底層，功能可能不穩定或無法運作。</string>
     <string name="shizuku_workaround_title">啟用 Shizuku 用法</string>
     <string name="shizuku_enable_workaround">啟用解決方法</string>
-    <string name="shizuku_workaround_desc">如果您使用的是中國版 ROM，則必須啟用 Shizuku 方法才能正確觸發通知。</string>
+    <string name="shizuku_workaround_desc">Optional compatibility workaround for existing advanced setups. Normal HyperBridge operation does not require Shizuku; prefer public system settings or the native Live Update engine.</string>
     <string name="shizuku_status_running">Shizuku 正在運作</string>
     <string name="shizuku_permission_granted">✅ 已授予權限</string>
     <string name="shizuku_permission_denied">權限被拒絕</string>

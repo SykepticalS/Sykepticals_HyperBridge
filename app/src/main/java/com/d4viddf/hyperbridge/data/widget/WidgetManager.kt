@@ -59,6 +59,7 @@ object WidgetManager {
     fun deleteId(ctx: Context, widgetId: Int) {
         init(ctx)
         appWidgetHost?.deleteAppWidgetId(widgetId)
+        HyperAppWidgetHostView.cachedRemoteViews.remove(widgetId)
     }
 
     // [FIX] Return Boolean so UI knows if binding succeeded or needs permission intent

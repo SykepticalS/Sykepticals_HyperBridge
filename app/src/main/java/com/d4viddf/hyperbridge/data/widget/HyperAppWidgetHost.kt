@@ -5,6 +5,8 @@ import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.widget.RemoteViews
+import java.util.Collections
+import java.util.LinkedHashMap
 
 class HyperAppWidgetHost(context: Context, hostId: Int) : AppWidgetHost(context, hostId) {
     override fun onCreateView(
@@ -19,7 +21,11 @@ class HyperAppWidgetHost(context: Context, hostId: Int) : AppWidgetHost(context,
 class HyperAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
 
     companion object {
-        val cachedRemoteViews = mutableMapOf<Int, RemoteViews>()
+        val cachedRemoteViews: MutableMap<Int, RemoteViews> = Collections.synchronizedMap(
+            object : LinkedHashMap<Int, RemoteViews>(16, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, RemoteViews>?): Boolean = size > 32
+            }
+        )
     }
 
     override fun updateAppWidget(remoteViews: RemoteViews?) {

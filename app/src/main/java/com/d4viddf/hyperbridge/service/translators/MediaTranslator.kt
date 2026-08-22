@@ -25,7 +25,7 @@ import androidx.core.graphics.createBitmap
 
 class MediaTranslator(context: Context) : BaseTranslator(context) {
 
-    fun translate(sbn: StatusBarNotification, picKey: String, config: IslandConfig): HyperIslandData {
+    fun translate(sbn: StatusBarNotification, picKey: String, config: IslandConfig, isUpdate: Boolean): HyperIslandData {
         val extras = sbn.notification.extras
 
         // --- 1. Metadata ---
@@ -74,13 +74,13 @@ class MediaTranslator(context: Context) : BaseTranslator(context) {
             albumArt = getRoundedCornerBitmap(albumArt, 32f)
         }
 
-        val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         val finalTimeout = config.timeout ?: 0
         builder.setEnableFloat(config.isFloat ?: false)
         builder.setIslandConfig(timeout = finalTimeout)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
+        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
 
         // --- RESOURCES ---
@@ -90,7 +90,7 @@ class MediaTranslator(context: Context) : BaseTranslator(context) {
             builder.addPicture(HyperPicture(artKey, albumArt))
             builder.addPicture(HyperPicture(picKey, albumArt))
         } else {
-            builder.addPicture(resolveIcon(sbn, picKey))
+            builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = true))
             val appIcon = getAppIcon(sbn.packageName) ?: createFallbackBitmap()
             val roundedAppIcon = getRoundedCornerBitmap(appIcon, 32f)
             builder.addPicture(HyperPicture(artKey, roundedAppIcon))
@@ -153,7 +153,8 @@ class MediaTranslator(context: Context) : BaseTranslator(context) {
             )
         )
         builder.setIslandConfig(highlightColor = containerColorHex, expandedTimeMs = config.floatTimeout)
-        builder.setHideDeco(true).setReopen(true).setShowSmallIcon(true)
+        builder.setHideDeco(true).setShowSmallIcon(true)
+        if (!isUpdate) builder.setReopen(true)
 
         return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
     }

@@ -31,7 +31,7 @@ class WidgetOverlayService : Service() {
 
     companion object {
         const val TAG = "HyperWidgetService"
-        const val WIDGET_CHANNEL_ID = "hyper_bridge_widget_channel"
+        const val WIDGET_CHANNEL_ID = BridgeNotificationChannels.WIDGET
         const val ACTION_TEST_WIDGET = "ACTION_TEST_WIDGET"
         const val ACTION_START_MONITORING = "ACTION_START_MONITORING"
         const val ACTION_KILL_ALL_WIDGETS = "ACTION_KILL_ALL_WIDGETS"
@@ -158,6 +158,10 @@ class WidgetOverlayService : Service() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Widget Overlay")
             .setPriority(NotificationCompat.PRIORITY_LOW) // Low priority = no sound/peek
+            .setOnlyAlertOnce(true)
+            .setDefaults(0)
+            .setSound(null)
+            .setVibrate(null)
             .addExtras(data.resources)
 
         // Click Intent -> Open App
@@ -179,10 +183,10 @@ class WidgetOverlayService : Service() {
     private fun createWidgetChannel() {
         val channel = NotificationChannel(
             WIDGET_CHANNEL_ID,
-            "HyperBridge Widgets", // Separate Name in System Settings
+            getString(R.string.channel_widgets),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Overlay notifications for Widgets"
+            description = getString(R.string.channel_widgets_desc)
             setSound(null, null)
             enableVibration(false)
             setShowBadge(false)
