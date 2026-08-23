@@ -13,11 +13,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SykepticalS/HyperBridge-master/releases"><img src="https://img.shields.io/badge/download-GitHub_Releases-181717?style=for-the-badge&amp;logo=github" alt="Download from GitHub Releases" /></a>
+  <a href="https://github.com/SykepticalS/Sykepticals_HyperBridge/releases"><img src="https://img.shields.io/badge/download-GitHub_Releases-181717?style=for-the-badge&amp;logo=github" alt="Download from GitHub Releases" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.8--sykeptical-blue?style=for-the-badge&logo=github" alt="Version 0.5.8-sykeptical" />
+  <img src="https://img.shields.io/badge/version-0.5.9--sykeptical-blue?style=for-the-badge&logo=github" alt="Version 0.5.9-sykeptical" />
   <img src="https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Material%20Design-757575?style=for-the-badge&logo=material-design&logoColor=white" alt="Material Design" />
@@ -36,7 +36,7 @@ The project remains built on the original developer's work. This fork is indepen
 
 | | Sykeptical Edition |
 |---|---|
-| Version | `0.5.8-sykeptical` |
+| Version | `0.5.9-sykeptical` |
 | Android package | `com.sykeptical.hyperbridge` |
 | Theme intent | `com.sykeptical.hyperbridge.APPLY_THEME` |
 | Maintainer | [Sykeptical](https://github.com/SykepticalS) |
@@ -47,6 +47,7 @@ Because the package name differs from upstream HyperBridge, Android treats this 
 
 The current fork includes the following work on top of upstream `v0.5.6`:
 
+* **No duplicate re-expansion:** Same-event notification reposts now retain their logical message identity across refreshed post times, source-key replacements, and rendering-only changes, preventing an already-collapsed Island from floating again.
 * **Accurate auto-hide durations:** Standard and message islands now honor the effective global or per-app duration instead of being removed after a hard-coded minute; disabling auto-hide leaves them untimed.
 * **Reliable notification lifecycle:** Reworked notification intake, reconciliation, expiry, and recovery to reduce missing, duplicated, stale, or reappearing islands.
 * **Messaging deduplication:** Added content-aware message fingerprinting and grouping for rapid WhatsApp and other chat updates.
@@ -110,7 +111,7 @@ These changes are designed to reduce redundant allocations, database access, ren
 
 HyperBridge supports an open theming standard (`.hbr` packages). You can create themes and distribute them, or integrate an "Apply Theme" button directly into your own app (Launcher, Icon Pack, etc.).
 
-* **Documentation:** [Full Guide on Creating & Distributing Themes](https://github.com/SykepticalS/HyperBridge-master/discussions/78)
+* **Documentation:** [Full Guide on Creating & Distributing Themes](https://github.com/SykepticalS/Sykepticals_HyperBridge/discussions/78)
 * **Intent API:** Send themes programmatically using `com.sykeptical.hyperbridge.APPLY_THEME`.
 
 ## 🌐 Supported Languages
@@ -154,7 +155,7 @@ Requirements: Android 15 or newer (`minSdk 35`) on a compatible Xiaomi, POCO, or
 
 ### Option 1: Release APK (Recommended)
 
-1. Download the latest `0.5.8-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/HyperBridge-master/releases).
+1. Download the latest `0.5.9-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/Sykepticals_HyperBridge/releases).
 2. Install it on your Xiaomi, POCO, or Redmi device.
 
 ### Option 2: Build from source
@@ -201,5 +202,5 @@ Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 
 **Sykeptical**
 * GitHub: [@SykepticalS](https://github.com/SykepticalS)
-* Repository: [SykepticalS/HyperBridge-master](https://github.com/SykepticalS/HyperBridge-master)
+* Repository: [SykepticalS/Sykepticals_HyperBridge](https://github.com/SykepticalS/Sykepticals_HyperBridge)
 * Original developer support: [GitHub Sponsors](https://github.com/sponsors/D4vidDf)

@@ -99,7 +99,7 @@ class MessageEventFingerprintResolverTest {
     }
 
     @Test
-    fun immediatePostTimeRefreshWithSameWhenCoalescesButLaterChangeIsNew() {
+    fun sameContentPostTimeRefreshWithSameWhenRemainsOneEvent() {
         val tracker = MessageEventFallbackTracker(duplicateWindowMs = 120L)
 
         val first = tracker.resolve(
@@ -121,7 +121,23 @@ class MessageEventFingerprintResolverTest {
 
         assertEquals(first, immediateRepost)
         assertEquals(first, burstTail)
-        assertNotEquals(first, laterEvent)
+        assertEquals(first, laterEvent)
+    }
+
+    @Test
+    fun changedContentWithReusedNotificationWhenIsANewEvent() {
+        val tracker = MessageEventFallbackTracker(duplicateWindowMs = 120L)
+
+        val first = tracker.resolve(
+            "conversation", 7, MessageEventSignals(notificationWhen = 200L, sourcePostTime = 300L),
+            1L, 1_000L, recovery = false
+        )
+        val changed = tracker.resolve(
+            "conversation", 8, MessageEventSignals(notificationWhen = 200L, sourcePostTime = 400L),
+            2L, 5_000L, recovery = false
+        )
+
+        assertNotEquals(first, changed)
     }
 
     @Test

@@ -1035,9 +1035,12 @@ class NotificationReaderService : NotificationListenerService() {
             DiagnosticsStore.record("PROCESS", "accepted", sbn.packageName, type.name.lowercase())
 
             val isMessagingLifecycleEvent = isMessagingLifecycleEvent(sbn, type, resolvedContent)
+            val logical = resolveLogicalNotification(sbn, type, effectiveTitle, isMessagingLifecycleEvent)
+            val effectiveKey = logical.logicalId
             val messageEventFingerprint = if (isMessagingLifecycleEvent) {
                 resolveMessageEventFingerprint(
                     sbn = sbn,
+                    eventScope = effectiveKey,
                     content = resolvedContent,
                     effectiveTitle = effectiveTitle,
                     effectiveText = effectiveText,
@@ -1050,8 +1053,6 @@ class NotificationReaderService : NotificationListenerService() {
             }
             val isSummary = isMessagingLifecycleEvent && isGroupSummary(sbn)
 
-            val logical = resolveLogicalNotification(sbn, type, effectiveTitle, isMessagingLifecycleEvent)
-            val effectiveKey = logical.logicalId
             traceSource(
                 "IDENTITY_RESOLVED",
                 sbn,
@@ -1098,7 +1099,15 @@ class NotificationReaderService : NotificationListenerService() {
             val generation = (previous?.generation ?: 0L) + 1L
             // Message-like generations are fresh presentations even when the display text repeats.
             // Event identity later distinguishes a real message from a framework repost.
-            val isUpdate = !presentationReason.mayAutoExpand && !(isMessagingLifecycleEvent && previous != null)
+            val isKnownSameMessagingEvent = isMessagingLifecycleEvent &&
+                    previous?.messageEventFingerprint != null &&
+                    messageEventFingerprint != null &&
+                    previous.messageEventFingerprint.representsSameEventAs(
+                        messageEventFingerprint,
+                        contentUnchanged = previous.title == effectiveTitle && previous.text == effectiveText
+                    )
+            val isUpdate = !presentationReason.mayAutoExpand &&
+                    !(isMessagingLifecycleEvent && previous != null && !isKnownSameMessagingEvent)
             val bridgeId = if (isMessagingLifecycleEvent && previous != null) {
                 allocateMessageBridgeId(
                     effectiveKey,
@@ -1698,6 +1707,7 @@ class NotificationReaderService : NotificationListenerService() {
 
     private fun resolveMessageEventFingerprint(
         sbn: StatusBarNotification,
+        eventScope: String,
         content: ResolvedNotificationContent,
         effectiveTitle: String,
         effectiveText: String,
@@ -1707,7 +1717,9 @@ class NotificationReaderService : NotificationListenerService() {
     ): MessageEventFingerprint? {
         val notification = sbn.notification
         return messageEventTracker.resolve(
-            sourceKey = sbn.key,
+            // Conversation identity survives the source-key replacement churn used by messaging
+            // apps for the same shade entry.
+            sourceKey = eventScope,
             contentHash = listOf(effectiveTitle, effectiveText, content.messageCount).hashCode(),
             signals = MessageEventSignals(
                 latestMessageTimestamp = content.latestMessageTimestamp,

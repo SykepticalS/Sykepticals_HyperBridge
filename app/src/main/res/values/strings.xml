@@ -706,6 +706,8 @@
     <string name="behavior_desc_glob_config">Determines how the island behaves.</string>
     <string name="widget_layout_snapshot">Preview of the widget</string>
 
+    <string name="changelog_0_5_9_sykeptical">&#8226; Prevented the same WhatsApp or messaging notification from expanding again after it had already collapsed.\n&#8226; Message identity now survives Android post-time refreshes and notification source-key replacements.\n&#8226; Rendering-only refreshes now update the existing Island silently instead of creating a fresh floating presentation.</string>
+    <string name="title_0_5_9_sykeptical">Duplicate Re-Expansion Fix</string>
     <string name="changelog_0_5_8_sykeptical">&#8226; Fixed standard and message Islands always disappearing after one minute.\n&#8226; Auto-hide now follows the effective global or per-app duration exactly.\n&#8226; Disabling auto-hide now prevents lifecycle cleanup from scheduling a hidden timeout.</string>
     <string name="title_0_5_8_sykeptical">Auto-Hide Duration Fix</string>
     <string name="changelog_0_5_7_sykeptical">

@@ -176,6 +176,56 @@ class IslandUpdateResolverTest {
     }
 
     @Test
+    fun sameMessageRenderingDriftIsASilentInPlaceUpdate() {
+        val event = messageEvent(timestamp = 200L, messageCount = 2)
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "conversation-a",
+            candidateBridgeId = 999,
+            contentHash = "same message, refreshed artwork".hashCode(),
+            previous = PreviousIslandPresentation(
+                "conversation-a",
+                42,
+                "same message".hashCode(),
+                messageEventFingerprint = event
+            ),
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = event
+        )
+
+        assertEquals(IslandPresentationKind.UPDATE, decision.kind)
+        assertEquals(42, decision.bridgeId)
+        assertTrue(decision.onlyAlertOnce)
+        assertFalse(decision.cancelBeforeNotify)
+    }
+
+    @Test
+    fun sameContentAndNotificationWhenIgnoresRefreshedPostTime() {
+        val previousEvent = MessageEventFingerprint(
+            source = MessageEventFingerprintSource.NOTIFICATION_WHEN,
+            primaryValue = 200L,
+            secondaryValue = 300L
+        )
+        val repostEvent = previousEvent.copy(secondaryValue = 400L)
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "conversation-a",
+            candidateBridgeId = 999,
+            contentHash = "hello".hashCode(),
+            previous = PreviousIslandPresentation(
+                "conversation-a",
+                42,
+                "hello".hashCode(),
+                messageEventFingerprint = previousEvent
+            ),
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = repostEvent
+        )
+
+        assertEquals(IslandPresentationKind.UNCHANGED, decision.kind)
+        assertEquals(42, decision.bridgeId)
+        assertFalse(decision.cancelBeforeNotify)
+    }
+
+    @Test
     fun identicalTextWithDifferentMessageEventCreatesFreshGeneration() {
         val firstEvent = messageEvent(timestamp = 100L, messageCount = 1)
         val secondEvent = messageEvent(timestamp = 200L, messageCount = 2)

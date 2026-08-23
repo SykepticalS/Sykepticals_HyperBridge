@@ -111,18 +111,17 @@ class MessageEventFallbackTracker(
                 return stableEvent
             }
 
-            if (recovery) return prior.eventFingerprint
-
-            // Some frameworks redeliver the same app event with a refreshed SBN postTime. Treat
-            // only an immediate, same-content change as dispatch noise. A later postTime change
-            // becomes a new event for apps that reuse Notification.when.
-            val isImmediatePostTimeRefresh = prior.contentHash == contentHash &&
-                    elapsed != null && elapsed in 0L..duplicateWindowMs
-            if (isImmediatePostTimeRefresh) {
+            // SystemUI and some apps repost the same notification after its initial floating
+            // animation, changing only StatusBarNotification.postTime. Keeping the event stable
+            // while its authoritative Notification.when and visible content are unchanged stops
+            // the already-present Island from floating a second time.
+            if (prior.contentHash == contentHash) {
                 val stableEvent = prior.eventFingerprint
                 remember(sourceKey, State(contentHash, strongFingerprint, stableEvent, observedAt))
                 return stableEvent
             }
+
+            if (recovery) return prior.eventFingerprint
 
             remember(sourceKey, State(contentHash, strongFingerprint, strongFingerprint, observedAt))
             return strongFingerprint

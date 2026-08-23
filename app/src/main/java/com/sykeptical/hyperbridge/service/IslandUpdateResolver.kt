@@ -59,10 +59,18 @@ object IslandUpdateResolver {
             )
         }
 
-        val messageEventChanged = isMessagingEvent &&
-                previous.messageEventFingerprint != messageEventFingerprint &&
-                (previous.messageEventFingerprint != null || messageEventFingerprint != null)
         val contentChanged = previous.contentHash != contentHash
+        val previousMessageEvent = previous.messageEventFingerprint
+        val sameKnownMessageEvent = isMessagingEvent &&
+                previousMessageEvent != null &&
+                messageEventFingerprint != null &&
+                previousMessageEvent.representsSameEventAs(
+                    messageEventFingerprint,
+                    contentUnchanged = !contentChanged
+                )
+        val messageEventChanged = isMessagingEvent &&
+                !sameKnownMessageEvent &&
+                (previousMessageEvent != null || messageEventFingerprint != null)
 
         if (!contentChanged && !messageEventChanged) {
             return IslandUpdateDecision(
@@ -73,7 +81,7 @@ object IslandUpdateResolver {
             )
         }
 
-        if (isMessagingEvent) {
+        if (isMessagingEvent && !sameKnownMessageEvent) {
             val newEventReason = when (presentationReason) {
                 IslandPresentationReason.RECONCILE,
                 IslandPresentationReason.RESTORE -> presentationReason
@@ -87,6 +95,7 @@ object IslandUpdateResolver {
                 cancelBeforeNotify = true
             )
         }
+
 
         return IslandUpdateDecision(
             kind = IslandPresentationKind.UPDATE,

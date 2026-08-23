@@ -11,7 +11,7 @@ performed by the desktop build environment.
 | 1 | Fresh install | Onboarding explains required access and optional floating setup; no root, Shizuku, or ADB required. | Device required |
 | 2 | Upgrade | Apps, themes, and preferences remain; full onboarding is not restarted; one optional setup card appears when relevant. | Device required |
 | 3 | WhatsApp sparse intake | With WhatsApp **Messages & chats** disabled, a DM that appears in the Android shade records `CALLBACK / received`, survives bounded refresh, and creates one Island whether classified `STANDARD` or `MESSAGE`. | Device required |
-| 4 | Repeated identical WhatsApp DM | Two real `Hello!` messages create two generations with different bridge IDs and fresh float/TTL; a framework repost of the second event creates no third Island. | Device required |
+| 4 | Repeated identical WhatsApp DM | Two real `Hello!` messages with distinct message timestamps create two generations with different bridge IDs and fresh float/TTL; post-time refreshes, source-key replacements, and rendering-only reposts of the second event create no third Island after it collapses. | Device required |
 | 5 | Instagram/Gmail/TikTok message | Correct Island and badge with no HyperBridge audible alert and no appear/disappear/reappear loop. | Device required |
 | 6 | WhatsApp outgoing call | Calling/Ringing has no timer; same Island begins a stable timer only after connection. | Device required |
 | 7 | Incoming call | Avatar and app badge, Answer/Decline, no pre-answer timer, stable post-answer timer. | Device required |
