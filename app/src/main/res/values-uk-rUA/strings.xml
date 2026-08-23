@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Перейдіть до бібліотеки, щоб увімкнути застосунки.</string>
     <string name="no_apps_found">Застосунків не знайдено</string>
     <string name="version_template">Версія %s</string>
-    <string name="developer_credit">від D4vidDf</string>
+    <string name="developer_credit">від Sykeptical</string>
     <string name="group_configuration">Конфіґурація</string>
     <string name="system_setup">Налаштування системи</string>
     <string name="system_setup_subtitle">Виправити дозволи та батарею</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">Island Width</string>
     <string name="group_about">Про застосунок</string>
     <string name="developer">Розробник</string>
-    <string name="developer_subtitle">Відвідати d4viddf.com</string>
+    <string name="developer_subtitle">Відвідати github.com/SykepticalS</string>
     <string name="source_code">Початковий код</string>
     <string name="source_code_subtitle">Репозиторій GitHub</string>
     <string name="licenses">Ліцензії Open Source</string>

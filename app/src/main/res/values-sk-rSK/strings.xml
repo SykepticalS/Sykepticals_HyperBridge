@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Prejdite do knižnice a povoľte aplikácie.</string>
     <string name="no_apps_found">Žiadne aplikácie nájdené</string>
     <string name="version_template">Verzia %s</string>
-    <string name="developer_credit">vytvorené D4vidDfom</string>
+    <string name="developer_credit">vytvorené Sykepticalom</string>
     <string name="group_configuration">Konfigurácia</string>
     <string name="system_setup">Nastavenie systému</string>
     <string name="system_setup_subtitle">Oprava povolení &amp; batérie</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">Island Width</string>
     <string name="group_about">O nás</string>
     <string name="developer">Vývojár</string>
-    <string name="developer_subtitle">Navštívte d4viddf.com</string>
+    <string name="developer_subtitle">Navštívte github.com/SykepticalS</string>
     <string name="source_code">Zdrojový kód</string>
     <string name="source_code_subtitle">GitHub Repozitár</string>
     <string name="licenses">Licencie Oper Source</string>

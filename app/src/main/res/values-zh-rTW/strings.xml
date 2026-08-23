@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">請前往「應用程式庫」以啟用 App。</string>
     <string name="no_apps_found">找不到應用程式</string>
     <string name="version_template">版本 %s</string>
-    <string name="developer_credit">開發者：D4vidDf</string>
+    <string name="developer_credit">開發者：Sykeptical</string>
     <string name="group_configuration">設定</string>
     <string name="system_setup">系統設定</string>
     <string name="system_setup_subtitle">修正權限 &amp; 電池設定</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">超級島寬度</string>
     <string name="group_about">關於</string>
     <string name="developer">開發者</string>
-    <string name="developer_subtitle">造訪 d4viddf.com</string>
+    <string name="developer_subtitle">造訪 github.com/SykepticalS</string>
     <string name="source_code">原始碼</string>
     <string name="source_code_subtitle">GitHub 儲存庫</string>
     <string name="licenses">開源授權</string>

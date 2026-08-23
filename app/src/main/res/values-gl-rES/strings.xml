@@ -36,13 +36,13 @@
     <string name="no_active_bridges_desc">Go to Library to enable apps.</string>
     <string name="no_apps_found">Non se atoparon aplicacións</string>
     <string name="version_template">Versión %s</string>
-    <string name="developer_credit">por D4vidDf</string>
+    <string name="developer_credit">por Sykeptical</string>
     <string name="group_configuration">Axustes</string>
     <string name="system_setup">System Setup</string>
     <string name="system_setup_subtitle">Fix permissions &amp; battery</string>
     <string name="group_about">About</string>
     <string name="developer">Developer</string>
-    <string name="developer_subtitle">Visit d4viddf.com</string>
+    <string name="developer_subtitle">Visit github.com/SykepticalS</string>
     <string name="source_code">Source Code</string>
     <string name="source_code_subtitle">GitHub Repository</string>
     <string name="licenses">Open Source Licenses</string>

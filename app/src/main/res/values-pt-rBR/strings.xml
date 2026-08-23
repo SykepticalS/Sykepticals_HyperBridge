@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Vá para a Biblioteca para ativar os apps.</string>
     <string name="no_apps_found">Nenhum app encontrado</string>
     <string name="version_template">Versão %s</string>
-    <string name="developer_credit">por D4vidDf</string>
+    <string name="developer_credit">por Sykeptical</string>
     <string name="group_configuration">Configuração</string>
     <string name="system_setup">Configuração do Sistema</string>
     <string name="system_setup_subtitle">Corrigir permissões e bateria</string>
@@ -48,7 +48,7 @@
     <string name="permanent_island_hide_landscape">Ocultar na Horizontal</string>
     <string name="group_about">Sobre</string>
     <string name="developer">Desenvolvedor</string>
-    <string name="developer_subtitle">Visite d4viddf.com</string>
+    <string name="developer_subtitle">Visite github.com/SykepticalS</string>
     <string name="source_code">Código Fonte</string>
     <string name="source_code_subtitle">Repositório GitHub</string>
     <string name="licenses">Licenças de Código Aberto</string>

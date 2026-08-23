@@ -18,7 +18,7 @@
         </intent>
 
         <intent>
-            <action android:name="com.d4viddf.hyperbridge.THEME_PROVIDER" />
+            <action android:name="com.sykeptical.hyperbridge.THEME_PROVIDER" />
         </intent>
     </queries>
 
@@ -57,7 +57,7 @@
                 <action android:name="android.intent.action.USER_UNLOCKED" />
                 <action android:name="android.intent.action.USER_PRESENT" />
                 <action android:name="android.intent.action.USER_SWITCHED" />
-                <action android:name="com.d4viddf.hyperbridge.ACTION_TEST_MIGRATION" />
+                <action android:name="com.sykeptical.hyperbridge.ACTION_TEST_MIGRATION" />
             </intent-filter>
         </receiver>
 
@@ -85,7 +85,7 @@
             android:excludeFromRecents="true">
 
             <intent-filter>
-                <action android:name="com.d4viddf.hyperbridge.APPLY_THEME" />
+                <action android:name="com.sykeptical.hyperbridge.APPLY_THEME" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/octet-stream" />

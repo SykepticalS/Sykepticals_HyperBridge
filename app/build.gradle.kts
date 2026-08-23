@@ -6,17 +6,17 @@ plugins {
 }
 
 android {
-    namespace = "com.d4viddf.hyperbridge"
+    namespace = "com.sykeptical.hyperbridge"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.d4viddf.hyperbridge"
+        applicationId = "com.sykeptical.hyperbridge"
         minSdk = 35
         targetSdk = 37
-        versionCode = 31
-        versionName = "0.5.6"
+        versionCode = 32
+        versionName = "0.5.7-sykeptical"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

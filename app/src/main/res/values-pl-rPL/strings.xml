@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Aby włączyć wyspy dla aplikacji, przejdź do Biblioteki.</string>
     <string name="no_apps_found">Nie znaleziono aplikacji</string>
     <string name="version_template">Wersja %s</string>
-    <string name="developer_credit">autor: D4vidDf</string>
+    <string name="developer_credit">autor: Sykeptical</string>
     <string name="group_configuration">Konfiguracja</string>
     <string name="system_setup">Ustawienia systemu</string>
     <string name="system_setup_subtitle">Sprawdź poprawność uprawnień</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">Island Width</string>
     <string name="group_about">O aplikacji</string>
     <string name="developer">Autor</string>
-    <string name="developer_subtitle">Odwiedź d4viddf.com</string>
+    <string name="developer_subtitle">Odwiedź github.com/SykepticalS</string>
     <string name="source_code">Kod źródłowy</string>
     <string name="source_code_subtitle">Repozytorium GitHub</string>
     <string name="licenses">Licencje open source</string>

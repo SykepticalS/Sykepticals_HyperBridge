@@ -2,24 +2,22 @@
   <img src="app/src/main/ic_launcher-playstore.png" width="150" alt="HyperBridge Logo" style="border-radius: 20%;" />
 </p>
 
-<h1 align="center">Hyper Bridge</h1>
+<h1 align="center">HyperBridge — Sykeptical Edition</h1>
 
 <p align="center">
-  <strong>Bring the native HyperIsland experience to third-party apps on HyperOS.</strong>
+  <strong>A reliability-focused, independently maintained HyperBridge fork for HyperOS.</strong>
 </p>
 
 <p align="center">
-  Hyper Bridge bridges standard Android notifications into the pill-shaped UI around the camera cutout, offering a seamless, iOS-like experience on Xiaomi phones. Now with full theme customization and widget support.
+  HyperBridge converts standard Android notifications into the pill-shaped HyperIsland UI around the camera cutout, with theme customization, widgets, messaging, calls, media, navigation, downloads, and more.
 </p>
 
 <p align="center">
-  <a href='https://play.google.com/store/apps/details?id=com.d4viddf.hyperbridge'>
-    <img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height="80"/>
-  </a>
+  <a href="https://github.com/SykepticalS/HyperBridge-master/releases"><img src="https://img.shields.io/badge/download-GitHub_Releases-181717?style=for-the-badge&amp;logo=github" alt="Download from GitHub Releases" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.0-blue?style=for-the-badge&logo=github" alt="Version 0.5.0" />
+  <img src="https://img.shields.io/badge/version-0.5.7--sykeptical-blue?style=for-the-badge&logo=github" alt="Version 0.5.7-sykeptical" />
   <img src="https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Material%20Design-757575?style=for-the-badge&logo=material-design&logoColor=white" alt="Material Design" />
@@ -27,6 +25,37 @@
 </p>
 
 <br>
+
+## About this fork
+
+This repository contains the **Sykeptical Edition** of HyperBridge. It is an improved fork created after issues were reported to the original developer but were not being fixed quickly enough, so I implemented the fixes myself.
+
+The project remains built on the original developer's work. This fork is independently maintained and is not presented as the official upstream release. If HyperBridge is useful to you, please consider [supporting the original developer](https://github.com/sponsors/D4vidDf) as well.
+
+### Current identity
+
+| | Sykeptical Edition |
+|---|---|
+| Version | `0.5.7-sykeptical` |
+| Android package | `com.sykeptical.hyperbridge` |
+| Theme intent | `com.sykeptical.hyperbridge.APPLY_THEME` |
+| Maintainer | [Sykeptical](https://github.com/SykepticalS) |
+
+Because the package name differs from upstream HyperBridge, Android treats this edition as a separate app. It can coexist with the original, but the original app's settings and data are not automatically shared with this edition.
+
+## What the Sykeptical Edition changes
+
+The current fork includes the following work on top of upstream `v0.5.6`:
+
+* **Reliable notification lifecycle:** Reworked notification intake, reconciliation, expiry, and recovery to reduce missing, duplicated, stale, or reappearing islands.
+* **Messaging deduplication:** Added content-aware message fingerprinting and grouping for rapid WhatsApp and other chat updates.
+* **Latest-update-wins processing:** Serializes rapid source changes and prevents older work from overwriting newer notification state.
+* **Improved call handling:** Added call classification and session tracking for more reliable incoming, active, answered, declined, and ended call transitions.
+* **Better visual resolution:** Improved icon sourcing, bitmap bounds, and rendered-data normalization for more consistent island artwork.
+* **Setup and diagnostics:** Added setup-health diagnostics, safer onboarding migration, and a guided floating-notification settings flow.
+* **Duplicate-banner guidance:** Recommends disabling an app's **Floating notifications** setting when HyperBridge is providing its banner.
+* **Fork transparency:** Added a first-run acknowledgement explaining this edition and linking users to support the original developer.
+* **Regression coverage:** Added focused unit tests and a [release manual-test matrix](docs/release-manual-test-matrix.md) for notification, message, call, reconciliation, visual, and setup behavior.
 
 ## 🚀 Features
 
@@ -50,10 +79,10 @@
 
 ## 👩‍💻 For Developers: Create Themes
 
-HyperBridge supports an open theming standard (`.hbr` packages). You can create themes and distribute them, or integrate a "Apply Theme" button directly into your own app (Launcher, Icon Pack, etc.).
+HyperBridge supports an open theming standard (`.hbr` packages). You can create themes and distribute them, or integrate an "Apply Theme" button directly into your own app (Launcher, Icon Pack, etc.).
 
-* **Documentation:** [Full Guide on Creating & Distributing Themes](https://github.com/D4vidDf/HyperBridge/discussions/78)
-* **Intent API:** Send themes programmatically using `com.d4viddf.hyperbridge.APPLY_THEME`.
+* **Documentation:** [Full Guide on Creating & Distributing Themes](https://github.com/SykepticalS/HyperBridge-master/discussions/78)
+* **Intent API:** Send themes programmatically using `com.sykeptical.hyperbridge.APPLY_THEME`.
 
 ## 🌐 Supported Languages
 
@@ -90,18 +119,32 @@ HyperBridge is fully localized thanks to our amazing community. **Want to add yo
 
 ## 📥 Installation
 
-### Option 1: Google Play Store (Recommended)
-The easiest way to install and keep the app updated.
+The Sykeptical Edition is not currently distributed through Google Play. Only install APKs published by this repository.
 
-<a href='https://play.google.com/store/apps/details?id=com.d4viddf.hyperbridge'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height="60"/></a>
+Requirements: Android 15 or newer (`minSdk 35`) on a compatible Xiaomi, POCO, or Redmi device running HyperOS/MIUI.
 
-### Option 2: Manual APK
-1.  Download the latest APK from the [Releases](https://github.com/D4vidDf/HyperBridge/releases) page.
-2.  Install the APK on your Xiaomi/POCO/Redmi device.
+### Option 1: Release APK (Recommended)
 
-### ⚙️ Setup (Required for both methods)
-1.  Grant **"Notification Access"** when prompted.
-2.  **Critical:** Follow the in-app guide to enable **Autostart** and **No Restrictions** (Battery) to prevent the system from killing the background service.
+1. Download the latest `0.5.7-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/HyperBridge-master/releases).
+2. Install it on your Xiaomi, POCO, or Redmi device.
+
+### Option 2: Build from source
+
+Clone the repository and build the debug APK with:
+
+```shell
+./gradlew assembleDebug
+```
+
+The output is written to `app/build/outputs/apk/debug/app-debug.apk`.
+
+### ⚙️ Setup
+
+1. Complete the in-app onboarding and grant **Notification Access** and the other requested Android permissions.
+2. Enable **Autostart** and set battery use to **No Restrictions** so HyperOS does not stop the background service.
+3. For apps handled by HyperBridge, disable their **Floating notifications** setting if you see duplicate banners.
+
+Root, Sui, Shizuku, and ADB are not required for the standard setup. Shizuku remains available only for optional device-specific functionality.
 
 ## 🤝 Contributing
 
@@ -113,9 +156,9 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 4.  Push to the branch (`git push origin feature/AmazingFeature`).
 5.  Open a **Pull Request**.
 
-## 💖 Support the Project
+## 💖 Credit and support
 
-Hyper Bridge is an open-source project developed in my free time. If this app has improved your daily experience, please consider supporting its development!
+This edition is maintained by [Sykeptical](https://github.com/SykepticalS), but HyperBridge began with the original developer's open-source work. If the project has improved your daily experience, please consider supporting that work too.
 
 <a href="https://github.com/sponsors/D4vidDf">
   <img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86" width="150" alt="Sponsor"/>
@@ -125,8 +168,9 @@ Hyper Bridge is an open-source project developed in my free time. If this app ha
 
 Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 
-## 👤 Developer
+## 👤 Maintainer
 
-**D4vidDf**
-* Website: [d4viddf.com](https://d4viddf.com)
-* GitHub: [@D4vidDf](https://github.com/D4vidDf)
+**Sykeptical**
+* GitHub: [@SykepticalS](https://github.com/SykepticalS)
+* Repository: [SykepticalS/HyperBridge-master](https://github.com/SykepticalS/HyperBridge-master)
+* Original developer support: [GitHub Sponsors](https://github.com/sponsors/D4vidDf)

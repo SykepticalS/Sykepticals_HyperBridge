@@ -14,6 +14,9 @@
     <string name="welcome_title">Welcome to\nHyper Bridge</string>
     <string name="welcome_subtitle">Seamlessly integrate HyperIslands into your HyperOS experience.</string>
     <string name="get_started">Get Started</string>
+    <string name="improved_version_title">An improved HyperBridge</string>
+    <string name="improved_version_desc">This version improves HyperBridge and addresses issues i reported to the original developer. When fixes were taking too long, i decided, to just &quot;do it myself.&quot; Please also support the original developer whose work made HyperBridge possible.</string>
+    <string name="support_original_developer">Support the original developer</string>
 
     <string name="how_it_works">How it Works</string>
     <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). HyperBridge transforms their notifications into a sleek HyperIsland.</string>
@@ -45,7 +48,7 @@
     <string name="no_apps_found">No apps found</string>
 
     <string name="version_template">Version %s</string>
-    <string name="developer_credit">by D4vidDf</string>
+    <string name="developer_credit">by Sykeptical</string>
 
     <string name="group_configuration">Configuration</string>
     <string name="system_setup">System Setup</string>
@@ -60,7 +63,7 @@
 
     <string name="group_about">About</string>
     <string name="developer">Developer</string>
-    <string name="developer_subtitle">Visit d4viddf.com</string>
+    <string name="developer_subtitle">Visit github.com/SykepticalS</string>
     <string name="source_code">Source Code</string>
     <string name="source_code_subtitle">GitHub Repository</string>
     <string name="licenses">Open Source Licenses</string>
@@ -248,6 +251,14 @@
     <string name="call_ringing">Ringing…</string>
     <string name="call_connecting">Connecting…</string>
     <string name="call_ended">Call ended</string>
+    <string name="call_stage_settings">Call stages</string>
+    <string name="call_stage_settings_desc">Choose which parts of a voice call can show an Island</string>
+    <string name="call_stage_incoming">Incoming calls</string>
+    <string name="call_stage_incoming_desc">Calls that are ringing and waiting to be answered</string>
+    <string name="call_stage_outgoing">Outgoing calls</string>
+    <string name="call_stage_outgoing_desc">Calling, ringing, and connecting before the call is answered</string>
+    <string name="call_stage_active">Active calls</string>
+    <string name="call_stage_active_desc">Connected calls with an elapsed-time display</string>
 
     <string-array name="call_keywords_hangup">
         <item>hang</item>
@@ -695,6 +706,18 @@
     <string name="behavior_desc_glob_config">Determines how the island behaves.</string>
     <string name="widget_layout_snapshot">Preview of the widget</string>
 
+    <string name="changelog_0_5_7_sykeptical">
+        <b>Sykeptical Edition</b>\n
+              • <b>More Reliable Islands:</b> Reworked notification intake, reconciliation, and expiry handling to prevent stale, duplicated, missing, or reappearing islands.\n
+              • <b>Better Messages:</b> Added content-aware message fingerprinting and grouping to keep rapid WhatsApp and other chat updates current without duplicates.\n
+              • <b>Call Stability:</b> Added call classification and session tracking so answer, decline, hang-up, and ongoing call states transition more reliably.\n
+              • <b>Accurate Updates:</b> Added latest-update-wins processing, safer rendered-data normalization, and stronger recovery after listener reconnects.\n
+              • <b>Improved Visuals:</b> Refined notification icon sourcing and geometry for more consistent island artwork.\n
+              • <b>Setup &amp; Diagnostics:</b> Added health diagnostics, floating-notification setup guidance, safer onboarding migration, and an explicit recommendation to disable duplicate floating banners.\n
+              • <b>Sykeptical Identity:</b> Moved the app to the com.sykeptical.hyperbridge package and added an acknowledgement of the original HyperBridge developer.\n
+    </string>
+    <string name="title_0_5_7_sykeptical">Reliability Overhaul</string>
+
     <string name="changelog_0_5_6">
         <b>Fixes &amp; Improvements</b>\n
               • <b>System UI Stability:</b> Validated highlightColor before passing to SystemUI to prevent crashes.\n
@@ -816,8 +839,10 @@
     <string name="settings_not_available" translatable="false">No compatible settings screen was found</string>
     <string name="finish_notification_setup" translatable="false">Finish notification setup</string>
     <string name="finish_notification_setup_desc" translatable="false">Review native floating banners for your selected apps. This is optional and can be revisited.</string>
+    <string name="review_notification_setup" translatable="false">Review setup</string>
+    <string name="not_now" translatable="false">Not now</string>
     <string name="floating_setup_onboarding_title" translatable="false">Avoid duplicate floating banners</string>
-    <string name="floating_setup_onboarding_desc" translatable="false">After selecting apps, HyperBridge can take you directly to each app’s notification settings. This optional step never requires root, Shizuku, or ADB.</string>
+    <string name="floating_setup_onboarding_desc" translatable="false">To avoid duplicate banners, we recommend turning off the &quot;Floating notifications&quot; setting for that app. After selecting apps, HyperBridge can take you directly to each app’s notification settings. This optional step never requires root, Shizuku, or ADB.</string>
 
     <string name="diagnostics_title" translatable="false">Diagnostics</string>
     <string name="diagnostics_subtitle" translatable="false">Permissions, service health, and sanitized recent events</string>

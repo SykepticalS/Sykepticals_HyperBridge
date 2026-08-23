@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">라이브러리에서 앱을 활성화하세요.</string>
     <string name="no_apps_found">앱을 찾을 수 없습니다</string>
     <string name="version_template">버전 %s</string>
-    <string name="developer_credit">D4vidDf 제작</string>
+    <string name="developer_credit">Sykeptical 제작</string>
     <string name="group_configuration">구성</string>
     <string name="system_setup">시스템 설정</string>
     <string name="system_setup_subtitle">권한 및 배터리 문제 해결</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">Island Width</string>
     <string name="group_about">앱 정보</string>
     <string name="developer">개발자</string>
-    <string name="developer_subtitle">d4viddf.com 방문</string>
+    <string name="developer_subtitle">github.com/SykepticalS 방문</string>
     <string name="source_code">소스 코드</string>
     <string name="source_code_subtitle">GitHub 저장소</string>
     <string name="licenses">오픈소스 라이선스</string>

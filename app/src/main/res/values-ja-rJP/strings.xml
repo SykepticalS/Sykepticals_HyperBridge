@@ -46,7 +46,7 @@
     <string name="no_apps_found">アプリが見つかりません</string>
 
     <string name="version_template">バージョン %s</string>
-    <string name="developer_credit">by D4vidDf</string>
+    <string name="developer_credit">by Sykeptical</string>
 
     <string name="group_configuration">設定</string>
     <string name="system_setup">システム設定</string>
@@ -54,7 +54,7 @@
 
     <string name="group_about">アプリについて</string>
     <string name="developer">開発者</string>
-    <string name="developer_subtitle">d4viddf.comにアクセス</string>
+    <string name="developer_subtitle">github.com/SykepticalSにアクセス</string>
     <string name="source_code">ソースコード</string>
     <string name="source_code_subtitle">GitHubリポジトリ</string>
     <string name="licenses">オープンソースライセンス</string>

@@ -1,0 +1,2648 @@
+package com.sykeptical.hyperbridge.service
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Person
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Bundle
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import android.util.LruCache
+import androidx.annotation.RequiresPermission
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.sykeptical.hyperbridge.BuildConfig
+import com.sykeptical.hyperbridge.MainActivity
+import com.sykeptical.hyperbridge.R
+import com.sykeptical.hyperbridge.data.AppPreferences
+import com.sykeptical.hyperbridge.data.db.AppDatabase
+import com.sykeptical.hyperbridge.data.theme.RulesEngine
+import com.sykeptical.hyperbridge.data.theme.ThemeRepository
+import com.sykeptical.hyperbridge.data.widget.WidgetManager
+import com.sykeptical.hyperbridge.models.ActiveIsland
+import com.sykeptical.hyperbridge.models.HyperIslandData
+import com.sykeptical.hyperbridge.models.IslandConfig
+import com.sykeptical.hyperbridge.models.IslandLimitMode
+import com.sykeptical.hyperbridge.models.MessageEventFingerprint
+import com.sykeptical.hyperbridge.models.NavContent
+import com.sykeptical.hyperbridge.models.NotificationType
+import com.sykeptical.hyperbridge.models.WidgetConfig
+import com.sykeptical.hyperbridge.models.WidgetRenderMode
+import com.sykeptical.hyperbridge.service.call.CallActionSignal
+import com.sykeptical.hyperbridge.service.call.CallNotificationClassifier
+import com.sykeptical.hyperbridge.service.call.CallReplacementPolicy
+import com.sykeptical.hyperbridge.service.call.CallStageVisibilityPolicy
+import com.sykeptical.hyperbridge.service.call.CallNotificationSignals
+import com.sykeptical.hyperbridge.service.call.CallSession
+import com.sykeptical.hyperbridge.service.call.CallSessionInput
+import com.sykeptical.hyperbridge.service.call.CallSessionTracker
+import com.sykeptical.hyperbridge.service.message.MessageIdentity
+import com.sykeptical.hyperbridge.service.message.MessageEventFallbackTracker
+import com.sykeptical.hyperbridge.service.message.MessageEventSignals
+import com.sykeptical.hyperbridge.service.message.MessageNotificationResolver
+import com.sykeptical.hyperbridge.service.message.MessageNotificationSignals
+import com.sykeptical.hyperbridge.service.message.MessagingEventSignals
+import com.sykeptical.hyperbridge.service.message.isMessagingEvent
+import com.sykeptical.hyperbridge.service.diagnostics.DiagnosticsStore
+import com.sykeptical.hyperbridge.service.translators.CallTranslator
+import com.sykeptical.hyperbridge.service.translators.LiveUpdateTranslator
+import com.sykeptical.hyperbridge.service.translators.MediaTranslator
+import com.sykeptical.hyperbridge.service.translators.MessageTranslator
+import com.sykeptical.hyperbridge.service.translators.NavTranslator
+import com.sykeptical.hyperbridge.service.translators.ProgressTranslator
+import com.sykeptical.hyperbridge.service.translators.DownloadTranslator
+import com.sykeptical.hyperbridge.service.translators.StandardTranslator
+import com.sykeptical.hyperbridge.service.translators.TimerTranslator
+import com.sykeptical.hyperbridge.service.translators.WidgetTranslator
+import com.sykeptical.hyperbridge.util.ShizukuManager
+import com.sykeptical.hyperbridge.util.isPostNotificationsEnabled
+import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration.Companion.milliseconds
+
+class NotificationReaderService : NotificationListenerService() {
+
+    companion object {
+        const val ACTION_RELOAD_THEME = "com.sykeptical.hyperbridge.ACTION_RELOAD_THEME"
+        const val ACTION_PERFORM_MIGRATION = "com.sykeptical.hyperbridge.ACTION_PERFORM_MIGRATION"
+    }
+
+    private val TAG = "HyperBridgeDebug"
+    private val EXTRA_ORIGINAL_KEY = "hyper_original_key"
+
+    // --- CHANNELS ---
+    private val NOTIFICATION_CHANNEL_ID = BridgeNotificationChannels.ACTIVE
+    private val WIDGET_CHANNEL_ID = BridgeNotificationChannels.WIDGET
+    private val LIVE_UPDATE_CHANNEL_ID = BridgeNotificationChannels.LIVE_UPDATE
+    private val WATCH_RELAY_CHANNEL_ID = BridgeNotificationChannels.WATCH_RELAY
+    private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
+
+    // --- STATE & CONFIG ---
+    private var allowedPackageSet: Set<String> = emptySet()
+    private var currentMode = IslandLimitMode.MOST_RECENT
+    private var appPriorityList = emptyList<String>()
+    private var globalBlockedTerms: Set<String> = emptySet()
+    
+    private var isDndModeEnabled = false
+    private var autoDetectDnd = false
+
+    // --- CACHES ---
+    private data class RemovedSource(
+        val observedAt: Long,
+        val sourcePostTime: Long,
+        val reason: Int
+    )
+
+    private val recentlyRemovedKeys = ConcurrentHashMap<String, RemovedSource>()
+    private val nativeIslands = ConcurrentHashMap.newKeySet<String>()
+    private val activeIslands = ConcurrentHashMap<String, ActiveIsland>()
+    private val activeTranslations = ConcurrentHashMap<String, Int>()
+    private val reverseTranslations = ConcurrentHashMap<Int, String>()
+    private val internalBridgeReplacements = InternalBridgeReplacementRegistry()
+    private val sourceToLogicalKeys = ConcurrentHashMap<String, String>()
+    private val processingJobs = ConcurrentHashMap<Long, Job>()
+    private val sourceProcessingGeneration = SourceProcessingGeneration()
+    private val messageEventTracker = MessageEventFallbackTracker()
+    private val expiredIslands = ExpiredIslandRegistry()
+    private val timeoutJobs = ConcurrentHashMap<String, Job>()
+    private val removalJobs = ConcurrentHashMap<String, Job>()
+    private lateinit var permanentIslandManager: PermanentIslandManager
+    private val intentionallyRemovedKeys = ConcurrentHashMap<String, Long>()
+    private val widgetUpdateDebouncer = ConcurrentHashMap<Int, Long>()
+    private val dismissedWidgetIds = ConcurrentHashMap.newKeySet<Int>()
+    private val activeWidgets = ConcurrentHashMap.newKeySet<Int>()
+    private val appLabelCache = object : LruCache<String, String>(128) {}
+
+    private val MAX_ISLANDS = 9
+    private val WIDGET_ID_BASE = 9000
+    // Negative so these ids can never hit the >= WIDGET_ID_BASE branch in onNotificationRemoved
+    private val WATCH_RELAY_ID_BASE = -20000
+    private var watchRelaySlot = 0
+    private val STANDARD_ISLAND_TIMEOUT_MS = 60_000L
+
+    private lateinit var preferences: AppPreferences
+
+    // --- THEME ENGINE ---
+    private lateinit var themeRepository: ThemeRepository
+    private lateinit var rulesEngine: RulesEngine
+    private lateinit var callClassifier: CallNotificationClassifier
+    private lateinit var presentationController: NotificationPresentationController
+    private val callSessionTracker = CallSessionTracker()
+    private val messageResolver = MessageNotificationResolver()
+    private val notificationLifecycleMutex = Mutex()
+
+    // Translators
+    private lateinit var callTranslator: CallTranslator
+    private lateinit var navTranslator: NavTranslator
+    private lateinit var timerTranslator: TimerTranslator
+    private lateinit var progressTranslator: ProgressTranslator
+    private lateinit var downloadTranslator: DownloadTranslator
+    private lateinit var standardTranslator: StandardTranslator
+    private lateinit var messageTranslator: MessageTranslator
+    private lateinit var mediaTranslator: MediaTranslator
+    private lateinit var widgetTranslator: WidgetTranslator
+    private lateinit var liveUpdateTranslator: LiveUpdateTranslator
+
+    @Volatile
+    private var isScreenOn = true
+
+    private val systemReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_USER_UNLOCKED) {
+                WidgetManager.init(this@NotificationReaderService)
+                syncNotifications(refresh = true)
+            } else if (intent.action == Intent.ACTION_SCREEN_ON) {
+                isScreenOn = true
+                syncNotifications(refresh = true)
+            } else if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                isScreenOn = false
+            }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    override fun onCreate() {
+        super.onCreate()
+        
+        val filter = IntentFilter(Intent.ACTION_USER_UNLOCKED)
+        filter.addAction(Intent.ACTION_SCREEN_ON)
+        filter.addAction(Intent.ACTION_SCREEN_OFF)
+        registerReceiver(systemReceiver, filter)
+        
+        preferences = AppPreferences(applicationContext)
+        createChannels()
+
+        // [INIT] Theme Engine
+        themeRepository = ThemeRepository(this)
+        rulesEngine = RulesEngine()
+        callClassifier = CallNotificationClassifier(
+            answerKeywords = resources.getStringArray(R.array.call_keywords_answer).toList(),
+            declineKeywords = resources.getStringArray(R.array.call_keywords_hangup).toList(),
+            hangUpKeywords = resources.getStringArray(R.array.call_keywords_hangup).toList(),
+            speakerKeywords = resources.getStringArray(R.array.call_keywords_speaker).toList()
+        )
+        presentationController = NotificationPresentationController(
+            markIntentionallyRemoved = { key -> intentionallyRemovedKeys[key] = System.currentTimeMillis() },
+            cancelOriginal = { key -> cancelNotification(key) },
+            postWatchRelay = { source, title, text -> postWatchRelayNotification(source, title, text) }
+        )
+
+        // Pass ThemeRepository to Translators
+        callTranslator = CallTranslator(this, themeRepository)
+        navTranslator = NavTranslator(this, themeRepository)
+        timerTranslator = TimerTranslator(this, themeRepository)
+        progressTranslator = ProgressTranslator(this, themeRepository)
+        downloadTranslator = DownloadTranslator(this, themeRepository)
+        standardTranslator = StandardTranslator(this, themeRepository)
+        messageTranslator = MessageTranslator(this, themeRepository)
+        liveUpdateTranslator = LiveUpdateTranslator(this, themeRepository)
+
+        mediaTranslator = MediaTranslator(this)
+        widgetTranslator = WidgetTranslator(this)
+
+        val userManager = getSystemService(USER_SERVICE) as android.os.UserManager
+        if (userManager.isUserUnlocked) {
+            WidgetManager.init(this)
+        }
+
+        permanentIslandManager = PermanentIslandManager(this, serviceScope, preferences)
+
+        serviceScope.launch { preferences.allowedPackagesFlow.collectLatest { allowedPackageSet = it } }
+        serviceScope.launch { preferences.limitModeFlow.collectLatest { currentMode = it } }
+        serviceScope.launch { preferences.appPriorityListFlow.collectLatest { appPriorityList = it } }
+        serviceScope.launch { preferences.globalBlockedTermsFlow.collectLatest { globalBlockedTerms = it } }
+        serviceScope.launch { preferences.isDndModeEnabledFlow.collectLatest { isDndModeEnabled = it } }
+        serviceScope.launch { preferences.autoDetectDndFlow.collectLatest { autoDetectDnd = it } }
+
+        // Listen for Theme Changes
+        serviceScope.launch {
+            preferences.activeThemeIdFlow.collectLatest { themeId ->
+                Log.d(TAG, "Service detected theme change: $themeId")
+                if (themeId != null) {
+                    themeRepository.activateTheme(themeId)
+                } else {
+                    themeRepository.activateTheme("")
+                }
+            }
+        }
+
+        // --- WIDGET LISTENER ---
+        serviceScope.launch {
+            WidgetManager.widgetUpdates.collect { updatedId ->
+                if (dismissedWidgetIds.contains(updatedId)) return@collect
+                val savedIds = preferences.savedWidgetIdsFlow.first()
+                if (savedIds.contains(updatedId)) {
+                    val config = preferences.getWidgetConfigFlow(updatedId).first()
+                    if (shouldProcessWidgetUpdate(updatedId, config)) {
+                        launch(Dispatchers.Main) {
+                            processSingleWidget(updatedId, config)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "ACTION_TEST_WIDGET") {
+            val widgetId = intent.getIntExtra("WIDGET_ID", -1)
+            if (widgetId != -1) {
+                dismissedWidgetIds.remove(widgetId)
+                serviceScope.launch(Dispatchers.Main) {
+                    val config = preferences.getWidgetConfigFlow(widgetId).first()
+                    processSingleWidget(widgetId, config)
+                }
+            }
+        } else if (intent?.action == ACTION_RELOAD_THEME) {
+            serviceScope.launch {
+                val themeId = preferences.activeThemeIdFlow.first()
+                if (themeId != null) {
+                    Log.d(TAG, "Hot-reloading theme: $themeId")
+                    themeRepository.activateTheme(themeId)
+                }
+            }
+        } else if (intent?.action == ACTION_PERFORM_MIGRATION) {
+            serviceScope.launch(Dispatchers.IO) {
+                AppDatabase.performMigration(applicationContext) { progress ->
+                    launch(Dispatchers.Main) {
+                        showMigrationProgress(progress)
+                    }
+                }
+            }
+        }
+        return START_STICKY
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun showMigrationProgress(progress: Int) {
+        val title = getString(R.string.migration_title)
+        val message = if (progress >= 100) getString(R.string.migration_complete) else getString(R.string.migration_message)
+        val bridgeId = "migration_update".hashCode()
+
+        serviceScope.launch {
+            val useNative = getEffectiveEngine(packageName)
+            
+            if (useNative) {
+                val notificationBuilder = liveUpdateTranslator.translateToLiveUpdate(
+                    sbn = null,
+                    channelId = LIVE_UPDATE_CHANNEL_ID,
+                    type = NotificationType.PROGRESS,
+                    navRight = null,
+                    config = null
+                )
+                notificationBuilder.setContentTitle(title)
+                notificationBuilder.setContentText(message)
+                notificationBuilder.setProgress(100, progress, progress < 0)
+                notificationBuilder.setOngoing(progress in 0..99)
+                notificationBuilder.setSmallIcon(R.drawable.ic_launcher_foreground)
+                notificationBuilder.setOnlyAlertOnce(true).setDefaults(0).setSound(null).setVibrate(null)
+
+                val notification = notificationBuilder.build()
+                ShizukuManager.notify(this@NotificationReaderService, bridgeId, notification)
+            } else {
+                val builder = HyperIslandNotification.Builder(this@NotificationReaderService, "migration", title)
+                builder.setProgressBar(progress, "#007AFF")
+                builder.setChatInfo(title, message, "migration_icon", packageName)
+                builder.setShowNotification(true)
+                builder.setIslandFirstFloat(false)
+
+                val data = HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
+
+                val notificationBuilder = NotificationCompat.Builder(this@NotificationReaderService, NOTIFICATION_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setContentTitle(title)
+                    .setContentText(message)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setOngoing(progress in 0..99)
+                    .setProgress(100, progress, progress < 0)
+                    .setOnlyAlertOnce(true)
+                    .setDefaults(0)
+                    .setSound(null)
+                    .setVibrate(null)
+                    .addExtras(data.resources)
+
+                val notification = notificationBuilder.build()
+                notification.extras.putString("miui.focus.param", data.jsonParam)
+
+                ShizukuManager.notify(this@NotificationReaderService, bridgeId, notification)
+            }
+
+            if (progress >= 100) {
+                delay(3000)
+                NotificationManagerCompat.from(this@NotificationReaderService).cancel(bridgeId)
+            }
+        }
+    }
+
+    // =========================================================================
+    //  EFFECTIVE BEHAVIOR RESOLUTION (Theme > App > Global)
+    // =========================================================================
+
+    private fun getEffectiveTypes(pkg: String): Set<String> {
+        val themeOverride = themeRepository.activeTheme.value?.apps?.get(pkg)
+        val rawTypes = if (themeOverride?.activeNotificationTypes != null) {
+            themeOverride.activeNotificationTypes
+        } else {
+            val localPref = preferences.getAppConfigSync(pkg)
+            localPref ?: preferences.getGlobalNotificationTypesSync()
+        }
+
+        // Fallback: if PROGRESS is enabled but DOWNLOAD is missing, implicitly enable DOWNLOAD
+        return if (rawTypes.contains("PROGRESS") && !rawTypes.contains("DOWNLOAD")) {
+            rawTypes + "DOWNLOAD"
+        } else {
+            rawTypes
+        }
+    }
+
+    private fun getEffectiveCallStages(pkg: String) = preferences.getEffectiveCallStagesSync(pkg)
+
+    private fun getEffectiveEngine(pkg: String): Boolean {
+        val activeTheme = themeRepository.activeTheme.value
+
+        // 1. Theme App Override (Creator explicitly configured this app)
+        val themeAppOverride = activeTheme?.apps?.get(pkg)?.useNativeLiveUpdates
+        if (themeAppOverride != null) return themeAppOverride
+
+        // 2. User App Override (User explicitly configured this app via Home Screen)
+        val userAppOverride = preferences.getAppEnginePreferenceSync(pkg)
+        if (userAppOverride != null) return userAppOverride
+
+        // 3. Theme Global Override (Creator explicitly forced an engine for the whole theme)
+        val themeGlobalOverride = activeTheme?.global?.useNativeLiveUpdates
+        if (themeGlobalOverride != null) return themeGlobalOverride
+
+        // 4. User Global Fallback (The main Engine Setting on the Home Screen!)
+        return preferences.useNativeLiveUpdatesSync()
+    }
+
+    private fun getEffectiveNav(pkg: String): Pair<NavContent, NavContent> {
+        return preferences.getEffectiveNavLayoutSync(pkg)
+    }
+
+    // =========================================================================
+    //  NOTIFICATION REMOVAL LOGIC
+    // =========================================================================
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?, reason: Int) {
+        sbn?.let {
+            if (nativeIslands.remove(it.key)) {
+                updatePermanentIsland()
+            }
+
+            val isOurApp = it.packageName == packageName
+            val notifId = it.id
+            val notifKey = it.key
+
+            if (isOurApp) {
+                val replacement = internalBridgeReplacements.consume(notifId, System.currentTimeMillis())
+                if (replacement != null) {
+                    Log.d(
+                        TAG,
+                        "MESSAGE REPLACE removal ignored logicalId=${replacement.logicalId.hashCode()} " +
+                                "oldBridgeId=$notifId generation=${replacement.generation}"
+                    )
+                    return
+                }
+            }
+
+            if (intentionallyRemovedKeys.remove(notifKey) != null) {
+                return
+            }
+
+            recentlyRemovedKeys[notifKey] = RemovedSource(System.currentTimeMillis(), it.postTime, reason)
+            traceSource(
+                stage = "SOURCE_REMOVED_DURING_PROCESS",
+                sbn = it,
+                generation = sourceProcessingGeneration.current(sourceSlotIdentity(it)),
+                detail = "removalReason=$reason"
+            )
+
+            // Removal is lifecycle state, not cancellation of an already-posted event. The pending
+            // job will apply PendingRemovalPolicy at commit after checking for an active replacement.
+            // Keep bounded expiry tombstones across source-key churn. A genuine new message event
+            // is admitted by its fingerprint; clearing here would resurrect an expired repost.
+
+            if (isOurApp) {
+                // Only process user-initiated dismissals for our notifications. 
+                // Ignore programmatic cancels (e.g., during updates or Shizuku workarounds).
+                if (reason != REASON_CANCEL && reason != REASON_CANCEL_ALL) {
+                    return
+                }
+
+                if (BridgeNotificationChannels.isWidget(it.notification.channelId)) {
+                    val widgetId = notifId - WIDGET_ID_BASE
+                    dismissedWidgetIds.add(widgetId)
+                    activeWidgets.remove(widgetId)
+                    updatePermanentIsland()
+                    return
+                }
+
+                var originalKey = reverseTranslations[notifId]
+                if (originalKey == null) {
+                    originalKey = it.notification.extras.getString(EXTRA_ORIGINAL_KEY)
+                }
+
+                if (originalKey != null) {
+                    Log.d(TAG, "Our notification $notifId removed. Cleaning up cache for $originalKey")
+                    activeIslands[originalKey]?.let { recordSuppressedIsland(it, "dismissed") }
+                    // [FIX] We no longer kill the source notification when our Island is dismissed or timed out
+                    try {
+                        activeIslands[originalKey]?.deleteIntent?.send()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error sending delete intent for original notification", e)
+                    }
+                    cleanupCache(originalKey)
+                }
+                return
+            }
+
+            val logicalKey = sourceToLogicalKeys[notifKey]
+                ?: callSessionTracker.logicalIdForSource(notifKey)
+                ?: notifKey
+            val trackedCallLogicalId = callSessionTracker.logicalIdForSource(notifKey)
+
+            if (activeTranslations.containsKey(logicalKey)) {
+                val hyperId = activeTranslations[logicalKey] ?: return
+                val islandType = activeIslands[logicalKey]?.type
+                if (islandType == NotificationType.CALL) {
+                    callSessionTracker.markSourceRemoved(notifKey, System.currentTimeMillis())
+                }
+
+                lateinit var job: Job
+                job = serviceScope.launch(Dispatchers.IO) {
+                    val appConfig = preferences.getAppIslandConfigSync(sbn.packageName)
+                    val globalConfig = preferences.getGlobalConfigSync()
+                    val finalConfig = appConfig.mergeWith(globalConfig)
+
+                    val forceDismiss = islandType == NotificationType.CALL || 
+                                       islandType == NotificationType.MEDIA || 
+                                       islandType == NotificationType.NAVIGATION
+
+                    if (finalConfig.dismissWithOriginal == true || forceDismiss) {
+                        // Debounce updates if the app canceled it programmatically
+                        if (islandType == NotificationType.CALL) {
+                            // Keep this strictly beyond the tracker's replacement-match window.
+                            // A replacement post can therefore rebind and cancel this job before
+                            // removal commits; the two deadlines must never race at the same instant.
+                            kotlinx.coroutines.delay(CallReplacementPolicy.REMOVAL_DELAY_MS)
+                        } else if (reason == REASON_APP_CANCEL) {
+                            kotlinx.coroutines.delay(300)
+                        }
+                        notificationLifecycleMutex.withLock {
+                            val current = activeIslands[logicalKey]
+                            val sourceStillActive = isSourceNotificationActive(notifKey)
+                            if (sourceStillActive || current == null || !NotificationLifecyclePolicy.isCurrentRemoval(
+                                    activeSourceKey = current.sourceKey,
+                                    activeSourcePostTime = current.sourcePostTime,
+                                    removedSourceKey = notifKey,
+                                    removedSourcePostTime = sbn.postTime
+                                )
+                            ) {
+                                Log.d(
+                                    TAG,
+                                    "${islandType?.name ?: "UNKNOWN"} REMOVE reason=stale " +
+                                            "sourceKey=${notifKey.hashCode()} logicalId=${logicalKey.hashCode()}"
+                                )
+                                return@withLock
+                            }
+                            timeoutJobs.remove(logicalKey)?.cancel()
+                            try {
+                                NotificationManagerCompat.from(this@NotificationReaderService).cancel(hyperId)
+                            } catch (_: Exception) {}
+                            Log.d(
+                                TAG,
+                                "${islandType?.name ?: "UNKNOWN"} REMOVE reason=$reason " +
+                                        "sourceKey=${notifKey.hashCode()} logicalId=${logicalKey.hashCode()}"
+                            )
+                            cleanupCache(logicalKey)
+                        }
+                    }
+                }
+                removalJobs[logicalKey]?.cancel()
+                removalJobs[logicalKey] = job
+                job.invokeOnCompletion { removalJobs.remove(logicalKey, job) }
+            } else if (trackedCallLogicalId != null) {
+                // A filtered call stage still needs replacement continuity so a later enabled
+                // stage (for example ACTIVE) can reuse the same logical session.
+                callSessionTracker.markSourceRemoved(notifKey, System.currentTimeMillis())
+                lateinit var job: Job
+                job = serviceScope.launch(Dispatchers.IO) {
+                    kotlinx.coroutines.delay(CallReplacementPolicy.REMOVAL_DELAY_MS)
+                    notificationLifecycleMutex.withLock {
+                        if (isSourceNotificationActive(notifKey) ||
+                            callSessionTracker.logicalIdForSource(notifKey) != trackedCallLogicalId
+                        ) {
+                            return@withLock
+                        }
+                        callSessionTracker.end(trackedCallLogicalId)
+                        sourceToLogicalKeys.entries.removeIf { it.value == trackedCallLogicalId }
+                    }
+                }
+                removalJobs[trackedCallLogicalId]?.cancel()
+                removalJobs[trackedCallLogicalId] = job
+                job.invokeOnCompletion { removalJobs.remove(trackedCallLogicalId, job) }
+            }
+        }
+    }
+
+    private fun cancelSourceNotification(targetKey: String) {
+        try {
+            val currentNotifications = try {
+                activeNotifications
+            } catch (_: Exception) {
+                cancelNotification(targetKey)
+                return
+            }
+
+            val targetSbn = currentNotifications.find { it.key == targetKey }
+            cancelNotification(targetKey)
+
+            if (targetSbn != null) {
+                val groupKey = targetSbn.groupKey
+                val pkg = targetSbn.packageName
+                if (groupKey == null) return
+
+                val remainingGroupMembers = currentNotifications.filter {
+                    it.packageName == pkg &&
+                            it.groupKey == groupKey &&
+                            it.key != targetKey
+                }
+
+                if (remainingGroupMembers.size == 1) {
+                    val survivor = remainingGroupMembers[0]
+                    val isSummary = (survivor.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+                    if (isSummary) {
+                        cancelNotification(survivor.key)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during smart dismissal", e)
+        }
+    }
+
+    private fun cleanupCache(originalKey: String, preserveCallSession: Boolean = false) {
+        val hyperId = activeTranslations[originalKey]
+        val island = activeIslands.remove(originalKey)
+        activeTranslations.remove(originalKey)
+        sourceToLogicalKeys.entries.removeIf { it.value == originalKey }
+        timeoutJobs[originalKey]?.cancel()
+        timeoutJobs.remove(originalKey)
+        removalJobs[originalKey]?.cancel()
+        removalJobs.remove(originalKey)
+
+        if (island?.type == NotificationType.CALL && !preserveCallSession) {
+            callSessionTracker.end(island.logicalId)
+        }
+
+        if (hyperId != null) {
+            reverseTranslations.remove(hyperId, originalKey)
+        }
+        updatePermanentIsland()
+    }
+
+    private fun recordExpiredIsland(island: ActiveIsland) = recordSuppressedIsland(island, "expired")
+
+    private fun recordSuppressedIsland(island: ActiveIsland, action: String) {
+        if (island.type != NotificationType.MESSAGE && island.type != NotificationType.STANDARD) return
+        expiredIslands.record(
+            ExpiredIslandRecord(
+                logicalId = island.logicalId,
+                sourceKey = island.sourceKey,
+                sourceFingerprint = sourceGenerationFingerprint(island.lastContentHash, island.sourcePostTime),
+                expiredAt = System.currentTimeMillis(),
+                messageEventFingerprint = island.messageEventFingerprint
+            )
+        )
+        Log.d(
+            TAG,
+            "${island.type.name} ${action.uppercase()} sourceKey=${island.sourceKey.hashCode()} " +
+                    "logicalId=${island.logicalId.hashCode()} bridgeId=${island.id}"
+        )
+        DiagnosticsStore.record(island.type.name, action, island.packageName)
+    }
+
+    private fun shouldSuppressExpiredSource(
+        sbn: StatusBarNotification,
+        type: NotificationType,
+        logicalKey: String,
+        contentHash: Int,
+        recovery: Boolean,
+        messageEventFingerprint: MessageEventFingerprint?
+    ): Boolean {
+        if (type != NotificationType.MESSAGE && type != NotificationType.STANDARD) return false
+        return when (
+            expiredIslands.evaluate(
+                sbn.key,
+                sourceGenerationFingerprint(contentHash, sbn.postTime),
+                System.currentTimeMillis(),
+                messageEventFingerprint,
+                logicalKey
+            )
+        ) {
+            ExpiredSourceDecision.NOT_EXPIRED -> false
+            ExpiredSourceDecision.SUPPRESS_IDENTICAL -> {
+                sourceToLogicalKeys.remove(sbn.key, logicalKey)
+                Log.d(
+                    TAG,
+                    "${type.name} RECOVERY_SKIPPED_EXPIRED sourceKey=${sbn.key.hashCode()} " +
+                            "logicalId=${logicalKey.hashCode()}"
+                )
+                DiagnosticsStore.record(
+                    type.name,
+                    if (recovery) "recovery-skipped-expired" else "expired-generation-ignored",
+                    sbn.packageName
+                )
+                true
+            }
+            ExpiredSourceDecision.NEW_GENERATION -> {
+                Log.d(
+                    TAG,
+                    "${type.name} NEW_GENERATION_AFTER_EXPIRY sourceKey=${sbn.key.hashCode()} " +
+                            "logicalId=${logicalKey.hashCode()}"
+                )
+                DiagnosticsStore.record(type.name, "new-generation-after-expiry", sbn.packageName)
+                false
+            }
+        }
+    }
+
+    private fun handlePostNotificationSideEffects(
+        logicalKey: String,
+        sourceKey: String,
+        bridgeId: Int,
+        generation: Long,
+        config: IslandConfig,
+        type: NotificationType,
+        isLiveUpdate: Boolean,
+        sbn: StatusBarNotification? = null,
+        title: String = "",
+        text: String = "",
+        isMessageReplacement: Boolean = false
+    ) {
+        if (!isMessageReplacement) {
+            presentationController.applyPostEffects(
+                NotificationPresentationRequest(
+                    originalKey = sourceKey,
+                    bridgeId = bridgeId,
+                    config = config,
+                    type = type,
+                    isLiveUpdate = isLiveUpdate,
+                    sbn = sbn,
+                    title = title,
+                    text = text
+                )
+            )
+        }
+
+        // 2. Schedule timeout ONLY for Live Update notifications
+        if (isLiveUpdate) {
+            val timeoutSeconds = config.timeout ?: 0
+            timeoutJobs.remove(logicalKey)?.cancel()
+            if (timeoutSeconds > 0) {
+                lateinit var job: Job
+                job = serviceScope.launch {
+                    delay((timeoutSeconds * 1000L).milliseconds)
+                    notificationLifecycleMutex.withLock {
+                        val current = activeIslands[logicalKey]
+                        if (!IslandTimeoutPolicy.isCurrent(current?.generation, current?.id, generation, bridgeId)) return@withLock
+                        current ?: return@withLock
+                        Log.d(TAG, "${type.name} TIMEOUT bridgeId=$bridgeId logicalId=${logicalKey.hashCode()}")
+                        recordExpiredIsland(current)
+                        NotificationManagerCompat.from(this@NotificationReaderService).cancel(bridgeId)
+                        cleanupCache(logicalKey)
+                    }
+                }
+                timeoutJobs[logicalKey] = job
+                job.invokeOnCompletion { timeoutJobs.remove(logicalKey, job) }
+            }
+        } else if (type == NotificationType.MESSAGE || type == NotificationType.STANDARD) {
+            // HyperOS island-swipe only hides the island; the focus notification stays posted and no
+            // removal callback fires, so an untimed island blocks the permanent island forever.
+            timeoutJobs.remove(logicalKey)?.cancel()
+            lateinit var job: Job
+            job = serviceScope.launch {
+                delay(STANDARD_ISLAND_TIMEOUT_MS)
+                notificationLifecycleMutex.withLock {
+                    val current = activeIslands[logicalKey]
+                    if (!IslandTimeoutPolicy.isCurrent(current?.generation, current?.id, generation, bridgeId)) return@withLock
+                    current ?: return@withLock
+                    Log.d(TAG, "${type.name} TIMEOUT bridgeId=$bridgeId logicalId=${logicalKey.hashCode()}")
+                    recordExpiredIsland(current)
+                    NotificationManagerCompat.from(this@NotificationReaderService).cancel(bridgeId)
+                    cleanupCache(logicalKey)
+                }
+            }
+            timeoutJobs[logicalKey] = job
+            job.invokeOnCompletion { timeoutJobs.remove(logicalKey, job) }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun postWatchRelayNotification(sbn: StatusBarNotification, title: String, text: String) {
+        try {
+            val appLabel = getCachedAppLabel(sbn.packageName)
+            val relayId = WATCH_RELAY_ID_BASE - (watchRelaySlot++ and 0x0F)
+            val notification = NotificationCompat.Builder(this, WATCH_RELAY_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle(if (title.isNotBlank()) "$appLabel · $title" else appLabel)
+                .setContentText(text)
+                .setSilent(true)
+                .setAutoCancel(true)
+                .setTimeoutAfter(10_000L)
+                .build()
+            NotificationManagerCompat.from(this).notify(relayId, notification)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error posting watch relay notification", e)
+        }
+    }
+
+    private fun logStateChange(isLandscape: Boolean) {
+        val orientation = if (isLandscape) "Landscape" else "Portrait"
+        val isIslandExhibited = activeIslands.isNotEmpty() || activeWidgets.isNotEmpty() || nativeIslands.isNotEmpty() || permanentIslandManager.isIslandActive()
+        val islandState = if (isIslandExhibited) "Showing Island" else "No Island"
+        Log.d(TAG, "State: $orientation | $islandState")
+    }
+
+    private fun updatePermanentIsland() {
+        permanentIslandManager.onActiveNotificationsChanged(activeIslands.size + activeWidgets.size, nativeIslands.isNotEmpty())
+        DiagnosticsStore.setActiveIslands(activeIslands.size)
+        val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        logStateChange(isLandscape)
+    }
+
+    private fun suppressPermanentIslandForPost(previous: ActiveIsland?) {
+        val pendingCount = activeIslands.size + activeWidgets.size + if (previous == null) 1 else 0
+        permanentIslandManager.onActiveNotificationsChanged(pendingCount, nativeIslands.isNotEmpty())
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        permanentIslandManager.onOrientationChanged()
+        logStateChange(newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
+    }
+
+    // =========================================================================
+    //  STANDARD NOTIFICATION LOGIC
+    // =========================================================================
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn?.let {
+            if (it.packageName != packageName) {
+                val extras = it.notification.extras
+                var isNative = false
+                if (extras != null) {
+                    if (extras.containsKey("miui.focus.param") || extras.containsKey("miui.system.focus.param")) {
+                        isNative = true
+                    }
+                    val template = extras.getString(Notification.EXTRA_TEMPLATE)
+                    if (template == "androidx.media.app.NotificationCompat\$MediaStyle" ||
+                        template == "android.app.Notification\$MediaStyle") {
+                        isNative = true
+                    }
+                }
+                if (isNative) {
+                    if (nativeIslands.add(it.key)) updatePermanentIsland()
+                } else {
+                    if (nativeIslands.remove(it.key)) updatePermanentIsland()
+                }
+            }
+
+            enqueueSourceNotification(it)
+        }
+    }
+
+    /** Debug-only, metadata-only trace. Sender names and notification content never enter it. */
+    private fun traceSource(
+        stage: String,
+        sbn: StatusBarNotification,
+        generation: Long? = null,
+        detail: String? = null
+    ) {
+        if (!BuildConfig.DEBUG) return
+        val notification = sbn.notification
+        val template = notification.extras.getString(Notification.EXTRA_TEMPLATE)
+            ?.substringAfterLast('.')
+            ?.take(64)
+            ?: "none"
+        Log.d(
+            "$TAG.Trace",
+            buildString {
+                append(stage)
+                append(" pkg=").append(sbn.packageName)
+                append(" sourceKeyHash=").append(sbn.key.hashCode())
+                append(" id=").append(sbn.id)
+                append(" tagHash=").append(sbn.tag?.hashCode() ?: "none")
+                append(" postTime=").append(sbn.postTime)
+                append(" channelHash=").append(notification.channelId?.hashCode() ?: "none")
+                append(" category=").append(notification.category ?: "none")
+                append(" template=").append(template)
+                append(" groupSummary=").append(isGroupSummary(sbn))
+                append(" generation=").append(generation ?: "none")
+                if (!detail.isNullOrBlank()) append(' ').append(detail)
+            }
+        )
+    }
+
+    @SuppressLint("MissingPermission") // Guarded by isPostNotificationsEnabled before work is enqueued.
+    private fun enqueueSourceNotification(sbn: StatusBarNotification, recovery: Boolean = false) {
+        if (shouldIgnore(sbn.packageName) || !isAppAllowed(sbn.packageName)) return
+        if (!recovery) {
+            DiagnosticsStore.record("CALLBACK", "received", sbn.packageName)
+        }
+        traceSource("CALLBACK_RECEIVED", sbn)
+        if (!isPostNotificationsEnabled(this)) {
+            DiagnosticsStore.record("PERMISSION", "ignored", sbn.packageName, "post-notifications-missing")
+            traceSource("TYPE_DISABLED", sbn, detail = "reason=post-notifications-missing")
+            return
+        }
+
+        val sourceSlot = sourceSlotIdentity(sbn)
+        val callbackObservedAt = System.currentTimeMillis()
+        val rawQuality = sourceCandidateQuality(sbn)
+        val processingGeneration = sourceProcessingGeneration.next(sourceSlot, rawQuality)
+        traceSource(
+            "PROCESS_ENQUEUED",
+            sbn,
+            processingGeneration,
+            "quality=$rawQuality slotHash=${sourceSlot.hashCode()}"
+        )
+        val job = serviceScope.launch {
+            traceSource("PROCESS_JOB_STARTED", sbn, processingGeneration)
+            val selectedSbn = ensureValidSbn(sbn, processingGeneration)
+            val selectedQuality = sourceCandidateQuality(selectedSbn)
+            sourceProcessingGeneration.consider(sourceSlot, processingGeneration, selectedQuality)
+            if (!sourceProcessingGeneration.isCurrent(sourceSlot, processingGeneration)) {
+                traceSource("GENERATION_STALE", selectedSbn, processingGeneration, "quality=$selectedQuality")
+                return@launch
+            }
+            traceSource("GENERATION_CURRENT", selectedSbn, processingGeneration, "quality=$selectedQuality")
+            traceSource("LIFECYCLE_LOCK_WAIT", selectedSbn, processingGeneration)
+            notificationLifecycleMutex.withLock {
+                traceSource("LIFECYCLE_LOCK_ACQUIRED", selectedSbn, processingGeneration)
+                if (!sourceProcessingGeneration.isCurrent(sourceSlot, processingGeneration)) {
+                    traceSource("GENERATION_STALE", selectedSbn, processingGeneration, "point=after-lock")
+                    return@withLock
+                }
+                processStandardNotification(
+                    rawSbn = sbn,
+                    sbn = selectedSbn,
+                    sourceSlot = sourceSlot,
+                    recovery = recovery,
+                    processingGeneration = processingGeneration,
+                    callbackObservedAt = callbackObservedAt
+                )
+            }
+        }
+        processingJobs[processingGeneration] = job
+        job.invokeOnCompletion { cause ->
+            processingJobs.remove(processingGeneration, job)
+            sourceProcessingGeneration.finish(sourceSlot, processingGeneration)
+            when (cause) {
+                is CancellationException -> traceSource("PROCESS_CANCELLED", sbn, processingGeneration)
+                null -> Unit
+                else -> traceSource(
+                    "PROCESS_EXCEPTION",
+                    sbn,
+                    processingGeneration,
+                    "exception=${cause.javaClass.simpleName}"
+                )
+            }
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private suspend fun processStandardNotification(
+        rawSbn: StatusBarNotification,
+        sbn: StatusBarNotification,
+        sourceSlot: String,
+        recovery: Boolean = false,
+        processingGeneration: Long,
+        callbackObservedAt: Long
+    ) {
+        val manager = getSystemService(NotificationManager::class.java)
+        val isSystemDndActive = manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+        val dndActive = isDndModeEnabled || (autoDetectDnd && isSystemDndActive)
+
+        if (dndActive) {
+            Log.d(TAG, "DND active. Skipping notification ${rawSbn.packageName}")
+            traceSource("EXPIRY_SUPPRESSED", sbn, processingGeneration, "reason=dnd")
+            return
+        }
+
+        try {
+            val extras = sbn.notification.extras
+
+            // Resolve rendered content before rules/type detection, but defer previous-state lookup
+            // until the final logical identity has been selected.
+            val resolvedContent = resolveNotificationContent(sbn)
+            traceSource(
+                if (resolvedContent.title.isNotBlank() || resolvedContent.text.isNotBlank() || resolvedContent.hasMessageContent) {
+                    "CONTENT_RESOLVED_USABLE"
+                } else {
+                    "CONTENT_RESOLVED_EMPTY"
+                },
+                sbn,
+                processingGeneration
+            )
+            val typeBeforeRules = detectNotificationType(sbn)
+            if (isJunkNotification(sbn, resolvedContent)) {
+                if (!recovery) {
+                    DiagnosticsStore.record("CALLBACK", "ignored-after-refresh", sbn.packageName, "junk-or-empty")
+                }
+                DiagnosticsStore.record(typeBeforeRules.name, "ignored", sbn.packageName, "junk-or-empty")
+                traceSource("JUNK_REJECTED", sbn, processingGeneration, "type=$typeBeforeRules")
+                return
+            }
+            traceSource("JUNK_ACCEPTED", sbn, processingGeneration, "type=$typeBeforeRules")
+            if (recovery) {
+                DiagnosticsStore.record(typeBeforeRules.name, "recovering", sbn.packageName)
+            }
+            val sourceTitleWasEmpty = resolvedContent.title.isEmpty()
+            var effectiveTitle = resolvedContent.title
+            val effectiveText = resolvedContent.text
+            if (effectiveTitle.isEmpty()) {
+                effectiveTitle = getCachedAppLabel(sbn.packageName)
+            }
+
+            val hasProgress = hasProgressNotification(sbn, effectiveTitle, effectiveText)
+            if (effectiveTitle.isEmpty() && !hasProgress) {
+                traceSource("CONTENT_RESOLVED_EMPTY", sbn, processingGeneration, "reason=no-title-or-progress")
+                return
+            }
+
+            val appBlockedTerms = preferences.getAppBlockedTermsSync(sbn.packageName)
+            if (appBlockedTerms.isNotEmpty()) {
+                val content = "$effectiveTitle $effectiveText"
+                if (appBlockedTerms.any { term -> content.contains(term, ignoreCase = true) }) {
+                    traceSource("JUNK_REJECTED", sbn, processingGeneration, "reason=app-blocked-term")
+                    return
+                }
+            }
+
+            val activeTheme = themeRepository.activeTheme.value
+            val ruleMatch = rulesEngine.match(sbn, effectiveTitle, effectiveText, activeTheme)
+
+            val detectedType = if (ruleMatch?.targetLayout != null) {
+                try { NotificationType.valueOf(ruleMatch.targetLayout) }
+                catch (_: Exception) { typeBeforeRules }
+            } else {
+                typeBeforeRules
+            }
+            traceSource(
+                when (detectedType) {
+                    NotificationType.MESSAGE -> "CLASSIFIED_MESSAGE"
+                    NotificationType.STANDARD -> "CLASSIFIED_STANDARD"
+                    else -> "CLASSIFIED_${detectedType.name}"
+                },
+                sbn,
+                processingGeneration,
+                "type=$detectedType"
+            )
+
+            // --- LAYERED TRIGGERS LOGIC ---
+            val effectiveTypes = getEffectiveTypes(sbn.packageName)
+            val hasDirectMessagingStyle = extras.getString(Notification.EXTRA_TEMPLATE)
+                ?.contains("MessagingStyle") == true
+            val enabledTypeName = NotificationTypeEnablementPolicy.resolveEnabledType(
+                effectiveTypes = effectiveTypes,
+                detectedType = detectedType.name,
+                hasDirectMessagingStyle = hasDirectMessagingStyle
+            )
+            if (enabledTypeName == null) {
+                Log.d(TAG, " ABORTING: Type $detectedType disabled by user/theme for ${sbn.packageName}")
+                DiagnosticsStore.record(detectedType.name, "ignored", sbn.packageName, "type-disabled")
+                traceSource(
+                    "TYPE_DISABLED",
+                    sbn,
+                    processingGeneration,
+                    "type=$detectedType enabledTypes=${effectiveTypes.sorted().joinToString("|")}"
+                )
+                return
+            }
+            val type = NotificationType.valueOf(enabledTypeName)
+            traceSource(
+                "TYPE_ENABLED",
+                sbn,
+                processingGeneration,
+                "type=$type detectedType=$detectedType fallback=${type != detectedType}"
+            )
+            DiagnosticsStore.record("PROCESS", "accepted", sbn.packageName, type.name.lowercase())
+
+            val isMessagingLifecycleEvent = isMessagingLifecycleEvent(sbn, type, resolvedContent)
+            val messageEventFingerprint = if (isMessagingLifecycleEvent) {
+                resolveMessageEventFingerprint(
+                    sbn = sbn,
+                    content = resolvedContent,
+                    effectiveTitle = effectiveTitle,
+                    effectiveText = effectiveText,
+                    processingGeneration = processingGeneration,
+                    callbackObservedAt = callbackObservedAt,
+                    recovery = recovery
+                )
+            } else {
+                null
+            }
+            val isSummary = isMessagingLifecycleEvent && isGroupSummary(sbn)
+
+            val logical = resolveLogicalNotification(sbn, type, effectiveTitle, isMessagingLifecycleEvent)
+            val effectiveKey = logical.logicalId
+            traceSource(
+                "IDENTITY_RESOLVED",
+                sbn,
+                processingGeneration,
+                "logicalHash=${effectiveKey.hashCode()}"
+            )
+            detachReassignedSource(sbn.key, effectiveKey)
+            val previous = activeIslands[effectiveKey]
+            if (isMessagingLifecycleEvent && previous != null && sbn.postTime < previous.sourcePostTime) {
+                Log.d(TAG, "MESSAGE skip stale update logical=${effectiveKey.hashCode()}")
+                traceSource("GENERATION_STALE", sbn, processingGeneration, "reason=older-source-post-time")
+                return
+            }
+            if (sourceTitleWasEmpty && previous?.title?.isNotEmpty() == true) {
+                effectiveTitle = previous.title
+            }
+
+            removalJobs[effectiveKey]?.cancel()
+            removalJobs.remove(effectiveKey)
+            val callSession = logical.callSession
+            if (callSession != null && !CallStageVisibilityPolicy.isVisible(
+                    getEffectiveCallStages(sbn.packageName),
+                    callSession.state
+                )
+            ) {
+                suppressCallStagePresentation(
+                    sbn = sbn,
+                    logicalKey = effectiveKey,
+                    session = callSession,
+                    previous = previous
+                )
+                traceSource(
+                    "TYPE_DISABLED",
+                    sbn,
+                    processingGeneration,
+                    "type=CALL stage=${CallStageVisibilityPolicy.stageFor(callSession.state)}"
+                )
+                return
+            }
+            val presentationReason = NotificationLifecyclePolicy.presentationReason(
+                hasPrevious = previous != null,
+                recovery = recovery
+            )
+            val generation = (previous?.generation ?: 0L) + 1L
+            // Message-like generations are fresh presentations even when the display text repeats.
+            // Event identity later distinguishes a real message from a framework repost.
+            val isUpdate = !presentationReason.mayAutoExpand && !(isMessagingLifecycleEvent && previous != null)
+            val bridgeId = if (isMessagingLifecycleEvent && previous != null) {
+                allocateMessageBridgeId(
+                    effectiveKey,
+                    generation,
+                    previous.lastContentHash,
+                    previous.id,
+                    messageEventFingerprint
+                )
+            } else {
+                previous?.id ?: effectiveKey.hashCode()
+            }
+
+            val appIslandConfig = preferences.getAppIslandConfigSync(sbn.packageName)
+            val globalConfig = preferences.getGlobalConfigSync()
+            val finalConfig = appIslandConfig.mergeWith(globalConfig)
+            val picKey = "pic_${bridgeId}"
+
+            // --- LAYERED ENGINE LOGIC ---
+            val useLiveUpdates = getEffectiveEngine(sbn.packageName)
+
+            if (useLiveUpdates) {
+                Log.i(TAG, " POSTING Native Live Update -> ID: $bridgeId, Type: $type")
+                traceSource("TRANSLATE_STARTED", sbn, processingGeneration, "engine=live-update type=$type")
+
+                // [FIX] Fetch the user's custom layout so the Live Update can use it!
+                val navLayout = if (type == NotificationType.NAVIGATION) getEffectiveNav(sbn.packageName) else null
+
+                // [FIX] Pass the type and the right layout to the translator
+                val builder = liveUpdateTranslator.translateToLiveUpdate(
+                    sbn = sbn,
+                    channelId = LIVE_UPDATE_CHANNEL_ID,
+                    type = type,
+                    navRight = navLayout?.second,
+                    config = finalConfig,
+                    callSession = logical.callSession,
+                    resolvedTitle = effectiveTitle,
+                    resolvedText = effectiveText
+                )
+
+                builder.extras.putString(EXTRA_ORIGINAL_KEY, effectiveKey)
+
+                builder.setOnlyAlertOnce(isUpdate)
+                builder.setDefaults(0).setSound(null).setVibrate(null)
+
+                val hasPermission = com.sykeptical.hyperbridge.util.XiaomiNotificationHelper.hasFocusPermission(this)
+                if (!hasPermission && com.sykeptical.hyperbridge.util.XiaomiNotificationHelper.isSupportIsland()) {
+                    serviceScope.launch {
+                        preferences.setFeaturedPermissionWarning(true)
+                    }
+                    val intent = Intent(this, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        putExtra("open_troubleshoot", true)
+                    }
+                    val pendingIntent = PendingIntent.getActivity(
+                        this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    builder.addAction(
+                        android.R.drawable.ic_dialog_info,
+                        getString(R.string.troubleshoot_featured_notification),
+                        pendingIntent
+                    )
+                }
+
+                val notification = builder.build()
+                traceSource("TRANSLATE_SUCCESS", sbn, processingGeneration, "engine=live-update type=$type")
+
+                val newContentHash = computeContentHash(
+                    sbn = sbn,
+                    type = type,
+                    title = effectiveTitle,
+                    text = effectiveText,
+                    renderedJson = null,
+                    callSession = logical.callSession
+                )
+                if (shouldSuppressExpiredSource(
+                        sbn, type, effectiveKey, newContentHash, recovery, messageEventFingerprint
+                    )
+                ) {
+                    traceSource("EXPIRY_SUPPRESSED", sbn, processingGeneration, "type=$type")
+                    return
+                }
+                traceSource("EXPIRY_ALLOWED", sbn, processingGeneration, "type=$type")
+                if (!ensureIslandCapacity(previous, type, sbn.packageName, logical, sbn.key, effectiveKey)) {
+                    traceSource("POST_FAILED", sbn, processingGeneration, "reason=island-capacity")
+                    return
+                }
+                bindSourceToLogicalKey(effectiveKey, sbn.key, previous)
+                val decision = IslandUpdateResolver.decide(
+                    logicalId = effectiveKey,
+                    candidateBridgeId = bridgeId,
+                    contentHash = newContentHash,
+                    previous = previous?.toPreviousPresentation(),
+                    notificationType = type,
+                    presentationReason = presentationReason,
+                    isMessagingEvent = isMessagingLifecycleEvent,
+                    messageEventFingerprint = messageEventFingerprint
+                )
+                if (decision.kind == IslandPresentationKind.UNCHANGED) {
+                    logMessageLifecycle(sbn, isMessagingLifecycleEvent, effectiveKey, decision, previous)
+                    logUpdateDecision(sbn, type, effectiveKey, decision)
+                    refreshSourceAlias(effectiveKey, sbn, previous)
+                    traceSource("POST_SUCCESS", sbn, processingGeneration, "result=unchanged-no-notify")
+                    return
+                }
+
+                logMessageLifecycle(sbn, isMessagingLifecycleEvent, effectiveKey, decision, previous)
+                if (!sourceProcessingGeneration.isCurrent(sourceSlot, processingGeneration)) {
+                    traceSource("GENERATION_STALE", sbn, processingGeneration, "point=pre-post")
+                    return
+                }
+                if (shouldSuppressPendingPost(rawSbn, sbn, processingGeneration)) return
+                suppressPermanentIslandForPost(previous)
+                prepareMessageReplacement(
+                    effectiveKey, previous, decision, generation, isMessagingLifecycleEvent
+                )
+                traceSource("POST_ATTEMPT", sbn, processingGeneration, "bridgeId=${decision.bridgeId}")
+                dispatchIslandNotification(decision.bridgeId, notification, decision.onlyAlertOnce)
+                traceSource("POST_SUCCESS", sbn, processingGeneration, "bridgeId=${decision.bridgeId}")
+                expiredIslands.acceptNewGeneration(
+                    sbn.key,
+                    sourceGenerationFingerprint(newContentHash, sbn.postTime),
+                    messageEventFingerprint,
+                    effectiveKey
+                )
+
+                activeTranslations[effectiveKey] = decision.bridgeId
+                reverseTranslations[decision.bridgeId] = effectiveKey
+                activeIslands[effectiveKey] = ActiveIsland(
+                    id = decision.bridgeId, type = type, postTime = System.currentTimeMillis(), sourcePostTime = sbn.postTime,
+                    packageName = sbn.packageName, sourceKey = sbn.key, logicalId = effectiveKey,
+                    groupKey = sbn.groupKey, isGroupSummary = isSummary, generation = generation,
+                    title = effectiveTitle, text = effectiveText,
+                    subText = "LiveUpdate", lastContentHash = newContentHash,
+                    messageEventFingerprint = messageEventFingerprint,
+                    deleteIntent = sbn.notification.deleteIntent
+                )
+                updatePermanentIsland()
+
+                logUpdateDecision(sbn, type, effectiveKey, decision)
+                handlePostNotificationSideEffects(
+                    effectiveKey, sbn.key, decision.bridgeId, generation, finalConfig,
+                    type, true, sbn, effectiveTitle, effectiveText,
+                    isMessageReplacement = decision.cancelBeforeNotify
+                )
+                return
+            }
+
+            // --- LAYERED CUSTOM ISLAND LOGIC ---
+            traceSource("TRANSLATE_STARTED", sbn, processingGeneration, "engine=custom type=$type")
+            val data: HyperIslandData = when (type) {
+                NotificationType.CALL -> callTranslator.translate(
+                    sbn, picKey, finalConfig, activeTheme,
+                    requireNotNull(logical.callSession), isUpdate
+                )
+                NotificationType.NAVIGATION -> {
+                    // --- LAYERED NAVIGATION LOGIC ---
+                    val navLayout = getEffectiveNav(sbn.packageName)
+                    navTranslator.translate(sbn, picKey, finalConfig, navLayout.first, navLayout.second, activeTheme, isUpdate)
+                }
+                NotificationType.TIMER -> timerTranslator.translate(sbn, picKey, finalConfig, activeTheme, isUpdate)
+                NotificationType.PROGRESS -> progressTranslator.translate(sbn, effectiveTitle, picKey, finalConfig, activeTheme, isUpdate)
+                NotificationType.DOWNLOAD -> downloadTranslator.translate(sbn, effectiveTitle, picKey, finalConfig, activeTheme, isUpdate)
+                NotificationType.MEDIA -> mediaTranslator.translate(sbn, picKey, finalConfig, isUpdate)
+                NotificationType.MESSAGE -> messageTranslator.translate(sbn, effectiveTitle, effectiveText, picKey, finalConfig, activeTheme, isUpdate)
+                else -> standardTranslator.translate(sbn, effectiveTitle, effectiveText, picKey, finalConfig, activeTheme, isUpdate)
+            }
+            traceSource("TRANSLATE_SUCCESS", sbn, processingGeneration, "engine=custom type=$type")
+
+            val newContentHash = computeContentHash(
+                sbn = sbn,
+                type = type,
+                title = effectiveTitle,
+                text = effectiveText,
+                renderedJson = data.jsonParam,
+                callSession = logical.callSession
+            )
+            if (shouldSuppressExpiredSource(
+                    sbn, type, effectiveKey, newContentHash, recovery, messageEventFingerprint
+                )
+            ) {
+                traceSource("EXPIRY_SUPPRESSED", sbn, processingGeneration, "type=$type")
+                return
+            }
+            traceSource("EXPIRY_ALLOWED", sbn, processingGeneration, "type=$type")
+            if (!ensureIslandCapacity(previous, type, sbn.packageName, logical, sbn.key, effectiveKey)) {
+                traceSource("POST_FAILED", sbn, processingGeneration, "reason=island-capacity")
+                return
+            }
+            bindSourceToLogicalKey(effectiveKey, sbn.key, previous)
+            val decision = IslandUpdateResolver.decide(
+                logicalId = effectiveKey,
+                candidateBridgeId = bridgeId,
+                contentHash = newContentHash,
+                previous = previous?.toPreviousPresentation(),
+                notificationType = type,
+                presentationReason = presentationReason,
+                isMessagingEvent = isMessagingLifecycleEvent,
+                messageEventFingerprint = messageEventFingerprint
+            )
+            if (decision.kind == IslandPresentationKind.UNCHANGED) {
+                logMessageLifecycle(sbn, isMessagingLifecycleEvent, effectiveKey, decision, previous)
+                logUpdateDecision(sbn, type, effectiveKey, decision)
+                refreshSourceAlias(effectiveKey, sbn, previous)
+                traceSource("POST_SUCCESS", sbn, processingGeneration, "result=unchanged-no-notify")
+                return
+            }
+
+            kotlinx.coroutines.yield()
+
+            logMessageLifecycle(sbn, isMessagingLifecycleEvent, effectiveKey, decision, previous)
+            if (!sourceProcessingGeneration.isCurrent(sourceSlot, processingGeneration)) {
+                traceSource("GENERATION_STALE", sbn, processingGeneration, "point=pre-post")
+                return
+            }
+            if (shouldSuppressPendingPost(rawSbn, sbn, processingGeneration)) return
+            suppressPermanentIslandForPost(previous)
+            prepareMessageReplacement(
+                effectiveKey, previous, decision, generation, isMessagingLifecycleEvent
+            )
+            Log.i(TAG, "UPDATE post pkg=${sbn.packageName} type=$type logical=${effectiveKey.hashCode()} id=${decision.bridgeId} kind=${decision.kind}")
+            traceSource("POST_ATTEMPT", sbn, processingGeneration, "bridgeId=${decision.bridgeId}")
+            postStandardNotification(
+                sbn, effectiveKey, decision.bridgeId, data, decision.onlyAlertOnce
+            )
+            traceSource("POST_SUCCESS", sbn, processingGeneration, "bridgeId=${decision.bridgeId}")
+            expiredIslands.acceptNewGeneration(
+                sbn.key,
+                sourceGenerationFingerprint(newContentHash, sbn.postTime),
+                messageEventFingerprint,
+                effectiveKey
+            )
+
+            activeIslands[effectiveKey] = ActiveIsland(
+                id = decision.bridgeId, type = type, postTime = System.currentTimeMillis(), sourcePostTime = sbn.postTime,
+                packageName = sbn.packageName, sourceKey = sbn.key, logicalId = effectiveKey,
+                groupKey = sbn.groupKey, isGroupSummary = isSummary, generation = generation,
+                title = effectiveTitle, text = effectiveText,
+                subText = "", lastContentHash = newContentHash,
+                messageEventFingerprint = messageEventFingerprint,
+                deleteIntent = sbn.notification.deleteIntent
+            )
+            activeTranslations[effectiveKey] = decision.bridgeId
+            reverseTranslations[decision.bridgeId] = effectiveKey
+            updatePermanentIsland()
+
+            logUpdateDecision(sbn, type, effectiveKey, decision)
+            handlePostNotificationSideEffects(
+                effectiveKey, sbn.key, decision.bridgeId, generation, finalConfig,
+                type, false, sbn, effectiveTitle, effectiveText,
+                isMessageReplacement = decision.cancelBeforeNotify
+            )
+
+        } catch (e: Exception) {
+            // Undo any predictive permanent-island suppression if posting failed before the
+            // active maps were committed. Existing active islands still keep it suppressed.
+            updatePermanentIsland()
+            Log.e(TAG, "Error processing standard notification", e)
+            DiagnosticsStore.record("ERROR", "processing-failed", rawSbn.packageName, e.javaClass.simpleName)
+            traceSource("TRANSLATE_FAILED", sbn, processingGeneration, "exception=${e.javaClass.simpleName}")
+            traceSource("POST_FAILED", sbn, processingGeneration, "exception=${e.javaClass.simpleName}")
+            traceSource("PROCESS_EXCEPTION", sbn, processingGeneration, "exception=${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun isDownloadNotification(sbn: StatusBarNotification, title: String, text: String): Boolean {
+        val pkg = sbn.packageName.lowercase()
+        val titleLower = title.lowercase()
+        val textLower = text.lowercase()
+        val channelId = sbn.notification.channelId?.lowercase() ?: ""
+        
+        val isMatch = if (pkg.contains("download") || pkg.contains("downloader") || pkg.contains("chrome") || 
+            pkg.contains("browser") || pkg.contains("firefox") || pkg.contains("market") || 
+            pkg.contains("vending") || pkg.contains("play.store") || pkg.contains("playstore") || 
+            pkg.contains("store") || pkg.contains("fdroid") || pkg.contains("samsungapps") || 
+            pkg.contains("mipicks") || pkg.contains("venezia") || pkg.contains("packageinstaller") || 
+            pkg.contains("installer") || pkg.contains("gms") || channelId.contains("download") || 
+            channelId.contains("install")) {
+            true
+        } else {
+            val extras = sbn.notification.extras
+            val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.lowercase() ?: ""
+            val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()?.lowercase() ?: ""
+            
+            val downloadKeywords = listOf(
+                // English
+                "download", "install", "update", "updat", "upload", "transfer",
+                // Spanish / Portuguese / Italian / French
+                "descarg", "baix", "telecharg", "instal", "actuali", "carg", "subi", "transf",
+                // German
+                "laden", "gelad", "aktualis",
+                // Polish
+                "pobier", "pobran", "aktual",
+                // Russian / Ukrainian
+                "скач", "загруз", "устан", "обнов"
+            )
+            downloadKeywords.any { 
+                titleLower.contains(it) || 
+                textLower.contains(it) || 
+                subText.contains(it) || 
+                infoText.contains(it) 
+            }
+        }
+
+        Log.d(TAG, "DOWNLOAD classify pkg=$pkg channel=${channelId.hashCode()} hasTitle=${title.isNotBlank()} hasText=${text.isNotBlank()} resolved=$isMatch")
+        return isMatch
+    }
+
+    private fun hasProgressNotification(sbn: StatusBarNotification, title: String, text: String): Boolean {
+        val extras = sbn.notification.extras
+        val isDownload = isDownloadNotification(sbn, title, text)
+        val isOngoing = (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0
+        return extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0 ||
+                extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) ||
+                (isDownload && extractTextPercentage(title, text) != null) ||
+                (isDownload && isOngoing)
+    }
+
+    private fun extractTextPercentage(title: String?, text: String?): Int? {
+        val pattern = Regex("""\b(\d{1,3})\s*%""")
+        val textMatch = text?.let { pattern.find(it) }
+        val titleMatch = title?.let { pattern.find(it) }
+        val match = textMatch ?: titleMatch
+        if (match != null) {
+            val value = match.groupValues[1].toIntOrNull()
+            if (value != null && value in 0..100) {
+                return value
+            }
+        }
+        return null
+    }
+
+    private fun resolveNotificationContent(sbn: StatusBarNotification): ResolvedNotificationContent {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
+        val isMessageStyle = notification.category == Notification.CATEGORY_MESSAGE ||
+                template.contains("MessagingStyle")
+        val rawTitle = extras.getCharSequence(Notification.EXTRA_TITLE)
+            ?.takeUnless { it.toString().trim().equals(sbn.packageName, ignoreCase = true) }
+        return NotificationContentResolver.resolve(
+            title = rawTitle,
+            text = extras.getCharSequence(Notification.EXTRA_TEXT),
+            bigTitle = extras.getCharSequence(Notification.EXTRA_TITLE_BIG),
+            bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+            messages = extractMessageContent(notification),
+            isMessageStyle = isMessageStyle,
+            textLines = try {
+                extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.toList().orEmpty()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        )
+    }
+
+    private fun extractMessageContent(notification: Notification): List<MessageContentCandidate> {
+        val publicMessages: List<MessageContentCandidate> = try {
+            NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification)
+                ?.messages
+                ?.map { message ->
+                    MessageContentCandidate(
+                        sender = message.person?.name?.toString(),
+                        text = message.text?.toString(),
+                        timestamp = message.timestamp.takeIf { it > 0L }
+                    )
+                }
+                .orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (publicMessages.isNotEmpty()) return publicMessages
+
+        return try {
+            @Suppress("DEPRECATION")
+            notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+                ?.mapNotNull { it as? Bundle }
+                ?.map { message ->
+                    @Suppress("DEPRECATION")
+                    val senderPerson = message.getParcelable<Person>("sender_person")
+                    MessageContentCandidate(
+                        sender = senderPerson?.name?.toString()
+                            ?: message.getCharSequence("sender")?.toString(),
+                        text = message.getCharSequence("text")?.toString(),
+                        timestamp = when {
+                            message.containsKey("time") -> message.getLong("time")
+                            message.containsKey("timestamp") -> message.getLong("timestamp")
+                            else -> 0L
+                        }.takeIf { it > 0L }
+                    )
+                }
+                .orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun ensureValidSbn(
+        initialSbn: StatusBarNotification,
+        processingGeneration: Long
+    ): StatusBarNotification {
+        var bestSbn = initialSbn
+        val requested = sourceCandidate(initialSbn)
+        repeat(NotificationRefreshPolicy.MAX_REFRESH_ATTEMPTS) {
+            if (!needsSourceRefresh(bestSbn)) {
+                traceSource("SOURCE_REFRESH_RAW_USED", bestSbn, processingGeneration, "quality=${sourceCandidateQuality(bestSbn)}")
+                return bestSbn
+            }
+
+            traceSource("SOURCE_REFRESH_STARTED", bestSbn, processingGeneration, "attempt=${it + 1}")
+            delay(NotificationRefreshPolicy.REFRESH_DELAY_MS.milliseconds)
+            val active = try {
+                activeNotifications?.toList().orEmpty()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val exact = active.filter { it.key == initialSbn.key }
+            val replacements = active.filter {
+                it.key != initialSbn.key &&
+                        SourceNotificationCandidatePolicy.isSameSlot(requested, sourceCandidate(it))
+            }
+            var refreshedSbn: StatusBarNotification? = null
+            for (candidate in exact + replacements) {
+                val selected = refreshedSbn
+                if (selected == null || SourceNotificationCandidatePolicy.shouldPrefer(
+                        current = sourceCandidate(selected),
+                        incoming = sourceCandidate(candidate),
+                        requestedSourceKey = initialSbn.key
+                    )
+                ) {
+                    refreshedSbn = candidate
+                }
+            }
+            if (refreshedSbn == null) {
+                traceSource("SOURCE_REFRESH_MISSING", bestSbn, processingGeneration)
+                return@repeat
+            }
+
+            traceSource(
+                "SOURCE_REFRESH_ACTIVE_MATCH",
+                refreshedSbn,
+                processingGeneration,
+                "match=${if (refreshedSbn.key == initialSbn.key) "exact" else "replacement"} " +
+                        "quality=${sourceCandidateQuality(refreshedSbn)}"
+            )
+            if (SourceNotificationCandidatePolicy.shouldPrefer(
+                    current = sourceCandidate(bestSbn),
+                    incoming = sourceCandidate(refreshedSbn),
+                    requestedSourceKey = initialSbn.key
+                )
+            ) {
+                bestSbn = refreshedSbn
+            } else {
+                traceSource("SOURCE_REFRESH_RAW_USED", bestSbn, processingGeneration, "reason=refresh-not-better")
+            }
+        }
+        return bestSbn
+    }
+
+    private fun sourceCandidate(sbn: StatusBarNotification): SourceNotificationCandidate =
+        SourceNotificationCandidate(
+            sourceKey = sbn.key,
+            packageName = sbn.packageName,
+            notificationId = sbn.id,
+            notificationTag = sbn.tag,
+            postTime = sbn.postTime,
+            quality = sourceCandidateQuality(sbn)
+        )
+
+    private fun sourceCandidateQuality(sbn: StatusBarNotification): SourceCandidateQuality =
+        if (needsSourceRefresh(sbn)) SourceCandidateQuality.SPARSE else SourceCandidateQuality.USABLE
+
+    private fun sourceSlotIdentity(sbn: StatusBarNotification): String =
+        buildString {
+            append(sbn.packageName.length).append(':').append(sbn.packageName)
+            append('|').append(sbn.id)
+            append('|').append(sbn.tag?.length ?: -1).append(':').append(sbn.tag.orEmpty())
+        }
+
+    private fun shouldSuppressPendingPost(
+        rawSbn: StatusBarNotification,
+        selectedSbn: StatusBarNotification,
+        processingGeneration: Long
+    ): Boolean {
+        val removal = listOfNotNull(
+            recentlyRemovedKeys[rawSbn.key],
+            recentlyRemovedKeys[selectedSbn.key]
+        ).maxByOrNull { it.observedAt } ?: return false
+        if (System.currentTimeMillis() - removal.observedAt >= 2_000L) return false
+
+        val activeReplacement = hasActiveExactOrReplacement(selectedSbn)
+        val suppress = PendingRemovalPolicy.shouldSuppress(
+            PendingRemovalSignals(
+                removalObserved = true,
+                removalPostTime = removal.sourcePostTime,
+                candidatePostTime = rawSbn.postTime,
+                explicitUserDismissal = isExplicitUserDismissal(removal.reason),
+                activeExactOrReplacement = activeReplacement
+            )
+        )
+        traceSource(
+            "SOURCE_REMOVED_DURING_PROCESS",
+            selectedSbn,
+            processingGeneration,
+            "removalReason=${removal.reason} replacementActive=$activeReplacement suppressed=$suppress"
+        )
+        if (suppress) {
+            DiagnosticsStore.record("PROCESS", "ignored", selectedSbn.packageName, "explicit-user-dismissal")
+            traceSource("EXPIRY_SUPPRESSED", selectedSbn, processingGeneration, "reason=explicit-user-dismissal")
+        }
+        return suppress
+    }
+
+    private fun hasActiveExactOrReplacement(sbn: StatusBarNotification): Boolean {
+        val requested = sourceCandidate(sbn)
+        return try {
+            activeNotifications?.any {
+                it.key == sbn.key || SourceNotificationCandidatePolicy.isSameSlot(requested, sourceCandidate(it))
+            } == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun isExplicitUserDismissal(reason: Int): Boolean = when (reason) {
+        REASON_CLICK,
+        REASON_CANCEL,
+        REASON_CANCEL_ALL,
+        REASON_SNOOZED -> true
+        else -> false
+    }
+
+    private fun needsSourceRefresh(sbn: StatusBarNotification): Boolean {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val content = resolveNotificationContent(sbn)
+        val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
+        val hasProgressOrSpecialState = hasProgressNotification(sbn, content.title, content.text) ||
+                notification.category == Notification.CATEGORY_CALL ||
+                notification.category == Notification.CATEGORY_TRANSPORT ||
+                notification.category == Notification.CATEGORY_NAVIGATION ||
+                notification.category == Notification.CATEGORY_ALARM ||
+                template.contains("MediaStyle") ||
+                extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
+        return NotificationRefreshPolicy.shouldRefresh(
+            NotificationRefreshSignals(
+                packageName = sbn.packageName,
+                title = content.title,
+                text = content.text,
+                hasMessageContent = content.hasMessageContent,
+                hasProgressOrSpecialState = hasProgressOrSpecialState
+            )
+        )
+    }
+
+    private fun isMessagingLifecycleEvent(
+        sbn: StatusBarNotification,
+        type: NotificationType,
+        content: ResolvedNotificationContent
+    ): Boolean {
+        // The compatibility extension is only for ordinary/message presentations. Calls,
+        // media, navigation, progress, and timers keep their existing stateful lifecycles.
+        if (type != NotificationType.MESSAGE && type != NotificationType.STANDARD) return false
+
+        val notification = sbn.notification
+        val extras = notification.extras
+        val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
+        val hasMessagePersonMetadata = try {
+            extras.getParcelable(Notification.EXTRA_MESSAGING_PERSON, Person::class.java) != null ||
+                    extras.getParcelableArrayList(
+                        Notification.EXTRA_PEOPLE_LIST,
+                        Person::class.java
+                    )?.isNotEmpty() == true ||
+                    extras.containsKey(Notification.EXTRA_MESSAGES)
+        } catch (_: Exception) {
+            extras.containsKey(Notification.EXTRA_MESSAGES)
+        }
+        val hasRemoteInputReply = (notification.actions ?: emptyArray()).any { action ->
+            action.semanticAction == Notification.Action.SEMANTIC_ACTION_REPLY ||
+                    !action.remoteInputs.isNullOrEmpty()
+        }
+
+        return isMessagingEvent(
+            MessagingEventSignals(
+                packageName = sbn.packageName,
+                isMessageNotificationType = type == NotificationType.MESSAGE,
+                isStandardNotificationType = type == NotificationType.STANDARD,
+                hasMessageCategory = notification.category == Notification.CATEGORY_MESSAGE,
+                hasMessagingStyleTemplate = template.contains("MessagingStyle"),
+                extractedMessageCount = content.messageCount,
+                hasConversationShortcut = !notification.shortcutId.isNullOrBlank(),
+                hasConversationLocus = !notification.locusId?.id.isNullOrBlank(),
+                hasMessagePersonMetadata = hasMessagePersonMetadata,
+                hasRemoteInputReply = hasRemoteInputReply,
+                hasUsefulContent = content.title.isNotBlank() && content.text.isNotBlank()
+            )
+        )
+    }
+
+    private fun resolveMessageEventFingerprint(
+        sbn: StatusBarNotification,
+        content: ResolvedNotificationContent,
+        effectiveTitle: String,
+        effectiveText: String,
+        processingGeneration: Long,
+        callbackObservedAt: Long,
+        recovery: Boolean
+    ): MessageEventFingerprint? {
+        val notification = sbn.notification
+        return messageEventTracker.resolve(
+            sourceKey = sbn.key,
+            contentHash = listOf(effectiveTitle, effectiveText, content.messageCount).hashCode(),
+            signals = MessageEventSignals(
+                latestMessageTimestamp = content.latestMessageTimestamp,
+                messageCount = content.messageCount,
+                notificationWhen = notification.`when`.takeIf { it > 0L },
+                notificationWhenIsReliable = notification.`when` > 0L,
+                sourcePostTime = sbn.postTime.takeIf { it > 0L }
+            ),
+            callbackGeneration = processingGeneration,
+            observedAt = callbackObservedAt,
+            recovery = recovery
+        )
+    }
+
+    private data class LogicalNotification(
+        val logicalId: String,
+        val callSession: CallSession? = null
+    )
+
+    private fun resolveLogicalNotification(
+        sbn: StatusBarNotification,
+        type: NotificationType,
+        title: String,
+        isMessagingLifecycleEvent: Boolean
+    ): LogicalNotification {
+        if (type == NotificationType.CALL) {
+            val signals = buildCallSignals(sbn)
+            val classification = callClassifier.classify(signals)
+            val now = System.currentTimeMillis()
+            val session = callSessionTracker.resolve(
+                CallSessionInput(
+                    sourceKey = sbn.key,
+                    packageName = sbn.packageName,
+                    notificationId = sbn.id,
+                    notificationTag = sbn.tag,
+                    groupKey = sbn.groupKey,
+                    participantId = resolveCallParticipantId(sbn),
+                    classification = classification,
+                    showsChronometer = signals.showsChronometer,
+                    chronometerBase = signals.whenTime,
+                    observedAt = now
+                )
+            )
+            val participantPresent = !resolveCallParticipantId(sbn).isNullOrBlank()
+            Log.d(
+                TAG,
+                "CALL SIGNAL pkg=${sbn.packageName} sourceKeyHash=${sbn.key.hashCode()} " +
+                        "logicalIdHash=${session.logicalCallId.hashCode()} callType=${signals.callType} " +
+                        "showsChronometer=${signals.showsChronometer} chronometerBase=${signals.whenTime} " +
+                        "ongoingFlag=${signals.isOngoingEvent} actionRoles=${classification.actionRoles} " +
+                        "participantPresent=${if (participantPresent) "yes" else "no"}"
+            )
+            Log.d(
+                TAG,
+                "CALL TRANSITION previousState=${session.previousState} candidateState=${session.candidateState} " +
+                        "resolvedState=${session.state} activeEvidence=${session.activeEvidence} " +
+                        "connectedAtSource=${session.connectedAtSource} " +
+                        "sourceReplacement=${if (session.sourceReplacement) "yes" else "no"} " +
+                        "reason=${classification.reason}"
+            )
+            DiagnosticsStore.record(
+                classification = "CALL",
+                action = "classified",
+                packageName = sbn.packageName,
+                reason = classification.reason,
+                callState = session.state.name
+            )
+            return LogicalNotification(session.logicalCallId, session)
+        }
+
+        if (isMessagingLifecycleEvent) {
+            sourceToLogicalKeys[sbn.key]?.let { existingLogicalId ->
+                val existing = activeIslands[existingLogicalId]
+                if (existing?.messageEventFingerprint != null && existing.packageName == sbn.packageName) {
+                    return LogicalNotification(existingLogicalId)
+                }
+            }
+            val identity = resolveMessageIdentity(sbn)
+            Log.d(
+                TAG,
+                "MESSAGE pkg=${sbn.packageName} key=${sbn.key.hashCode()} group=${sbn.groupKey?.hashCode()} " +
+                        "summary=${isGroupSummary(sbn)} logical=${identity.logicalId.hashCode()} identity=${identity.source}"
+            )
+            return LogicalNotification(identity.logicalId)
+        }
+
+        if (type == NotificationType.DOWNLOAD || type == NotificationType.PROGRESS) {
+            val candidates = activeIslands.values.filter {
+                it.packageName == sbn.packageName &&
+                        (it.type == NotificationType.DOWNLOAD || it.type == NotificationType.PROGRESS)
+            }
+            val existing = if (candidates.size == 1) candidates.first() else candidates.find { it.title == title }
+            if (existing != null) return LogicalNotification(existing.logicalId)
+        }
+
+        return LogicalNotification(sbn.key)
+    }
+
+    private fun resolveMessageIdentity(sbn: StatusBarNotification): MessageIdentity {
+        val extras = sbn.notification.extras
+        val conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
+        return messageResolver.resolve(
+            MessageNotificationSignals(
+                packageName = sbn.packageName,
+                notificationId = sbn.id,
+                notificationTag = sbn.tag,
+                shortcutId = sbn.notification.shortcutId,
+                locusId = sbn.notification.locusId?.id,
+                conversationTitle = conversationTitle,
+                isGroupSummary = isGroupSummary(sbn)
+            )
+        )
+    }
+
+    private fun resolveCallParticipantId(sbn: StatusBarNotification): String? {
+        val extras = sbn.notification.extras
+        val person = try {
+            extras.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
+                ?: extras.getParcelable(Notification.EXTRA_MESSAGING_PERSON, Person::class.java)
+                ?: extras.getParcelableArrayList(Notification.EXTRA_PEOPLE_LIST, Person::class.java)?.firstOrNull()
+        } catch (_: Exception) {
+            null
+        }
+        val identity = person?.let(::personIdentity)
+        return identity?.hashCode()?.toUInt()?.toString(16)
+    }
+
+    private fun personIdentity(person: Person): String? {
+        return person.key?.takeIf { it.isNotBlank() }
+            ?: person.uri?.takeIf { it.isNotBlank() }
+            ?: person.name?.toString()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun isGroupSummary(sbn: StatusBarNotification): Boolean {
+        return (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+    }
+
+    private fun isSourceNotificationActive(sourceKey: String): Boolean {
+        return try {
+            activeNotifications?.any { it.key == sourceKey } == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun bindSourceToLogicalKey(logicalKey: String, sourceKey: String, previous: ActiveIsland?) {
+        if (previous != null && previous.sourceKey != sourceKey) {
+            sourceToLogicalKeys.remove(previous.sourceKey, logicalKey)
+        }
+        sourceToLogicalKeys[sourceKey] = logicalKey
+    }
+
+    private fun suppressCallStagePresentation(
+        sbn: StatusBarNotification,
+        logicalKey: String,
+        session: CallSession,
+        previous: ActiveIsland?
+    ) {
+        if (previous?.type == NotificationType.CALL) {
+            activeTranslations[logicalKey]?.let { bridgeId ->
+                try {
+                    NotificationManagerCompat.from(this).cancel(bridgeId)
+                } catch (_: Exception) {}
+            }
+            cleanupCache(logicalKey, preserveCallSession = true)
+        }
+        sourceToLogicalKeys[sbn.key] = logicalKey
+        Log.d(
+            TAG,
+            "CALL STAGE HIDDEN pkg=${sbn.packageName} logicalIdHash=${logicalKey.hashCode()} " +
+                    "state=${session.state} stage=${CallStageVisibilityPolicy.stageFor(session.state)}"
+        )
+        DiagnosticsStore.record(
+            classification = "CALL",
+            action = "stage-hidden",
+            packageName = sbn.packageName,
+            reason = CallStageVisibilityPolicy.stageFor(session.state)?.name,
+            callState = session.state.name
+        )
+    }
+
+    private fun detachReassignedSource(sourceKey: String, newLogicalKey: String) {
+        val oldLogicalKey = sourceToLogicalKeys[sourceKey] ?: return
+        if (oldLogicalKey == newLogicalKey) return
+        val oldIsland = activeIslands[oldLogicalKey] ?: run {
+            sourceToLogicalKeys.remove(sourceKey, oldLogicalKey)
+            return
+        }
+        Log.d(
+            TAG,
+            "UPDATE source reassigned source=${sourceKey.hashCode()} old=${oldLogicalKey.hashCode()} new=${newLogicalKey.hashCode()}"
+        )
+        NotificationManagerCompat.from(this).cancel(oldIsland.id)
+        cleanupCache(oldLogicalKey)
+    }
+
+    private fun refreshSourceAlias(
+        logicalKey: String,
+        sbn: StatusBarNotification,
+        previous: ActiveIsland?
+    ) {
+        if (previous == null) return
+        bindSourceToLogicalKey(logicalKey, sbn.key, previous)
+        activeIslands[logicalKey] = previous.copy(
+            sourceKey = sbn.key,
+            sourcePostTime = sbn.postTime,
+            groupKey = sbn.groupKey,
+            deleteIntent = sbn.notification.deleteIntent
+        )
+    }
+
+    private fun ActiveIsland.toPreviousPresentation(): PreviousIslandPresentation {
+        return PreviousIslandPresentation(logicalId, id, lastContentHash, messageEventFingerprint)
+    }
+
+    private fun allocateMessageBridgeId(
+        logicalKey: String,
+        generation: Long,
+        contentHashSeed: Int,
+        previousBridgeId: Int,
+        messageEventFingerprint: MessageEventFingerprint?
+    ): Int {
+        var attempt = 0
+        while (true) {
+            val candidate = MessageBridgeIdPolicy.candidate(
+                logicalId = logicalKey,
+                generation = generation,
+                contentHash = contentHashSeed,
+                attempt = attempt++,
+                messageEventFingerprint = messageEventFingerprint
+            )
+            if (candidate != previousBridgeId && !reverseTranslations.containsKey(candidate)) return candidate
+        }
+    }
+
+    private fun prepareMessageReplacement(
+        logicalKey: String,
+        previous: ActiveIsland?,
+        decision: IslandUpdateDecision,
+        generation: Long,
+        isMessagingLifecycleEvent: Boolean
+    ) {
+        if (previous == null || !isMessagingLifecycleEvent || !decision.cancelBeforeNotify) return
+
+        timeoutJobs.remove(logicalKey)?.cancel()
+        internalBridgeReplacements.mark(
+            bridgeId = previous.id,
+            logicalId = logicalKey,
+            generation = generation,
+            now = System.currentTimeMillis()
+        )
+        reverseTranslations.remove(previous.id, logicalKey)
+        NotificationManagerCompat.from(this).cancel(previous.id)
+        Log.d(
+            TAG,
+            "MESSAGE REPLACE logicalId=${logicalKey.hashCode()} oldBridgeId=${previous.id} " +
+                    "newBridgeId=${decision.bridgeId} generation=$generation"
+        )
+        DiagnosticsStore.record(previous.type.name, "replace", previous.packageName)
+    }
+
+    private fun ensureIslandCapacity(
+        previous: ActiveIsland?,
+        type: NotificationType,
+        packageName: String,
+        logical: LogicalNotification,
+        sourceKey: String,
+        logicalKey: String
+    ): Boolean {
+        if (previous != null || activeIslands.size < MAX_ISLANDS) return true
+        handleLimitReached(type, packageName)
+        if (activeIslands.size < MAX_ISLANDS) return true
+        logical.callSession?.let { callSessionTracker.end(it.logicalCallId) }
+        sourceToLogicalKeys.remove(sourceKey, logicalKey)
+        return false
+    }
+
+    private fun computeContentHash(
+        sbn: StatusBarNotification,
+        type: NotificationType,
+        title: String,
+        text: String,
+        renderedJson: String?,
+        callSession: CallSession?
+    ): Int {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val actionState = (notification.actions ?: emptyArray()).map {
+            listOf(
+                it.semanticAction,
+                it.title?.toString()?.hashCode(),
+                it.actionIntent?.creatorPackage?.hashCode(),
+                it.getIcon()?.hashCode()
+            ).hashCode()
+        }
+        val visualState = listOf(
+            visualObjectIdentity(notification.getLargeIcon()),
+            visualObjectIdentity(notification.smallIcon),
+            visualObjectIdentity(extras.get(Notification.EXTRA_PICTURE)),
+            visualObjectIdentity(extras.get(Notification.EXTRA_LARGE_ICON)),
+            resolvePersonVisualIdentity(extras)
+        ).hashCode()
+        return listOf(
+            type,
+            title,
+            text,
+            extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
+            actionState,
+            extras.getInt(Notification.EXTRA_PROGRESS, 0),
+            extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0),
+            extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false),
+            extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false),
+            notification.`when`.takeIf { type == NotificationType.TIMER },
+            notification.shortcutId,
+            visualState,
+            callSession?.state,
+            callSession?.connectedAt,
+            normalizeRenderedJson(type, renderedJson)
+        ).hashCode()
+    }
+
+    private fun normalizeRenderedJson(type: NotificationType, renderedJson: String?): String? {
+        val semanticJson = RenderedJsonNormalizer.normalize(renderedJson)
+        return if (type == NotificationType.CALL) normalizeCallRenderedJson(semanticJson) else semanticJson
+    }
+
+    private fun normalizeCallRenderedJson(renderedJson: String?): String? {
+        if (renderedJson == null) return null
+        return renderedJson.replace(
+            Regex("""(\"timer(?:When|Total|SystemCurrent)\"\s*:\s*)-?\d+"""),
+            "$1<time>"
+        )
+    }
+
+    private fun visualObjectIdentity(value: Any?): Int? {
+        return when (value) {
+            is android.graphics.Bitmap -> listOf(value.generationId, value.width, value.height).hashCode()
+            is android.graphics.drawable.Icon -> value.toString().hashCode()
+            else -> value?.hashCode()
+        }
+    }
+
+    private fun resolvePersonVisualIdentity(extras: Bundle): Int? {
+        val directPerson = try {
+            extras.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
+                ?: extras.getParcelable(Notification.EXTRA_MESSAGING_PERSON, Person::class.java)
+        } catch (_: Exception) {
+            null
+        }
+        directPerson?.icon?.let { return it.toString().hashCode() }
+
+        return try {
+            @Suppress("DEPRECATION")
+            val message = extras.getParcelableArray(Notification.EXTRA_MESSAGES)?.lastOrNull() as? Bundle
+            @Suppress("DEPRECATION")
+            val sender = message?.getParcelable<Person>("sender_person")
+            sender?.icon?.toString()?.hashCode()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun logUpdateDecision(
+        sbn: StatusBarNotification,
+        type: NotificationType,
+        logicalKey: String,
+        decision: IslandUpdateDecision
+    ) {
+        Log.d(
+            TAG,
+            "UPDATE pkg=${sbn.packageName} type=$type logical=${logicalKey.hashCode()} bridgeId=${decision.bridgeId} " +
+                    "kind=${decision.kind} alertOnce=${decision.onlyAlertOnce} cancelBeforeNotify=${decision.cancelBeforeNotify}"
+        )
+        Log.d(
+            TAG,
+            "FLOAT reason=${decision.presentationReason} islandFirstFloat=${decision.presentationReason.mayAutoExpand} " +
+                    "logical=${logicalKey.hashCode()} bridgeId=${decision.bridgeId}"
+        )
+        DiagnosticsStore.record(
+            classification = type.name,
+            action = decision.kind.name.lowercase(),
+            packageName = sbn.packageName
+        )
+    }
+
+    private fun logMessageLifecycle(
+        sbn: StatusBarNotification,
+        isMessagingLifecycleEvent: Boolean,
+        logicalKey: String,
+        decision: IslandUpdateDecision,
+        previous: ActiveIsland?
+    ) {
+        if (!isMessagingLifecycleEvent) return
+        when (decision.kind) {
+            IslandPresentationKind.NEW -> Log.d(
+                TAG,
+                "MESSAGE NEW package=${sbn.packageName} sourceKey=${sbn.key.hashCode()} " +
+                        "bridgeId=${decision.bridgeId} logicalId=${logicalKey.hashCode()}"
+            )
+            IslandPresentationKind.UPDATE -> Log.d(
+                TAG,
+                "MESSAGE UPDATE package=${sbn.packageName} oldSourceKey=${previous?.sourceKey?.hashCode()} " +
+                        "newSourceKey=${sbn.key.hashCode()} bridgeId=${decision.bridgeId} logicalId=${logicalKey.hashCode()}"
+            )
+            IslandPresentationKind.UNCHANGED -> Log.d(
+                TAG,
+                "MESSAGE UNCHANGED package=${sbn.packageName} sourceKey=${sbn.key.hashCode()} " +
+                        "bridgeId=${decision.bridgeId} logicalId=${logicalKey.hashCode()}"
+            )
+        }
+    }
+
+    private fun buildCallSignals(sbn: StatusBarNotification): CallNotificationSignals {
+        val n = sbn.notification
+        val extras = n.extras
+        val callType = try {
+            if (extras.containsKey(Notification.EXTRA_CALL_TYPE)) {
+                extras.getInt(Notification.EXTRA_CALL_TYPE, CallNotificationClassifier.CALL_TYPE_UNKNOWN)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+        return CallNotificationSignals(
+            category = n.category,
+            template = extras.getString(Notification.EXTRA_TEMPLATE),
+            callType = callType,
+            showsChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER),
+            whenTime = n.`when`,
+            actions = (n.actions ?: emptyArray()).map {
+                CallActionSignal(
+                    title = it.title?.toString().orEmpty(),
+                    semanticAction = it.semanticAction,
+                    hasPendingIntent = it.actionIntent != null
+                )
+            },
+            isOngoingEvent = (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
+        )
+    }
+
+    private fun detectNotificationType(sbn: StatusBarNotification): NotificationType {
+        val n = sbn.notification
+        val extras = n.extras
+        val template = extras.getString(Notification.EXTRA_TEMPLATE) ?: ""
+        val isCall = callClassifier.classify(buildCallSignals(sbn)).isCall
+        val isNav = n.category == Notification.CATEGORY_NAVIGATION || sbn.packageName.let { it.contains("maps") || it.contains("waze") }
+        val isTimer = (extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) || n.category == Notification.CATEGORY_ALARM) && n.`when` > 0
+        val isMedia = template.contains("MediaStyle") || n.category == Notification.CATEGORY_TRANSPORT
+        val isMessage = n.category == Notification.CATEGORY_MESSAGE || template.contains("MessagingStyle")
+        
+        val content = resolveNotificationContent(sbn)
+        val title = content.title
+        val text = content.text
+        val isDownload = isDownloadNotification(sbn, title, text)
+        val hasProgress = hasProgressNotification(sbn, title, text)
+
+        return when {
+            isCall -> NotificationType.CALL
+            isNav -> NotificationType.NAVIGATION
+            isTimer -> NotificationType.TIMER
+            isMedia -> NotificationType.MEDIA
+            isMessage -> NotificationType.MESSAGE
+            hasProgress -> {
+                if (isDownload) {
+                    NotificationType.DOWNLOAD
+                } else {
+                    NotificationType.PROGRESS
+                }
+            }
+            else -> NotificationType.STANDARD
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private suspend fun postStandardNotification(
+        sbn: StatusBarNotification,
+        logicalKey: String,
+        bridgeId: Int,
+        data: HyperIslandData,
+        shouldAlertOnce: Boolean
+    ): Notification {
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(getString(R.string.notification_went_wrong))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOngoing(true)
+            .setOnlyAlertOnce(shouldAlertOnce)
+            .setDefaults(0)
+            .setSound(null)
+            .setVibrate(null)
+
+        val extras = Bundle()
+        extras.putString(EXTRA_ORIGINAL_KEY, logicalKey)
+        builder.addExtras(extras)
+        builder.addExtras(data.resources)
+
+        val hasPermission = com.sykeptical.hyperbridge.util.XiaomiNotificationHelper.hasFocusPermission(this)
+        if (!hasPermission) {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                putExtra("open_troubleshoot", true)
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.setContentIntent(pendingIntent)
+            builder.addAction(
+                android.R.drawable.ic_dialog_info,
+                getString(R.string.troubleshoot_featured_notification),
+                pendingIntent
+            )
+        } else {
+            // Use the source PendingIntent directly. Notification trampolines are blocked on
+            // modern Android and could prevent message Islands from opening their app.
+            sbn.notification.contentIntent?.let(builder::setContentIntent)
+        }
+
+        val notification = builder.build()
+        notification.extras.putString("miui.focus.param", data.jsonParam)
+
+        // Same-ID notify is both the create and update operation. HyperOS can retain the existing
+        // Focus island; cancel-before-notify would force a close/open presentation.
+        dispatchIslandNotification(bridgeId, notification, shouldAlertOnce)
+        return notification
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private suspend fun dispatchIslandNotification(
+        bridgeId: Int,
+        notification: Notification,
+        isUpdate: Boolean
+    ) {
+        if (isUpdate) {
+            NotificationManagerCompat.from(this).notify(bridgeId, notification)
+        } else {
+            ShizukuManager.notifyInPlace(this, bridgeId, notification)
+        }
+    }
+
+    // =========================================================================
+    //  HELPERS & SETUP
+    // =========================================================================
+
+    private fun createChannels() {
+        val manager = getSystemService(NotificationManager::class.java)
+        val notifChannel = NotificationChannel(NOTIFICATION_CHANNEL_ID, getString(R.string.channel_active_islands), NotificationManager.IMPORTANCE_HIGH).apply {
+            description = getString(R.string.channel_active_islands_desc)
+            setSound(null, null); enableVibration(false); setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(notifChannel)
+
+        val widgetChannel = NotificationChannel(WIDGET_CHANNEL_ID, getString(R.string.channel_widgets), NotificationManager.IMPORTANCE_LOW).apply {
+            description = getString(R.string.channel_widgets_desc)
+            setSound(null, null); enableVibration(false); setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(widgetChannel)
+
+        val liveUpdateChannel = NotificationChannel(LIVE_UPDATE_CHANNEL_ID, getString(R.string.channel_live_updates), NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = getString(R.string.channel_live_updates_desc)
+            setSound(null, null); enableVibration(false); setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(liveUpdateChannel)
+
+        val watchRelayChannel = NotificationChannel(WATCH_RELAY_CHANNEL_ID, getString(R.string.channel_watch_relay), NotificationManager.IMPORTANCE_LOW).apply {
+            description = getString(R.string.channel_watch_relay_desc)
+            setSound(null, null); enableVibration(false); setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        }
+        manager.createNotificationChannel(watchRelayChannel)
+    }
+
+    private fun shouldProcessWidgetUpdate(widgetId: Int, config: WidgetConfig): Boolean {
+        val now = System.currentTimeMillis()
+        val lastTime = widgetUpdateDebouncer[widgetId] ?: 0L
+        val throttleTime = if (config.renderMode == WidgetRenderMode.SNAPSHOT) 1500L else 200L
+        if (now - lastTime < throttleTime) return false
+        widgetUpdateDebouncer[widgetId] = now
+        return true
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private suspend fun processSingleWidget(widgetId: Int, config: WidgetConfig) {
+        try {
+            val data = widgetTranslator.translate(widgetId)
+            postWidgetNotification(WIDGET_ID_BASE + widgetId, data)
+            activeWidgets.add(widgetId)
+            updatePermanentIsland()
+        } catch (e: Exception) { Log.e(TAG, "Failed widget $widgetId", e) }
+    }
+
+    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    private fun postWidgetNotification(notificationId: Int, data: HyperIslandData) {
+        val builder = NotificationCompat.Builder(this, WIDGET_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Widget Overlay").setContentText(getString(R.string.widget_went_wrong))
+            .setPriority(NotificationCompat.PRIORITY_LOW).setOngoing(true)
+            .setOnlyAlertOnce(true).setDefaults(0).setSound(null).setVibrate(null)
+            .addExtras(data.resources)
+
+        val intent = Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK }
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        builder.setContentIntent(pendingIntent)
+
+        val notification = builder.build()
+        notification.extras.putString("miui.focus.param", data.jsonParam)
+        ShizukuManager.notify(this, notificationId, notification)
+    }
+
+    private fun handleLimitReached(newType: NotificationType, newPkg: String) {
+        val oldest = activeIslands.minByOrNull { it.value.postTime } ?: return
+
+        when (currentMode) {
+            IslandLimitMode.FIRST_COME -> {
+                // Ignore the new notification by removing it immediately (or simply returning, but returning here means the caller won't add it)
+                // The logic in the caller says:
+                // if (!isUpdate && activeIslands.size >= MAX_ISLANDS) {
+                //    handleLimitReached(type, sbn.packageName)
+                //    if (activeIslands.size >= MAX_ISLANDS) return
+                // }
+                // So if we do nothing here, the size remains >= MAX_ISLANDS, and the caller will return.
+                return
+            }
+            IslandLimitMode.MOST_RECENT -> {
+                NotificationManagerCompat.from(this).cancel(oldest.value.id)
+                cleanupCache(oldest.key)
+            }
+            IslandLimitMode.PRIORITY -> {
+                // Check if newPkg has higher priority than existing ones.
+                // Priority is determined by its index in appPriorityList (lower index = higher priority).
+                // If it's not in the list, it has the lowest priority (Int.MAX_VALUE).
+                val newPriority = appPriorityList.indexOf(newPkg).let { if (it == -1) Int.MAX_VALUE else it }
+                
+                // Find the existing active island with the lowest priority (highest index value)
+                val lowestPriorityIsland = activeIslands.maxByOrNull {
+                    appPriorityList.indexOf(it.value.packageName).let { idx -> if (idx == -1) Int.MAX_VALUE else idx }
+                }
+
+                if (lowestPriorityIsland != null) {
+                    val lowestPriority = appPriorityList.indexOf(lowestPriorityIsland.value.packageName).let { if (it == -1) Int.MAX_VALUE else it }
+                    if (newPriority <= lowestPriority) {
+                        // The new notification has equal or higher priority than the lowest existing one.
+                        // Remove the lowest priority existing notification.
+                        NotificationManagerCompat.from(this).cancel(lowestPriorityIsland.value.id)
+                        cleanupCache(lowestPriorityIsland.key)
+                    } else {
+                        // The new notification has lower priority than all existing ones. Do nothing, which will ignore it.
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isJunkNotification(
+        sbn: StatusBarNotification,
+        content: ResolvedNotificationContent
+    ): Boolean {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val pkg = sbn.packageName
+
+        val title = content.title
+        val text = content.text
+
+        val hasProgress = hasProgressNotification(sbn, title, text)
+        val isSpecial = notification.category == Notification.CATEGORY_TRANSPORT || callClassifier.classify(buildCallSignals(sbn)).isCall ||
+                notification.category == Notification.CATEGORY_NAVIGATION || extras.getString(Notification.EXTRA_TEMPLATE)?.contains("MediaStyle") == true
+        return NotificationAcceptancePolicy.isJunk(
+            NotificationAcceptanceSignals(
+                packageName = pkg,
+                title = title,
+                text = text,
+                hasMessageContent = content.hasMessageContent,
+                hasProgressOrSpecialState = hasProgress || isSpecial,
+                containsBlockedTerm = globalBlockedTerms.any { "$title $text".contains(it, true) }
+            )
+        )
+    }
+
+    private fun getCachedAppLabel(pkg: String): String {
+        synchronized(appLabelCache) {
+            appLabelCache.get(pkg)?.let { return it }
+        }
+        val label = try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (_: Exception) {
+            ""
+        }
+        synchronized(appLabelCache) { appLabelCache.put(pkg, label) }
+        return label
+    }
+
+    private fun shouldIgnore(packageName: String): Boolean = packageName == this.packageName || packageName == "android" || packageName.contains("miui.notification")
+    private fun isAppAllowed(packageName: String): Boolean = allowedPackageSet.contains(packageName)
+
+    private var syncJob: Job? = null
+
+    override fun onListenerConnected() { 
+        Log.i(TAG, "HyperBridge Service Connected")
+        DiagnosticsStore.setServiceConnected(true)
+        DiagnosticsStore.record("SERVICE", "connected")
+        syncNotifications(refresh = true)
+        syncJob?.cancel()
+        syncJob = serviceScope.launch {
+            while (true) {
+                delay(60_000) // 1 minute periodic sync
+                // Screen off: nothing to keep in sync visually, and SCREEN_ON runs a full
+                // refresh sync on wake — skip the tick instead of waking up all night.
+                if (isScreenOn) {
+                    syncNotifications()
+                }
+            }
+        }
+    }
+
+    private fun syncNotifications(refresh: Boolean = false) {
+        val now = System.currentTimeMillis()
+        recentlyRemovedKeys.entries.removeIf { now - it.value.observedAt > 10000 }
+        intentionallyRemovedKeys.entries.removeIf { now - it.value > 10_000 }
+        internalBridgeReplacements.prune(now)
+        expiredIslands.prune(now)
+        callSessionTracker.pruneStale(now)
+        sourceToLogicalKeys.entries.removeIf { !activeIslands.containsKey(it.value) }
+
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val currentNotifications = activeNotifications ?: return@launch
+                val selectedPackages = preferences.allowedPackagesFlow.first()
+                allowedPackageSet = selectedPackages
+                val systemNotificationKeys = currentNotifications.map { it.key }.toSet()
+                val postedWidgetIds = currentNotifications
+                    .filter { it.packageName == packageName && BridgeNotificationChannels.isWidget(it.notification.channelId) }
+                    .mapNotNull { (it.id - WIDGET_ID_BASE).takeIf { widgetId -> widgetId >= 0 } }
+                    .toSet()
+                activeWidgets.retainAll(postedWidgetIds)
+                activeWidgets.addAll(postedWidgetIds)
+                val savedWidgetIds = preferences.savedWidgetIdsFlow.first().toSet()
+                widgetUpdateDebouncer.keys.removeIf { it !in savedWidgetIds }
+                dismissedWidgetIds.removeIf { it !in savedWidgetIds }
+
+                var nativeChanged = false
+                for (sbn in currentNotifications) {
+                    if (sbn.packageName != packageName) {
+                        val extras = sbn.notification.extras
+                        var isNative = false
+                        if (extras != null) {
+                            if (extras.containsKey("miui.focus.param") || extras.containsKey("miui.system.focus.param")) {
+                                isNative = true
+                            }
+                            val template = extras.getString(Notification.EXTRA_TEMPLATE)
+                            if (template == "androidx.media.app.NotificationCompat\$MediaStyle" ||
+                                template == "android.app.Notification\$MediaStyle") {
+                                isNative = true
+                            }
+                        }
+                        if (isNative) {
+                            if (nativeIslands.add(sbn.key)) nativeChanged = true
+                        } else {
+                            if (nativeIslands.remove(sbn.key)) nativeChanged = true
+                        }
+                    }
+                }
+
+                val currentNatives = nativeIslands.toList()
+                for (key in currentNatives) {
+                    if (!systemNotificationKeys.contains(key)) {
+                        if (nativeIslands.remove(key)) nativeChanged = true
+                    }
+                }
+                if (nativeChanged) updatePermanentIsland()
+
+                val currentKeys = currentNotifications.map { it.key }.toSet()
+                
+                val keysToRemove = mutableListOf<String>()
+                for ((logicalKey, activeIsland) in activeIslands) {
+                    if (!currentKeys.contains(activeIsland.sourceKey)) {
+                        val appConfig = preferences.getAppIslandConfigSync(activeIsland.packageName)
+                        val globalConfig = preferences.getGlobalConfigSync()
+                        val finalConfig = appConfig.mergeWith(globalConfig)
+
+                        val forceDismiss = activeIsland.type == NotificationType.CALL || 
+                                           activeIsland.type == NotificationType.MEDIA || 
+                                           activeIsland.type == NotificationType.NAVIGATION
+
+                        val canBeIntentionallyMirrored = activeIsland.type == NotificationType.MESSAGE ||
+                                activeIsland.type == NotificationType.STANDARD
+
+                        // Only message/standard notifications use the unprivileged cancel-and-mirror
+                        // fallback. Other types should clean up when their source notification is gone.
+                        if (!forceDismiss && canBeIntentionallyMirrored && finalConfig.removeOriginalNotification == true) {
+                            continue
+                        }
+
+                        if (finalConfig.dismissWithOriginal == true || forceDismiss) {
+                            keysToRemove.add(logicalKey)
+                        }
+                    }
+                }
+
+                for (key in keysToRemove) {
+                    Log.d(TAG, "Sync: Found stuck notification $key, removing.")
+                    val hyperId = activeTranslations[key]
+                    if (hyperId != null) {
+                        try {
+                            NotificationManagerCompat.from(this@NotificationReaderService).cancel(hyperId)
+                        } catch (_: Exception) {}
+                    }
+                    cleanupCache(key)
+                }
+
+                // Bridged notifications we no longer track (e.g. left over from a service restart)
+                // keep their island slot occupied forever, since island-swipe never removes them.
+                for (sbn in currentNotifications) {
+                    if (sbn.packageName != packageName) continue
+                    val id = sbn.id
+                    if (id == PermanentIslandManager.PERMANENT_BRIDGE_ID) continue
+                    if (BridgeNotificationChannels.isWidget(sbn.notification.channelId)) continue
+                    if (BridgeNotificationChannels.isWatchRelay(sbn.notification.channelId)) continue
+                    if ((sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) continue
+                    if (reverseTranslations.containsKey(id)) continue
+                    if (System.currentTimeMillis() - sbn.postTime < 5000) continue
+                    Log.d(TAG, "Sync: Reaping orphan bridge notification $id")
+                    try {
+                        NotificationManagerCompat.from(this@NotificationReaderService).cancel(id)
+                    } catch (_: Exception) {}
+                }
+
+                // Full type detection can inspect actions, content and app metadata. Run it only
+                // for discrete recovery passes, never for the ordinary 60-second bookkeeping tick.
+                if (OngoingRecoveryPolicy.shouldClassifyShadeNotifications(refresh)) {
+                    val eligibleSources = currentNotifications.filter {
+                        it.packageName != packageName &&
+                                it.packageName in selectedPackages &&
+                                !shouldIgnore(it.packageName)
+                    }
+                    val mappedSourceKeys = sourceToLogicalKeys.keys + activeIslands.values.map { it.sourceKey }
+                    val recoverableSources = eligibleSources.map { it to detectNotificationType(it) }
+                        .filter { (_, type) -> type != NotificationType.MESSAGE && type != NotificationType.STANDARD }
+                    val reconciliation = NotificationReconciliation.plan(
+                        ReconciliationInput(
+                            activeLogicalSources = activeIslands.mapValues { it.value.sourceKey },
+                            currentSourceKeys = systemNotificationKeys,
+                            trackedBridgeIds = reverseTranslations.keys,
+                            postedBridgeIds = currentNotifications.filter { it.packageName == packageName }.map { it.id }.toSet(),
+                            recoverableSourceKeys = recoverableSources.map { it.first.key }.toSet(),
+                            mappedSourceKeys = mappedSourceKeys
+                        )
+                    )
+                    recoverableSources
+                        .filter { (source, _) -> source.key in reconciliation.missingSourceKeys }
+                        .forEach { (source, type) ->
+                            Log.d(TAG, "RECONCILE RECOVER_ONGOING sourceKey=${source.key.hashCode()}")
+                            DiagnosticsStore.record(type.name, "recover-ongoing", source.packageName)
+                            enqueueSourceNotification(source, recovery = true)
+                        }
+                }
+
+                val islandPresent = currentNotifications.any {
+                    it.packageName == packageName && it.id == PermanentIslandManager.PERMANENT_BRIDGE_ID
+                }
+                permanentIslandManager.reconcile(
+                    activeIslands.size + activeWidgets.size,
+                    nativeIslands.isNotEmpty(),
+                    islandPresent,
+                    refresh
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error syncing notifications", e)
+            }
+        }
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        syncJob?.cancel()
+        syncJob = null
+        DiagnosticsStore.setServiceConnected(false)
+        DiagnosticsStore.record("SERVICE", "disconnected")
+        try {
+            requestRebind(android.content.ComponentName(this, NotificationReaderService::class.java))
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to request listener rebind", e)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(systemReceiver)
+        syncJob?.cancel()
+        DiagnosticsStore.setServiceConnected(false)
+        callSessionTracker.clear()
+        messageEventTracker.clear()
+        processingJobs.values.forEach { it.cancel() }
+        timeoutJobs.values.forEach { it.cancel() }
+        removalJobs.values.forEach { it.cancel() }
+        processingJobs.clear()
+        timeoutJobs.clear()
+        removalJobs.clear()
+        sourceProcessingGeneration.clear()
+        expiredIslands.clear()
+        activeIslands.clear()
+        activeTranslations.clear()
+        reverseTranslations.clear()
+        sourceToLogicalKeys.clear()
+        recentlyRemovedKeys.clear()
+        intentionallyRemovedKeys.clear()
+        internalBridgeReplacements.clear()
+        nativeIslands.clear()
+        widgetUpdateDebouncer.clear()
+        dismissedWidgetIds.clear()
+        activeWidgets.clear()
+        synchronized(appLabelCache) { appLabelCache.evictAll() }
+        serviceScope.cancel() 
+    }
+}

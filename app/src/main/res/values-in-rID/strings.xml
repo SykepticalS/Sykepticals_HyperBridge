@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Buka Pustaka untuk mengaktifkan aplikasi.</string>
     <string name="no_apps_found">Aplikasi tidak ditemukan</string>
     <string name="version_template">Versi %s</string>
-    <string name="developer_credit">oleh D4vidDf</string>
+    <string name="developer_credit">oleh Sykeptical</string>
     <string name="group_configuration">Konfigurasi</string>
     <string name="system_setup">Pengaturan Sistem</string>
     <string name="system_setup_subtitle">Perbaiki perizinan &amp; baterai</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">Lebar Island</string>
     <string name="group_about">Tentang</string>
     <string name="developer">Pengembang</string>
-    <string name="developer_subtitle">Kunjungi d4viddf.com</string>
+    <string name="developer_subtitle">Kunjungi github.com/SykepticalS</string>
     <string name="source_code">Kode Sumber</string>
     <string name="source_code_subtitle">Repository GitHub</string>
     <string name="licenses">Lisensi Open Source</string>

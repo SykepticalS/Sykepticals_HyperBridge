@@ -4,8 +4,8 @@ description: Create a report to help us improve HyperBridge
 title: "[BUG] "
 labels: ["bug"]
 assignees:
-  - D4vidDf
-projects: "D4vidDf/8"
+  - SykepticalS
+projects: "SykepticalS/8"
 body:
   - type: markdown
     attributes:
@@ -50,7 +50,7 @@ body:
     id: app_version
     attributes:
       label: App Version
-      description: "Which version is causing the issue? (Check tags: https://github.com/D4vidDf/HyperBridge/tags)"
+      description: "Which version is causing the issue? (Check tags: https://github.com/SykepticalS/HyperBridge-master/tags)"
       options:
         - v0.6.x
         - v0.5.5

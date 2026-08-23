@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Menj a Könyvtárba az alkalmazások engedélyezéséhez.</string>
     <string name="no_apps_found">Nincsenek alkalmazások</string>
     <string name="version_template">Verzió %s</string>
-    <string name="developer_credit">D4vidDf készítette</string>
+    <string name="developer_credit">Sykeptical készítette</string>
     <string name="group_configuration">Konfiguráció</string>
     <string name="system_setup">Rendszerbeállítás</string>
     <string name="system_setup_subtitle">Engedélyek és akkumulátor javítása</string>
@@ -47,7 +47,7 @@
     <string name="permanent_island_width">Island Width</string>
     <string name="group_about">Alkalmazásról</string>
     <string name="developer">Fejlesztő</string>
-    <string name="developer_subtitle">Keresd fel d4viddf.com</string>
+    <string name="developer_subtitle">Keresd fel github.com/SykepticalS</string>
     <string name="source_code">Forráskód</string>
     <string name="source_code_subtitle">GitHub adattároló</string>
     <string name="licenses">Nyílt forráskód licenszek</string>
