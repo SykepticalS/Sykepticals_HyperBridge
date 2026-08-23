@@ -129,6 +129,18 @@ class ExpiredIslandRegistryTest {
         assertTrue(IslandTimeoutPolicy.isCurrent(2, 42, scheduledGeneration = 2, scheduledBridgeId = 42))
     }
 
+    @Test
+    fun timeoutDurationUsesConfiguredSecondsWithoutOneMinuteCap() {
+        assertEquals(5_000L, IslandTimeoutPolicy.durationMillis(5))
+        assertEquals(120_000L, IslandTimeoutPolicy.durationMillis(120))
+    }
+
+    @Test
+    fun disabledTimeoutDoesNotScheduleAutoHide() {
+        assertEquals(null, IslandTimeoutPolicy.durationMillis(null))
+        assertEquals(null, IslandTimeoutPolicy.durationMillis(0))
+    }
+
     private fun messageEvent(timestamp: Long): MessageEventFingerprint {
         return MessageEventFingerprint(
             source = MessageEventFingerprintSource.MESSAGING_STYLE,

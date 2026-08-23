@@ -103,6 +103,9 @@ fun sourceGenerationFingerprint(contentHash: Int, sourcePostTime: Long): Int =
     listOf(contentHash, sourcePostTime).hashCode()
 
 object IslandTimeoutPolicy {
+    fun durationMillis(timeoutSeconds: Int?): Long? =
+        timeoutSeconds?.takeIf { it > 0 }?.toLong()?.times(1_000L)
+
     fun isCurrent(
         activeGeneration: Long?,
         activeBridgeId: Int?,

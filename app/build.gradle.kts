@@ -15,8 +15,8 @@ android {
         applicationId = "com.sykeptical.hyperbridge"
         minSdk = 35
         targetSdk = 37
-        versionCode = 32
-        versionName = "0.5.7-sykeptical"
+        versionCode = 33
+        versionName = "0.5.8-sykeptical"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

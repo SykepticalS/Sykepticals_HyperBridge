@@ -27,6 +27,7 @@ performed by the desktop build environment.
 | 17 | Icon consistency | Transparent, full-bleed, tall, wide, adaptive, bitmap, vector, themed, and monochrome actions keep aspect ratio and similar visible size. | Device required |
 | 18 | Floating setup | Per-app public notification settings opens with fallback; confirmation is labeled user-confirmed; source shade entry remains after native floating is disabled. | Device required |
 | 19 | Expired repeated text | An expired message does not resurrect while its source remains in the shade; a later identical-text event with new identity bypasses the old tombstone. | Device required |
+| 20 | Auto-hide duration | Standard and message Islands remain for the selected global/per-app duration (test below and above 60 seconds); disabling auto-hide schedules no service-side expiry. | Device required |
 
 For upgrade testing, include one install from upstream, one Pass 1 build, and one Pass 2
 build. Inspect Android notification-channel settings before and after upgrading: the four

@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.7--sykeptical-blue?style=for-the-badge&logo=github" alt="Version 0.5.7-sykeptical" />
+  <img src="https://img.shields.io/badge/version-0.5.8--sykeptical-blue?style=for-the-badge&logo=github" alt="Version 0.5.8-sykeptical" />
   <img src="https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Material%20Design-757575?style=for-the-badge&logo=material-design&logoColor=white" alt="Material Design" />
@@ -36,7 +36,7 @@ The project remains built on the original developer's work. This fork is indepen
 
 | | Sykeptical Edition |
 |---|---|
-| Version | `0.5.7-sykeptical` |
+| Version | `0.5.8-sykeptical` |
 | Android package | `com.sykeptical.hyperbridge` |
 | Theme intent | `com.sykeptical.hyperbridge.APPLY_THEME` |
 | Maintainer | [Sykeptical](https://github.com/SykepticalS) |
@@ -47,6 +47,7 @@ Because the package name differs from upstream HyperBridge, Android treats this 
 
 The current fork includes the following work on top of upstream `v0.5.6`:
 
+* **Accurate auto-hide durations:** Standard and message islands now honor the effective global or per-app duration instead of being removed after a hard-coded minute; disabling auto-hide leaves them untimed.
 * **Reliable notification lifecycle:** Reworked notification intake, reconciliation, expiry, and recovery to reduce missing, duplicated, stale, or reappearing islands.
 * **Messaging deduplication:** Added content-aware message fingerprinting and grouping for rapid WhatsApp and other chat updates.
 * **Latest-update-wins processing:** Serializes rapid source changes and prevents older work from overwriting newer notification state.
@@ -153,7 +154,7 @@ Requirements: Android 15 or newer (`minSdk 35`) on a compatible Xiaomi, POCO, or
 
 ### Option 1: Release APK (Recommended)
 
-1. Download the latest `0.5.7-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/HyperBridge-master/releases).
+1. Download the latest `0.5.8-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/HyperBridge-master/releases).
 2. Install it on your Xiaomi, POCO, or Redmi device.
 
 ### Option 2: Build from source

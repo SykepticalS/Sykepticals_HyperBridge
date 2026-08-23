@@ -137,8 +137,6 @@ class NotificationReaderService : NotificationListenerService() {
     // Negative so these ids can never hit the >= WIDGET_ID_BASE branch in onNotificationRemoved
     private val WATCH_RELAY_ID_BASE = -20000
     private var watchRelaySlot = 0
-    private val STANDARD_ISLAND_TIMEOUT_MS = 60_000L
-
     private lateinit var preferences: AppPreferences
 
     // --- THEME ENGINE ---
@@ -716,34 +714,19 @@ class NotificationReaderService : NotificationListenerService() {
             )
         }
 
-        // 2. Schedule timeout ONLY for Live Update notifications
-        if (isLiveUpdate) {
-            val timeoutSeconds = config.timeout ?: 0
+        // Live Updates need explicit lifecycle cleanup. Message and standard Islands need the same
+        // cleanup because HyperOS can hide their UI without removing the focus notification. Both
+        // paths must honor the effective per-app/global auto-hide setting instead of using a fixed TTL.
+        val needsLifecycleTimeout = isLiveUpdate ||
+                type == NotificationType.MESSAGE || type == NotificationType.STANDARD
+        if (needsLifecycleTimeout) {
+            val timeoutMs = IslandTimeoutPolicy.durationMillis(config.timeout)
             timeoutJobs.remove(logicalKey)?.cancel()
-            if (timeoutSeconds > 0) {
-                lateinit var job: Job
-                job = serviceScope.launch {
-                    delay((timeoutSeconds * 1000L).milliseconds)
-                    notificationLifecycleMutex.withLock {
-                        val current = activeIslands[logicalKey]
-                        if (!IslandTimeoutPolicy.isCurrent(current?.generation, current?.id, generation, bridgeId)) return@withLock
-                        current ?: return@withLock
-                        Log.d(TAG, "${type.name} TIMEOUT bridgeId=$bridgeId logicalId=${logicalKey.hashCode()}")
-                        recordExpiredIsland(current)
-                        NotificationManagerCompat.from(this@NotificationReaderService).cancel(bridgeId)
-                        cleanupCache(logicalKey)
-                    }
-                }
-                timeoutJobs[logicalKey] = job
-                job.invokeOnCompletion { timeoutJobs.remove(logicalKey, job) }
-            }
-        } else if (type == NotificationType.MESSAGE || type == NotificationType.STANDARD) {
-            // HyperOS island-swipe only hides the island; the focus notification stays posted and no
-            // removal callback fires, so an untimed island blocks the permanent island forever.
-            timeoutJobs.remove(logicalKey)?.cancel()
+            if (timeoutMs == null) return
+
             lateinit var job: Job
             job = serviceScope.launch {
-                delay(STANDARD_ISLAND_TIMEOUT_MS)
+                delay(timeoutMs.milliseconds)
                 notificationLifecycleMutex.withLock {
                     val current = activeIslands[logicalKey]
                     if (!IslandTimeoutPolicy.isCurrent(current?.generation, current?.id, generation, bridgeId)) return@withLock
