@@ -1,5 +1,7 @@
 package com.d4viddf.hyperbridge.service
 
+import com.d4viddf.hyperbridge.models.MessageEventFingerprint
+import com.d4viddf.hyperbridge.models.MessageEventFingerprintSource
 import com.d4viddf.hyperbridge.models.NotificationType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -153,17 +155,70 @@ class IslandUpdateResolverTest {
 
     @Test
     fun identicalMessageRepostRemainsUnchanged() {
+        val event = messageEvent(timestamp = 200L, messageCount = 2)
         val decision = IslandUpdateResolver.decide(
             logicalId = "conversation-a",
             candidateBridgeId = 999,
             contentHash = "hello".hashCode(),
-            previous = PreviousIslandPresentation("conversation-a", 42, "hello".hashCode()),
-            notificationType = NotificationType.MESSAGE
+            previous = PreviousIslandPresentation(
+                "conversation-a",
+                42,
+                "hello".hashCode(),
+                messageEventFingerprint = event
+            ),
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = event
         )
 
         assertEquals(IslandPresentationKind.UNCHANGED, decision.kind)
         assertEquals(42, decision.bridgeId)
         assertFalse(decision.cancelBeforeNotify)
+    }
+
+    @Test
+    fun identicalTextWithDifferentMessageEventCreatesFreshGeneration() {
+        val firstEvent = messageEvent(timestamp = 100L, messageCount = 1)
+        val secondEvent = messageEvent(timestamp = 200L, messageCount = 2)
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "conversation-a",
+            candidateBridgeId = 999,
+            contentHash = "hello".hashCode(),
+            previous = PreviousIslandPresentation(
+                "conversation-a",
+                42,
+                "hello".hashCode(),
+                messageEventFingerprint = firstEvent
+            ),
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = secondEvent
+        )
+
+        assertEquals(IslandPresentationKind.NEW, decision.kind)
+        assertEquals(999, decision.bridgeId)
+        assertEquals(IslandPresentationReason.NEW_EVENT, decision.presentationReason)
+        assertFalse(decision.onlyAlertOnce)
+        assertTrue(decision.cancelBeforeNotify)
+    }
+
+    @Test
+    fun messageLikeStandardNotificationUsesMessageReplacementLifecycle() {
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "conversation-a",
+            candidateBridgeId = 999,
+            contentHash = "hello".hashCode(),
+            previous = PreviousIslandPresentation(
+                "conversation-a",
+                42,
+                "hello".hashCode(),
+                messageEventFingerprint = messageEvent(100L, 1)
+            ),
+            notificationType = NotificationType.STANDARD,
+            isMessagingEvent = true,
+            messageEventFingerprint = messageEvent(200L, 2)
+        )
+
+        assertEquals(IslandPresentationKind.NEW, decision.kind)
+        assertTrue(decision.cancelBeforeNotify)
     }
 
     @Test
@@ -175,6 +230,24 @@ class IslandUpdateResolverTest {
         assertTrue(second < -1_000_000_000)
         assertTrue(first != second)
         assertTrue(first != PermanentIslandManager.PERMANENT_BRIDGE_ID)
+    }
+
+    @Test
+    fun messageBridgeIdIncludesEventIdentityEvenForSameGenerationAndContent() {
+        val first = MessageBridgeIdPolicy.candidate(
+            logicalId = "conversation-a",
+            generation = 2L,
+            contentHash = 123,
+            messageEventFingerprint = messageEvent(100L, 1)
+        )
+        val second = MessageBridgeIdPolicy.candidate(
+            logicalId = "conversation-a",
+            generation = 2L,
+            contentHash = 123,
+            messageEventFingerprint = messageEvent(200L, 2)
+        )
+
+        assertTrue(first != second)
     }
 
     @Test
@@ -196,5 +269,14 @@ class IslandUpdateResolverTest {
         assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 0, true, false, false))
         assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 0, false, true, true))
         assertFalse(PermanentIslandVisibilityPolicy.desiredActive(false, 0, false, false, false))
+    }
+
+
+    private fun messageEvent(timestamp: Long, messageCount: Int): MessageEventFingerprint {
+        return MessageEventFingerprint(
+            source = MessageEventFingerprintSource.MESSAGING_STYLE,
+            primaryValue = timestamp,
+            messageCount = messageCount
+        )
     }
 }

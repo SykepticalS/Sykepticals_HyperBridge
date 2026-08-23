@@ -18,5 +18,7 @@ data class ActiveIsland(
     val subText: String,
     // Used for Deduplication
     val lastContentHash: Int,
+    /** Distinguishes repeated, semantically identical message events. */
+    val messageEventFingerprint: MessageEventFingerprint? = null,
     val deleteIntent: android.app.PendingIntent? = null
 )

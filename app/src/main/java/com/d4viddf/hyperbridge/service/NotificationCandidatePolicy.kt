@@ -1,25 +1,25 @@
 package com.d4viddf.hyperbridge.service
 
-data class NotificationCandidateSignals(
-    val hasTitle: Boolean,
-    val hasText: Boolean,
-    val hasBigTitle: Boolean,
-    val hasBigText: Boolean,
-    val hasMessagingStyleMessage: Boolean,
-    val hasSupportedPersistentState: Boolean
+data class NotificationRefreshSignals(
+    val packageName: String,
+    val title: String,
+    val text: String,
+    val hasMessageContent: Boolean,
+    val hasProgressOrSpecialState: Boolean
 )
 
-/** Cheap callback-time quality check; it intentionally contains no app or language rules. */
-object NotificationCandidatePolicy {
-    fun quality(signals: NotificationCandidateSignals): SourceCandidateQuality =
-        if (
-            signals.hasTitle || signals.hasText || signals.hasBigTitle || signals.hasBigText ||
-            signals.hasMessagingStyleMessage || signals.hasSupportedPersistentState
-        ) {
-            SourceCandidateQuality.USABLE
-        } else {
-            SourceCandidateQuality.EMPTY_AUXILIARY
-        }
+/** Bounded refresh policy used after an allowed callback has already claimed a generation. */
+object NotificationRefreshPolicy {
+    const val MAX_REFRESH_ATTEMPTS = 2
+    const val REFRESH_DELAY_MS = 125L
+
+    fun shouldRefresh(signals: NotificationRefreshSignals): Boolean {
+        if (signals.hasProgressOrSpecialState) return false
+        if (signals.title.equals(signals.packageName, ignoreCase = true) ||
+            signals.text.equals(signals.packageName, ignoreCase = true)
+        ) return true
+        return signals.title.isBlank() && signals.text.isBlank() && !signals.hasMessageContent
+    }
 }
 
 data class NotificationAcceptanceSignals(
@@ -28,9 +28,7 @@ data class NotificationAcceptanceSignals(
     val text: String,
     val hasMessageContent: Boolean,
     val hasProgressOrSpecialState: Boolean,
-    val containsBlockedTerm: Boolean,
-    val isGroupSummary: Boolean,
-    val isMessageType: Boolean
+    val containsBlockedTerm: Boolean
 )
 
 /** Upstream-compatible junk policy using already resolved title/text content. */
@@ -42,10 +40,6 @@ object NotificationAcceptancePolicy {
             signals.text.equals(signals.packageName, ignoreCase = true)
         ) return true
         if (signals.containsBlockedTerm) return true
-        if (signals.isGroupSummary) {
-            if (!signals.isMessageType) return true
-            if ((signals.text.isEmpty() || signals.title.isEmpty()) && !signals.hasMessageContent) return true
-        }
         return false
     }
 }

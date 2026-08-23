@@ -1,5 +1,7 @@
 package com.d4viddf.hyperbridge.service
 
+import com.d4viddf.hyperbridge.models.MessageEventFingerprint
+import com.d4viddf.hyperbridge.models.MessageEventFingerprintSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -26,6 +28,63 @@ class ExpiredIslandRegistryTest {
     }
 
     @Test
+    fun sameTextNewMessageEventBypassesExpiredTombstone() {
+        val registry = ExpiredIslandRegistry(retentionMs = 1_000)
+        val firstEvent = messageEvent(100L)
+        val secondEvent = messageEvent(200L)
+        registry.record(
+            ExpiredIslandRecord(
+                "conversation",
+                "source",
+                sourceFingerprint = 7,
+                expiredAt = 100,
+                messageEventFingerprint = firstEvent
+            )
+        )
+
+        assertEquals(
+            ExpiredSourceDecision.NEW_GENERATION,
+            registry.evaluate(
+                "source",
+                sourceFingerprint = 7,
+                now = 200,
+                messageEventFingerprint = secondEvent
+            )
+        )
+        registry.acceptNewGeneration(
+            "source",
+            sourceFingerprint = 7,
+            messageEventFingerprint = secondEvent
+        )
+        assertEquals(ExpiredSourceDecision.NOT_EXPIRED, registry.evaluate("source", 7, now = 201))
+    }
+
+    @Test
+    fun identicalMessageEventStaysExpiredDespiteRenderingDrift() {
+        val registry = ExpiredIslandRegistry(retentionMs = 1_000)
+        val event = messageEvent(100L)
+        registry.record(
+            ExpiredIslandRecord(
+                "conversation",
+                "source",
+                sourceFingerprint = 7,
+                expiredAt = 100,
+                messageEventFingerprint = event
+            )
+        )
+
+        assertEquals(
+            ExpiredSourceDecision.SUPPRESS_IDENTICAL,
+            registry.evaluate(
+                "source",
+                sourceFingerprint = 8,
+                now = 200,
+                messageEventFingerprint = event
+            )
+        )
+    }
+
+    @Test
     fun tombstonesExpireAndRemainBounded() {
         val registry = ExpiredIslandRegistry(maxEntries = 1, retentionMs = 100)
         registry.record(ExpiredIslandRecord("one", "source-one", 1, expiredAt = 0))
@@ -39,5 +98,13 @@ class ExpiredIslandRegistryTest {
     fun staleTimeoutCannotDeleteNewerUpdate() {
         assertFalse(IslandTimeoutPolicy.isCurrent(2, 42, scheduledGeneration = 1, scheduledBridgeId = 42))
         assertTrue(IslandTimeoutPolicy.isCurrent(2, 42, scheduledGeneration = 2, scheduledBridgeId = 42))
+    }
+
+    private fun messageEvent(timestamp: Long): MessageEventFingerprint {
+        return MessageEventFingerprint(
+            source = MessageEventFingerprintSource.MESSAGING_STYLE,
+            primaryValue = timestamp,
+            messageCount = 1
+        )
     }
 }

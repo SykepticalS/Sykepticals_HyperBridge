@@ -1,10 +1,13 @@
 package com.d4viddf.hyperbridge.service
 
+import com.d4viddf.hyperbridge.models.MessageEventFingerprint
+
 data class ExpiredIslandRecord(
     val logicalId: String,
     val sourceKey: String,
     val sourceFingerprint: Int,
-    val expiredAt: Long
+    val expiredAt: Long,
+    val messageEventFingerprint: MessageEventFingerprint? = null
 )
 
 enum class ExpiredSourceDecision {
@@ -35,10 +38,15 @@ class ExpiredIslandRegistry(
     }
 
     @Synchronized
-    fun evaluate(sourceKey: String, sourceFingerprint: Int, now: Long): ExpiredSourceDecision {
+    fun evaluate(
+        sourceKey: String,
+        sourceFingerprint: Int,
+        now: Long,
+        messageEventFingerprint: MessageEventFingerprint? = null
+    ): ExpiredSourceDecision {
         prune(now)
         val record = records[sourceKey] ?: return ExpiredSourceDecision.NOT_EXPIRED
-        if (record.sourceFingerprint == sourceFingerprint) {
+        if (record.isSameGeneration(sourceFingerprint, messageEventFingerprint)) {
             return ExpiredSourceDecision.SUPPRESS_IDENTICAL
         }
         return ExpiredSourceDecision.NEW_GENERATION
@@ -46,9 +54,15 @@ class ExpiredIslandRegistry(
 
     /** Clear only after the changed source generation was successfully posted. */
     @Synchronized
-    fun acceptNewGeneration(sourceKey: String, sourceFingerprint: Int) {
+    fun acceptNewGeneration(
+        sourceKey: String,
+        sourceFingerprint: Int,
+        messageEventFingerprint: MessageEventFingerprint? = null
+    ) {
         val record = records[sourceKey] ?: return
-        if (record.sourceFingerprint != sourceFingerprint) records.remove(sourceKey)
+        if (!record.isSameGeneration(sourceFingerprint, messageEventFingerprint)) {
+            records.remove(sourceKey)
+        }
     }
 
     @Synchronized
@@ -66,6 +80,18 @@ class ExpiredIslandRegistry(
     fun prune(now: Long) {
         records.entries.removeIf { now - it.value.expiredAt > retentionMs }
     }
+}
+
+private fun ExpiredIslandRecord.isSameGeneration(
+    candidateSourceFingerprint: Int,
+    candidateMessageEventFingerprint: MessageEventFingerprint?
+): Boolean {
+    // When both sides know the event identity it is authoritative. The legacy source fingerprint
+    // remains a conservative fallback when metadata is absent on either snapshot.
+    if (messageEventFingerprint != null && candidateMessageEventFingerprint != null) {
+        return messageEventFingerprint == candidateMessageEventFingerprint
+    }
+    return sourceFingerprint == candidateSourceFingerprint
 }
 
 fun sourceGenerationFingerprint(contentHash: Int, sourcePostTime: Long): Int =

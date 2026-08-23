@@ -1,5 +1,6 @@
 package com.d4viddf.hyperbridge.service
 
+import com.d4viddf.hyperbridge.models.MessageEventFingerprint
 import com.d4viddf.hyperbridge.models.NotificationType
 import java.util.LinkedHashMap
 
@@ -22,7 +23,8 @@ enum class IslandPresentationReason {
 data class PreviousIslandPresentation(
     val logicalId: String,
     val bridgeId: Int,
-    val contentHash: Int
+    val contentHash: Int,
+    val messageEventFingerprint: MessageEventFingerprint? = null
 )
 
 data class IslandUpdateDecision(
@@ -44,7 +46,9 @@ object IslandUpdateResolver {
             IslandPresentationReason.NEW_EVENT
         } else {
             IslandPresentationReason.CONTENT_UPDATE
-        }
+        },
+        isMessagingEvent: Boolean = notificationType == NotificationType.MESSAGE,
+        messageEventFingerprint: MessageEventFingerprint? = null
     ): IslandUpdateDecision {
         if (previous == null || previous.logicalId != logicalId) {
             return IslandUpdateDecision(
@@ -55,7 +59,12 @@ object IslandUpdateResolver {
             )
         }
 
-        if (previous.contentHash == contentHash) {
+        val messageEventChanged = isMessagingEvent &&
+                previous.messageEventFingerprint != messageEventFingerprint &&
+                (previous.messageEventFingerprint != null || messageEventFingerprint != null)
+        val contentChanged = previous.contentHash != contentHash
+
+        if (!contentChanged && !messageEventChanged) {
             return IslandUpdateDecision(
                 kind = IslandPresentationKind.UNCHANGED,
                 bridgeId = previous.bridgeId,
@@ -64,12 +73,17 @@ object IslandUpdateResolver {
             )
         }
 
-        if (notificationType == NotificationType.MESSAGE) {
+        if (isMessagingEvent) {
+            val newEventReason = when (presentationReason) {
+                IslandPresentationReason.RECONCILE,
+                IslandPresentationReason.RESTORE -> presentationReason
+                else -> IslandPresentationReason.NEW_EVENT
+            }
             return IslandUpdateDecision(
                 kind = IslandPresentationKind.NEW,
                 bridgeId = candidateBridgeId,
-                onlyAlertOnce = false,
-                presentationReason = IslandPresentationReason.NEW_EVENT,
+                onlyAlertOnce = !newEventReason.mayAutoExpand,
+                presentationReason = newEventReason,
                 cancelBeforeNotify = true
             )
         }
@@ -88,8 +102,20 @@ object MessageBridgeIdPolicy {
     private const val RANGE_SIZE = 800_000_000
 
     /** Message replacements use a private negative band, away from permanent/widget/watch ids. */
-    fun candidate(logicalId: String, generation: Long, contentHash: Int, attempt: Int = 0): Int {
-        val mixed = listOf(logicalId, generation, contentHash, attempt).hashCode().toLong()
+    fun candidate(
+        logicalId: String,
+        generation: Long,
+        contentHash: Int,
+        attempt: Int = 0,
+        messageEventFingerprint: MessageEventFingerprint? = null
+    ): Int {
+        val mixed = listOf(
+            logicalId,
+            generation,
+            contentHash,
+            messageEventFingerprint?.stableHash,
+            attempt
+        ).hashCode().toLong()
         return RANGE_START + Math.floorMod(mixed, RANGE_SIZE.toLong()).toInt()
     }
 }

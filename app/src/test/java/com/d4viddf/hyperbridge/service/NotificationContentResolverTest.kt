@@ -50,4 +50,52 @@ class NotificationContentResolverTest {
         assertEquals("Conversation", content.title)
         assertEquals("Top-level text", content.text)
     }
+
+    @Test
+    fun lastMeaningfulTextLinePrecedesMessagingStyleFallback() {
+        val content = NotificationContentResolver.resolve(
+            title = "Conversation",
+            text = null,
+            bigTitle = null,
+            bigText = null,
+            messages = listOf(MessageContentCandidate("Alice", "message fallback", timestamp = 100L)),
+            isMessageStyle = true,
+            textLines = listOf("older", "  ", "latest line")
+        )
+
+        assertEquals("latest line", content.text)
+        assertEquals(100L, content.latestMessageTimestamp)
+        assertEquals(1, content.messageCount)
+    }
+
+    @Test
+    fun bigTextPrecedesTextLines() {
+        val content = NotificationContentResolver.resolve(
+            title = "Conversation",
+            text = null,
+            bigTitle = null,
+            bigText = "expanded text",
+            messages = emptyList(),
+            isMessageStyle = false,
+            textLines = listOf("line fallback")
+        )
+
+        assertEquals("expanded text", content.text)
+    }
+
+    @Test
+    fun usefulStandardContentDoesNotRequireMessagingStyle() {
+        val content = NotificationContentResolver.resolve(
+            title = "Alice",
+            text = "hello",
+            bigTitle = null,
+            bigText = null,
+            messages = emptyList(),
+            isMessageStyle = false
+        )
+
+        assertEquals("Alice", content.title)
+        assertEquals("hello", content.text)
+        assertFalse(content.hasMessageContent)
+    }
 }

@@ -6,9 +6,9 @@ import org.junit.Test
 
 class NotificationCandidatePolicyTest {
     @Test
-    fun rawUpstreamTitleAndTextWithoutMessagingStyleAreUsableAndNotJunk() {
-        val quality = NotificationCandidatePolicy.quality(
-            NotificationCandidateSignals(true, true, false, false, false, false)
+    fun rawUpstreamTitleAndTextWithoutMessagingStyleAreAcceptedWithoutRefresh() {
+        val shouldRefresh = NotificationRefreshPolicy.shouldRefresh(
+            NotificationRefreshSignals("com.whatsapp", "Kişi", "İleti", false, false)
         )
         val junk = NotificationAcceptancePolicy.isJunk(
             NotificationAcceptanceSignals(
@@ -17,43 +17,61 @@ class NotificationCandidatePolicyTest {
                 text = "İleti",
                 hasMessageContent = false,
                 hasProgressOrSpecialState = false,
-                containsBlockedTerm = false,
-                isGroupSummary = false,
-                isMessageType = false
+                containsBlockedTerm = false
             )
         )
 
-        assertTrue(quality == SourceCandidateQuality.USABLE)
+        assertFalse(shouldRefresh)
         assertFalse(junk)
     }
 
     @Test
-    fun usefulStandardNotificationIsAccepted() {
-        assertFalse(
-            NotificationAcceptancePolicy.isJunk(
-                NotificationAcceptanceSignals("com.example", "Başlık", "İçerik", false, false, false, false, false)
+    fun sparseCallbackRequiresRefreshBeforeEmptyAcceptanceDecision() {
+        assertTrue(
+            NotificationRefreshPolicy.shouldRefresh(
+                NotificationRefreshSignals("com.whatsapp", "", "", false, false)
             )
         )
     }
 
     @Test
-    fun qualityAndAcceptanceDoNotDependOnEnglishOrWhatsappPackageRules() {
-        val quality = NotificationCandidatePolicy.quality(
-            NotificationCandidateSignals(false, false, true, true, false, false)
+    fun usefulRefreshedContentStopsRetrying() {
+        assertFalse(
+            NotificationRefreshPolicy.shouldRefresh(
+                NotificationRefreshSignals("com.whatsapp", "Alice", "Hello", false, false)
+            )
         )
-        val accepted = !NotificationAcceptancePolicy.isJunk(
-            NotificationAcceptanceSignals("com.whatsapp.w4b", "送信者", "新しい通知", false, false, false, false, false)
-        )
-
-        assertTrue(quality == SourceCandidateQuality.USABLE)
-        assertTrue(accepted)
     }
 
     @Test
-    fun validMessageGroupSummaryIsNotAutomaticallySuppressed() {
+    fun refreshIsShortAndBounded() {
+        assertTrue(NotificationRefreshPolicy.REFRESH_DELAY_MS in 100L..150L)
+        assertTrue(NotificationRefreshPolicy.MAX_REFRESH_ATTEMPTS == 2)
+    }
+
+    @Test
+    fun persistentStateDoesNotWaitForContent() {
+        assertFalse(
+            NotificationRefreshPolicy.shouldRefresh(
+                NotificationRefreshSignals("com.example", "", "", false, true)
+            )
+        )
+    }
+
+    @Test
+    fun usefulStandardContentIsAcceptedWithoutGroupSummaryGate() {
         assertFalse(
             NotificationAcceptancePolicy.isJunk(
-                NotificationAcceptanceSignals("com.whatsapp", "Sender", "Content", true, false, false, true, true)
+                NotificationAcceptanceSignals("com.whatsapp", "Sender", "Content", false, false, false)
+            )
+        )
+    }
+
+    @Test
+    fun genuinelyEmptyContentIsJunkAfterRefreshAttempts() {
+        assertTrue(
+            NotificationAcceptancePolicy.isJunk(
+                NotificationAcceptanceSignals("com.whatsapp", "", "", false, false, false)
             )
         )
     }

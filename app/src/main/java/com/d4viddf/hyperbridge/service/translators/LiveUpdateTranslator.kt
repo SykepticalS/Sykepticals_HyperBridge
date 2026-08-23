@@ -24,13 +24,17 @@ class LiveUpdateTranslator(
         type: NotificationType,
         navRight: NavContent? = null,
         config: com.d4viddf.hyperbridge.models.IslandConfig? = null,
-        callSession: CallSession? = null
+        callSession: CallSession? = null,
+        resolvedTitle: String? = null,
+        resolvedText: String? = null
     ): NotificationCompat.Builder {
         val original = sbn?.notification
         val extras = original?.extras
 
-        val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val sourceText = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val title = resolvedTitle
+            ?: extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val sourceText = resolvedText
+            ?: extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         val text = if (type == NotificationType.CALL && callSession != null) {
             when (callSession.state) {
                 CallState.INCOMING_RINGING -> context.getString(R.string.call_incoming)

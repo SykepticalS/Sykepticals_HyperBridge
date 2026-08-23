@@ -8,39 +8,31 @@ class SourceProcessingGenerationTest {
     @Test
     fun staleGenerationCannotPostAfterNewerCallback() {
         val generations = SourceProcessingGeneration()
-        val old = requireNotNull(generations.next("source"))
-        val latest = requireNotNull(generations.next("source"))
+        val old = generations.next("source")
+        val latest = generations.next("source")
 
         assertFalse(generations.isCurrent("source", old))
         assertTrue(generations.isCurrent("source", latest))
     }
 
     @Test
-    fun emptyCallbackCannotSupersedeQueuedUsableCallback() {
+    fun everyCallbackClaimsGenerationRegardlessOfInitialContent() {
         val generations = SourceProcessingGeneration()
-        val usable = requireNotNull(generations.next("source", SourceCandidateQuality.USABLE))
+        val initiallyUseful = generations.next("source")
+        val initiallySparse = generations.next("source")
 
-        val empty = generations.next("source", SourceCandidateQuality.EMPTY_AUXILIARY)
-
-        assertTrue(empty == null)
-        assertTrue(generations.isCurrent("source", usable))
+        assertTrue(initiallySparse > initiallyUseful)
+        assertFalse(generations.isCurrent("source", initiallyUseful))
+        assertTrue(generations.isCurrent("source", initiallySparse))
     }
 
     @Test
-    fun usableCallbackAfterEmptyProcessesNormally() {
+    fun generationsAreTrackedIndependentlyPerSource() {
         val generations = SourceProcessingGeneration()
-        assertTrue(generations.next("source", SourceCandidateQuality.EMPTY_AUXILIARY) == null)
+        val first = generations.next("first")
+        val second = generations.next("second")
 
-        val usable = requireNotNull(generations.next("source", SourceCandidateQuality.USABLE))
-
-        assertTrue(generations.isCurrent("source", usable))
-    }
-
-    @Test
-    fun emptyCallbackAloneDoesNotCreateGeneration() {
-        val generations = SourceProcessingGeneration()
-
-        assertTrue(generations.next("source", SourceCandidateQuality.EMPTY_AUXILIARY) == null)
-        assertTrue(generations.current("source") == null)
+        assertTrue(generations.isCurrent("first", first))
+        assertTrue(generations.isCurrent("second", second))
     }
 }
