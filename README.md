@@ -57,6 +57,34 @@ The current fork includes the following work on top of upstream `v0.5.6`:
 * **Fork transparency:** Added a first-run acknowledgement explaining this edition and linking users to support the original developer.
 * **Regression coverage:** Added focused unit tests and a [release manual-test matrix](docs/release-manual-test-matrix.md) for notification, message, call, reconciliation, visual, and setup behavior.
 
+## Optimization work
+
+The Sykeptical Edition optimizes the full notification path, not just the visible Island. The goal is to do less duplicate work, keep temporary state bounded, and make rapid notification changes deterministic.
+
+### Notification processing
+
+* **Candidate-first intake:** Sparse Android callbacks are refreshed from the active-notification snapshot before expensive classification and rendering begin. Empty or unusable candidates are rejected early.
+* **Latest-generation wins:** Per-source generation gates prevent delayed coroutine work from overwriting a newer notification. Lifecycle mutations are serialized only where shared Island state must remain consistent.
+* **Update instead of recreate:** Logical notification identities, content hashes, and message fingerprints allow genuine updates to reuse the current Island while suppressing framework reposts and duplicate chat events.
+* **Targeted reconciliation:** Service reconnects compare Android's active sources with HyperBridge's tracked Islands and repair only missing or stale entries instead of rebuilding everything.
+* **Bounded recovery:** Expiry tombstones, replacement windows, removal delays, and refresh attempts all have explicit limits, preventing endless retries or stale-notification resurrection.
+
+### Memory and CPU use
+
+* **Shared settings cache:** Lightweight `AppPreferences` instances share one Room observer and one in-memory settings cache, avoiding duplicate database collectors and blocking reads in the notification hot path.
+* **Bounded visual caches:** App labels, application icons, extracted brand colors, and processed action bitmaps use size-limited LRU caches rather than growing for the lifetime of the service.
+* **Aggressive lifecycle cleanup:** Finished jobs, source aliases, expired records, message fingerprints, call sessions, pictures, and reverse-translation entries are cancelled or pruned when they are no longer useful.
+* **Work on the correct dispatcher:** Package scanning, backup processing, notification refreshes, and other I/O-heavy operations run away from the main thread; UI state remains coroutine- and Flow-driven.
+
+### Rendering and background behavior
+
+* **Reusable rendered assets:** Stable resource keys and normalized bitmap bounds reduce repeated icon work while keeping artwork correctly scaled and visible.
+* **State-aware timers and calls:** Call timers are created only after a verified connection transition, and hidden call stages continue lightweight session tracking without posting an Island.
+* **Permanent Island reconciliation:** The permanent Island reacts to active Island and widget state, avoiding overlaps and unnecessary reposts when nothing meaningful changed.
+* **HyperOS survival guidance:** Setup Health exposes notification access, Autostart, and battery-restriction checks so users can fix OS-level service termination without root or continuous polling.
+
+These changes are designed to reduce redundant allocations, database access, rendering, and notification churn. Exact CPU and battery results still depend on the device, HyperOS version, enabled apps, widgets, and notification volume.
+
 ## 🚀 Features
 
 * **Native Visuals:** Transforms notifications into HyperOS system-style islands.
