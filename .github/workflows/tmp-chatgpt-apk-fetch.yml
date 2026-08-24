@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - tmp-chatgpt-apk-fetch
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
