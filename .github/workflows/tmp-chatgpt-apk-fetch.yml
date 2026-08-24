@@ -1,9 +1,6 @@
 name: Temporary ChatGPT APK Fetch
 
 on:
-  push:
-    branches:
-      - tmp-chatgpt-apk-fetch
   pull_request:
     branches:
       - main
@@ -22,8 +19,7 @@ jobs:
           gh release download --repo "$GITHUB_REPOSITORY" --pattern "HyperBridge-0.5.9-sykeptical-release.apk" --dir .
           test -s HyperBridge-0.5.9-sykeptical-release.apk
           sha256sum HyperBridge-0.5.9-sykeptical-release.apk > SHA256.txt
-          ls -lh HyperBridge-0.5.9-sykeptical-release.apk
-          cat SHA256.txt
+          echo "ready"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
