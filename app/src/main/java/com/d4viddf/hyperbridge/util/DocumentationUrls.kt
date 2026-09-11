@@ -6,8 +6,10 @@ import java.util.Locale
 object DocumentationUrls {
     const val BASE_URL = "https://hyper-bridge.app"
     const val DOCS = "https://hyper-bridge.app/docs/"
+    const val PRIVACY_POLICY = "https://hyper-bridge.app/privacy/"
     const val CUSTOMIZATION_DOCS = "https://hyper-bridge.app/docs/customization/"
     const val THEME_CREATOR_DOCS = "https://hyper-bridge.app/docs/customization/theme-creator/"
+    const val GITHUB_BUG_REPORT = "https://github.com/D4vidDf/HyperBridge/issues/new?template=bug_report.yml"
 
     /**
      * Resolves the localized changelog URL on https://hyper-bridge.app/ based on the active app locale.

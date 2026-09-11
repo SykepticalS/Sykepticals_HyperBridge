@@ -16,7 +16,7 @@
     <string name="get_started">Get Started</string>
 
     <string name="how_it_works">How it Works</string>
-    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). HyperBridge transforms their notifications into a sleek HyperIsland.</string>
+    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). Hyper Bridge transforms their notifications into a sleek HyperIsland.</string>
     <string name="beta_warning">Note: This app is in Beta. You may encounter bugs or incorrect visual information.</string>
 
     <string name="device_compatible">Device Compatible</string>
@@ -340,7 +340,7 @@
     <string name="theme_installer_success_title">Theme Ready</string>
     <string name="theme_installer_author">Created by %s</string>
     <string name="theme_installer_version">Version %d</string>
-    <string name="theme_installer_apply_question">Do you want to apply this theme to HyperBridge now?</string>
+    <string name="theme_installer_apply_question">Do you want to apply this theme to Hyper Bridge now?</string>
     <string name="theme_installer_action_apply">Apply Theme</string>
     <string name="theme_installer_action_later">Save for Later</string>
     <string name="theme_installer_error_title">Import Failed</string>
@@ -493,7 +493,7 @@
 
     <string name="kill_all_widgets">Kill Active Widgets</string>
     <string name="permission_reminder_title">Update Notice</string>
-    <string name="permission_reminder_desc">HyperBridge has been updated! Please ensure that your Autostart and Background Battery permissions haven\'t been silently revoked by the system to keep your widgets running smoothly.</string>
+    <string name="permission_reminder_desc">Hyper Bridge has been updated! Please ensure that your Autostart and Background Battery permissions haven\'t been silently revoked by the system to keep your widgets running smoothly.</string>
     <string name="got_it">Got it</string>
 
     <string name="recommended">Recommended</string>

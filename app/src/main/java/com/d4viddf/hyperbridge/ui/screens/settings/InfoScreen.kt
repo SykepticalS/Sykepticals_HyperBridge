@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import com.d4viddf.hyperbridge.util.DocumentationUrls
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -88,7 +90,8 @@ fun InfoScreen(
     onGlobalSettingsClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onBlocklistClick: () -> Unit,
-    onBackupClick: () -> Unit
+    onBackupClick: () -> Unit,
+    onBugReportClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -195,7 +198,13 @@ fun InfoScreen(
                         stringResource(R.string.documentation_subtitle)
                     ) {
                         uriHandler.openUri(DocumentationUrls.DOCS)
-                    }
+                    },
+                    SettingsItemData(
+                        Icons.Default.BugReport,
+                        stringResource(R.string.bug_report_entry_title),
+                        stringResource(R.string.bug_report_entry_subtitle),
+                        onBugReportClick
+                    )
                 )
             )
 
@@ -209,7 +218,8 @@ fun InfoScreen(
                     SettingsItemData(Icons.Default.Person, stringResource(R.string.developer), stringResource(R.string.developer_subtitle)) { uriHandler.openUri("https://d4viddf.com") },
                     SettingsItemData(Icons.Default.History, stringResource(R.string.version_history), "0.1.0 - $appVersion", onHistoryClick),
                     SettingsItemData(Icons.Default.Code, stringResource(R.string.source_code), stringResource(R.string.source_code_subtitle)) { uriHandler.openUri("https://github.com/D4vidDf/HyperBridge") },
-                    SettingsItemData(Icons.Default.Description, stringResource(R.string.licenses), stringResource(R.string.licenses_subtitle), onLicensesClick)
+                    SettingsItemData(Icons.Default.Description, stringResource(R.string.licenses), stringResource(R.string.licenses_subtitle), onLicensesClick),
+                    SettingsItemData(Icons.Default.Security, stringResource(R.string.privacy_policy_title), stringResource(R.string.privacy_policy_subtitle)) { uriHandler.openUri(DocumentationUrls.PRIVACY_POLICY) }
                 )
             )
 

@@ -14,7 +14,7 @@
     <string name="welcome_subtitle">Seamlessly integrate HyperIslands into your HyperOS experience.</string>
     <string name="get_started">Get Started</string>
     <string name="how_it_works">How it Works</string>
-    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). HyperBridge transforms their notifications into a sleek HyperIsland.</string>
+    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). Hyper Bridge transforms their notifications into a sleek HyperIsland.</string>
     <string name="beta_warning">Note: This app is in Beta. You may encounter bugs or incorrect visual information.</string>
     <string name="device_compatible">Device Compatible</string>
     <string name="unsupported_device">Unsupported Device</string>
@@ -120,7 +120,7 @@
     <string name="title_0_2_0">The Information Update</string>
     <string name="title_0_1_0">The Expressive Update</string>
     <string name="priority_edu_title">New: Control the Island</string>
-    <string name="priority_edu_desc">HyperBridge can now manage how multiple notifications behave when the 9-island limit is reached.\n\n&lt;b&gt;Default: Most Recent&lt;/b&gt;\nNew notifications replace the oldest ones automatically.</string>
+    <string name="priority_edu_desc">Hyper Bridge can now manage how multiple notifications behave when the 9-island limit is reached.\n\n&lt;b&gt;Default: Most Recent&lt;/b&gt;\nNew notifications replace the oldest ones automatically.</string>
     <string name="badge_new">NEW</string>
     <string name="nav_layout_title">Navigation Layout</string>
     <string name="nav_layout_desc">Choose where information appears</string>
@@ -268,7 +268,7 @@
     <string name="theme_installer_success_title">Theme Ready</string>
     <string name="theme_installer_author">Created by %s</string>
     <string name="theme_installer_version">Version %d</string>
-    <string name="theme_installer_apply_question">Do you want to apply this theme to HyperBridge now?</string>
+    <string name="theme_installer_apply_question">Do you want to apply this theme to Hyper Bridge now?</string>
     <string name="theme_installer_action_apply">Apply Theme</string>
     <string name="theme_installer_action_later">Save for Later</string>
     <string name="theme_installer_error_title">Import Failed</string>

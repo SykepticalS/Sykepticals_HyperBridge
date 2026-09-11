@@ -229,7 +229,7 @@ fun HomeScreen(
                                         ThemeManagerScreen(
                                             onBack = { designRoute = DesignRoute.DASHBOARD },
                                             onFindThemes = {
-                                                val query = "HyperBridge Theme"
+                                                val query = "Hyper Bridge Theme"
                                                 try {
                                                     val intent = Intent(
                                                         Intent.ACTION_VIEW,

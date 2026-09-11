@@ -14,7 +14,7 @@
     <string name="welcome_subtitle">Intégrez parfaitement HyperIsland à votre expérience HyperOS.</string>
     <string name="get_started">Démarrer</string>
     <string name="how_it_works">Comment cela fonctionne</string>
-    <string name="how_it_works_desc">Choisissez vos applications favorites (Spotify, Maps, Horloge), HyperBridge transforme leurs notifications en bulle HyperIsland.</string>
+    <string name="how_it_works_desc">Choisissez vos applications favorites (Spotify, Maps, Horloge), Hyper Bridge transforme leurs notifications en bulle HyperIsland.</string>
     <string name="beta_warning">Note : Cette version est une bêta. Vous pourriez rencontrer des bugs ou des problèmes d\'affichage.</string>
     <string name="device_compatible">Appareil compatible</string>
     <string name="unsupported_device">Appareil non supporté</string>
@@ -279,7 +279,7 @@
     <string name="theme_installer_success_title">Thème prêt</string>
     <string name="theme_installer_author">Créé par %s</string>
     <string name="theme_installer_version">Version %d</string>
-    <string name="theme_installer_apply_question">Souhaitez-vous appliquer ce thème à HyperBridge maintenant ?</string>
+    <string name="theme_installer_apply_question">Souhaitez-vous appliquer ce thème à Hyper Bridge maintenant ?</string>
     <string name="theme_installer_action_apply">Appliquer thème</string>
     <string name="theme_installer_action_later">Enregistrer pour plus tard</string>
     <string name="theme_installer_error_title">Échec de l\'importation</string>
@@ -408,7 +408,7 @@
     <string name="colors_desc_material_you">Extrait les couleurs de votre fond d\'écran actuel.</string>
     <string name="kill_all_widgets">Tuer les widgets actifs</string>
     <string name="permission_reminder_title">Notification de mise à jour</string>
-    <string name="permission_reminder_desc">HyperBridge a été mis à jour ! Assurez-vous que vos autorisations de démarrage automatique et de fonctionnement en arrière-plan n\'ont pas été révoquées par le système pour que vos widgets continuent de fonctionner correctement.</string>
+    <string name="permission_reminder_desc">Hyper Bridge a été mis à jour ! Assurez-vous que vos autorisations de démarrage automatique et de fonctionnement en arrière-plan n\'ont pas été révoquées par le système pour que vos widgets continuent de fonctionner correctement.</string>
     <string name="got_it">J\'ai compris</string>
     <string name="recommended">Recommandé</string>
     <string name="all">Toutes</string>
@@ -500,15 +500,15 @@
     <string name="widget_went_wrong">Si vous voyez ceci, quelque chose s\'est mal passé ! Le système n\'a pas pu afficher le widget</string>
     <string name="troubleshoot_featured_notification">Résolution des problèmes</string>
     <string name="featured_notifications_check">Vérification des notifications recommandées</string>
-    <string name="featured_notifications_check_desc">Vérifions si votre système est correctement configuré pour afficher les notifications HyperBridge.</string>
+    <string name="featured_notifications_check_desc">Vérifions si votre système est correctement configuré pour afficher les notifications Hyper Bridge.</string>
     <string name="featured_notifications_not_supported">Non pris en charge</string>
     <string name="featured_notifications_enabled">Activé</string>
     <string name="featured_notifications_open_settings">Ouvrir les paramètres système</string>
     <string name="featured_notifications_troubleshoot_title">Pourquoi ce n\'est pas une bulle de notification ?</string>
-    <string name="featured_notifications_troubleshoot_desc">Votre appareil Xiaomi a intercepté la notification, mais n\'a pas réussi à l\'afficher en tant que notification recommandée car la permission est désactivée dans vos paramètres système.\n\nPour résoudre ceci:\n1. Appuyez sur \"Ouvrir les paramètres du système\"\n2. Faites défiler vers le bas jusqu\'à \"Notifications recommandées\" (ou similaires)\n3. Activez-le pour HyperBridge.</string>
+    <string name="featured_notifications_troubleshoot_desc">Votre appareil Xiaomi a intercepté la notification, mais n\'a pas réussi à l\'afficher en tant que notification recommandée car la permission est désactivée dans vos paramètres système.\n\nPour résoudre ceci:\n1. Appuyez sur \"Ouvrir les paramètres du système\"\n2. Faites défiler vers le bas jusqu\'à \"Notifications recommandées\" (ou similaires)\n3. Activez-le pour Hyper Bridge.</string>
     <string name="featured_notifications_shizuku_alternative">Alternative : remplacement par Shizuku</string>
-    <string name="featured_notifications_shizuku_desc">Si votre système n\'affiche pas le paramètre ou s\'il est restreint, vous pouvez contourner entièrement la liste blanche de Xiaomi en configurant Shizuku. HyperBridge utilisera Shizuku pour afficher directement les bulles de notifications.</string>
-    <string name="migration_title">HyperBridge Update</string>
+    <string name="featured_notifications_shizuku_desc">Si votre système n\'affiche pas le paramètre ou s\'il est restreint, vous pouvez contourner entièrement la liste blanche de Xiaomi en configurant Shizuku. Hyper Bridge utilisera Shizuku pour afficher directement les bulles de notifications.</string>
+    <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
     <string name="notification_management">Gestion des notifications</string>

@@ -14,7 +14,7 @@
     <string name="welcome_subtitle">Integrasikan HyperIslands secara mulus ke dalam pengalaman HyperOS Anda.</string>
     <string name="get_started">Mulai</string>
     <string name="how_it_works">Cara Kerjanya</string>
-    <string name="how_it_works_desc">Pilih aplikasi favorit Anda (Spotify, Peta, Pewaktu). HyperBridge mengubah pemberitahuan aplikasi tersebut menjadi HyperIsland yang elegan.</string>
+    <string name="how_it_works_desc">Pilih aplikasi favorit Anda (Spotify, Peta, Pewaktu). Hyper Bridge mengubah pemberitahuan aplikasi tersebut menjadi HyperIsland yang elegan.</string>
     <string name="beta_warning">Catatan: Aplikasi ini masih dalam tahap Beta. Anda mungkin menemui kesalahan atau informasi visual yang tidak akurat.</string>
     <string name="device_compatible">Perangkat Kompatibel</string>
     <string name="unsupported_device">Perangkat Tidak Didukung</string>
@@ -276,7 +276,7 @@
     <string name="theme_installer_success_title">Tema Siap</string>
     <string name="theme_installer_author">Dibuat oleh %s</string>
     <string name="theme_installer_version">Versi %d</string>
-    <string name="theme_installer_apply_question">Apakah Anda ingin menerapkan tema ini ke HyperBridge sekarang?</string>
+    <string name="theme_installer_apply_question">Apakah Anda ingin menerapkan tema ini ke Hyper Bridge sekarang?</string>
     <string name="theme_installer_action_apply">Terapkan Tema</string>
     <string name="theme_installer_action_later">Simpan untuk Nanti</string>
     <string name="theme_installer_error_title">Impor Gagal</string>
@@ -404,7 +404,7 @@
     <string name="colors_desc_material_you">Mengekstrak warna dari wallpaper Anda saat ini.</string>
     <string name="kill_all_widgets">Matikan Widget yang Aktif</string>
     <string name="permission_reminder_title">Informasi Pembaruan</string>
-    <string name="permission_reminder_desc">HyperBridge telah diperbarui! Pastikan izin Mulai Otomatis dan Penggunaan Baterai di Latar Belakang Anda tidak dicabut secara diam-diam oleh sistem agar widget Anda tetap berjalan dengan lancar.</string>
+    <string name="permission_reminder_desc">Hyper Bridge telah diperbarui! Pastikan izin Mulai Otomatis dan Penggunaan Baterai di Latar Belakang Anda tidak dicabut secara diam-diam oleh sistem agar widget Anda tetap berjalan dengan lancar.</string>
     <string name="got_it">Mengerti</string>
     <string name="recommended">Direkomendasikan</string>
     <string name="all">Semua</string>
@@ -496,15 +496,15 @@
     <string name="widget_went_wrong">Jika Anda melihat pesan ini, berarti terjadi kesalahan! Sistem tidak dapat menampilkan widget</string>
     <string name="troubleshoot_featured_notification">Pemecahan Masalah</string>
     <string name="featured_notifications_check">Pemeriksaan Pemberitahuan Unggulan</string>
-    <string name="featured_notifications_check_desc">Mari kita periksa apakah sistem Anda sudah dikonfigurasi dengan benar untuk menampilkan HyperBridge islands.</string>
+    <string name="featured_notifications_check_desc">Mari kita periksa apakah sistem Anda sudah dikonfigurasi dengan benar untuk menampilkan Hyper Bridge islands.</string>
     <string name="featured_notifications_not_supported">Tidak Didukung</string>
     <string name="featured_notifications_enabled">Diaktifkan</string>
     <string name="featured_notifications_open_settings">Buka Pengatran Sistem</string>
     <string name="featured_notifications_troubleshoot_title">Mengapa ini bukan island?</string>
-    <string name="featured_notifications_troubleshoot_desc">Perangkat Xiaomi Anda telah mencegat pemberitahuan tersebut, tetapi gagal menampilkannya sebagai island unggulan karena izinnya dinonaktifkan di pengaturan sistem Anda.\n\nUntuk memperbaikinya:\n1. Ketuk \"Buka Pengaturan Sistem\"\n2. Gulir ke bawah ke \"Pemberitahuan Unggulan\" (atau yang serupa)\n3. Aktifkan untuk HyperBridge.</string>
+    <string name="featured_notifications_troubleshoot_desc">Perangkat Xiaomi Anda telah mencegat pemberitahuan tersebut, tetapi gagal menampilkannya sebagai island unggulan karena izinnya dinonaktifkan di pengaturan sistem Anda.\n\nUntuk memperbaikinya:\n1. Ketuk \"Buka Pengaturan Sistem\"\n2. Gulir ke bawah ke \"Pemberitahuan Unggulan\" (atau yang serupa)\n3. Aktifkan untuk Hyper Bridge.</string>
     <string name="featured_notifications_shizuku_alternative">Alternatif: Penggantian Shizuku</string>
-    <string name="featured_notifications_shizuku_desc">Jika sistem Anda tidak menampilkan pengaturan tersebut atau pengaturan tersebut dibatasi, Anda dapat melewati daftar putih Xiaomi sepenuhnya dengan mengatur Shizuku. HyperBridge akan menggunakan Shizuku untuk mengirimkan islands secara langsung.</string>
-    <string name="migration_title">HyperBridge Update</string>
+    <string name="featured_notifications_shizuku_desc">Jika sistem Anda tidak menampilkan pengaturan tersebut atau pengaturan tersebut dibatasi, Anda dapat melewati daftar putih Xiaomi sepenuhnya dengan mengatur Shizuku. Hyper Bridge akan menggunakan Shizuku untuk mengirimkan islands secara langsung.</string>
+    <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
     <string name="notification_management">Pengelolaan Pemberitahuan</string>

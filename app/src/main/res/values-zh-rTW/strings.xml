@@ -14,7 +14,7 @@
     <string name="welcome_subtitle">將 HyperIslands 整合至你的 HyperOS 使用體驗中。</string>
     <string name="get_started">開始使用</string>
     <string name="how_it_works">如何運作</string>
-    <string name="how_it_works_desc">選擇你常用的應用程式（Spotify、地圖、計時器）。HyperBridge 會將它們的通知轉換為簡潔俐落的超級島。</string>
+    <string name="how_it_works_desc">選擇你常用的應用程式（Spotify、地圖、計時器）。Hyper Bridge 會將它們的通知轉換為簡潔俐落的超級島。</string>
     <string name="beta_warning">注意：此應用程式目前為 Beta 測試版，您可能會遇到程式錯誤 或顯示資訊不正確的情況。</string>
     <string name="device_compatible">相容的裝置</string>
     <string name="unsupported_device">不支援此裝置</string>
@@ -123,7 +123,7 @@
     <string name="title_0_2_0">資訊更新</string>
     <string name="title_0_1_0">快速更新</string>
     <string name="priority_edu_title">全新：超級島控制功能</string>
-    <string name="priority_edu_desc">HyperBridge 現在可以管理當達到 9 個超級島上限時，多個通知的處理方式。\n\n&lt;b&gt;設值：最近優先&lt;/b&gt;\n新的通知將會自動替換掉最舊的通知。</string>
+    <string name="priority_edu_desc">Hyper Bridge 現在可以管理當達到 9 個超級島上限時，多個通知的處理方式。\n\n&lt;b&gt;設值：最近優先&lt;/b&gt;\n新的通知將會自動替換掉最舊的通知。</string>
     <string name="badge_new">新功能</string>
     <string name="nav_layout_title">導航設定</string>
     <string name="nav_layout_desc">選擇資訊顯示的位置</string>
@@ -276,7 +276,7 @@
     <string name="theme_installer_success_title">主題已就緒</string>
     <string name="theme_installer_author">建立者：%s</string>
     <string name="theme_installer_version">版本 %d</string>
-    <string name="theme_installer_apply_question">您現在要將此主題套用到 HyperBridge 嗎？</string>
+    <string name="theme_installer_apply_question">您現在要將此主題套用到 Hyper Bridge 嗎？</string>
     <string name="theme_installer_action_apply">套用主題</string>
     <string name="theme_installer_action_later">稍後儲存</string>
     <string name="theme_installer_error_title">匯入失敗</string>
@@ -404,7 +404,7 @@
     <string name="colors_desc_material_you">從目前壁紙中提取顏色。</string>
     <string name="kill_all_widgets">停止運作中的小工具</string>
     <string name="permission_reminder_title">更新通知</string>
-    <string name="permission_reminder_desc">HyperBridge 已更新！請確保您的自啟動和後台運作權限未被系統移除，以確保您的小工具正常運作。</string>
+    <string name="permission_reminder_desc">Hyper Bridge 已更新！請確保您的自啟動和後台運作權限未被系統移除，以確保您的小工具正常運作。</string>
     <string name="got_it">明白了</string>
     <string name="recommended">建議</string>
     <string name="all">全部</string>
@@ -496,15 +496,15 @@
     <string name="widget_went_wrong">如果您看到此訊息，表示出錯了！系統無法顯示該小工具</string>
     <string name="troubleshoot_featured_notification">故障排除</string>
     <string name="featured_notifications_check">精選通知檢查</string>
-    <string name="featured_notifications_check_desc">讓我們驗證一下您的系統是否已正確配置以顯示 HyperBridge 超級島。</string>
+    <string name="featured_notifications_check_desc">讓我們驗證一下您的系統是否已正確配置以顯示 Hyper Bridge 超級島。</string>
     <string name="featured_notifications_not_supported">不支援</string>
     <string name="featured_notifications_enabled">啟用</string>
     <string name="featured_notifications_open_settings">開啟系統設定</string>
     <string name="featured_notifications_troubleshoot_title">為什麼沒有超級島？</string>
-    <string name="featured_notifications_troubleshoot_desc">您的小米設備攔截了通知，但由於系統設定中權限已停用，因此無法將其顯示為精選通知。 \n\n要解決此問題：\n1. 點選「開啟系統設定」\n2. 向下捲動至「精選通知」（或類似選項）\n3. 為 HyperBridge 啟用此權限。</string>
+    <string name="featured_notifications_troubleshoot_desc">您的小米設備攔截了通知，但由於系統設定中權限已停用，因此無法將其顯示為精選通知。 \n\n要解決此問題：\n1. 點選「開啟系統設定」\n2. 向下捲動至「精選通知」（或類似選項）\n3. 為 Hyper Bridge 啟用此權限。</string>
     <string name="featured_notifications_shizuku_alternative">替代方案：Shizuku 方法</string>
-    <string name="featured_notifications_shizuku_desc">如果您的系統未顯示此設定或該設定受到限制，您可以透過設定 Shizuku 來完全繞過小米白名單。 HyperBridge 將使用 Shizuku 直接發布超級島通知。</string>
-    <string name="migration_title">HyperBridge Update</string>
+    <string name="featured_notifications_shizuku_desc">如果您的系統未顯示此設定或該設定受到限制，您可以透過設定 Shizuku 來完全繞過小米白名單。 Hyper Bridge 將使用 Shizuku 直接發布超級島通知。</string>
+    <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
     <string name="notification_management">通知管理</string>

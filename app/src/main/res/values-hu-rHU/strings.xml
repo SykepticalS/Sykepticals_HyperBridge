@@ -14,7 +14,7 @@
     <string name="welcome_subtitle">Integráld zökkenőmentesen a HyperIslands-t a HyperOS élményébe.</string>
     <string name="get_started">Kezdj hozzá</string>
     <string name="how_it_works">Hogyan működik</string>
-    <string name="how_it_works_desc">Kiválaszthatod a kedvenc alkalmazásaid (Spotify, Térkép, Óra). A HyperBridge ezek értesítéseit stílusos HyperIsland-dé alakítja át.</string>
+    <string name="how_it_works_desc">Kiválaszthatod a kedvenc alkalmazásaid (Spotify, Térkép, Óra). A Hyper Bridge ezek értesítéseit stílusos HyperIsland-dé alakítja át.</string>
     <string name="beta_warning">Megjegyzés: Ez az alkalmazás béta verzióban van. Lehet, hogy hibákkal vagy helytelen vizuális információkkal találkozol.</string>
     <string name="device_compatible">Kompatibilis eszköz</string>
     <string name="unsupported_device">Nem támogatott eszköz</string>
@@ -123,7 +123,7 @@
     <string name="title_0_2_0">Az információs frissítés</string>
     <string name="title_0_1_0">A kifejező frissítés</string>
     <string name="priority_edu_title">Újdonság: Vezéreld a Island-ot</string>
-    <string name="priority_edu_desc">A HyperBridge mostantól kezelni tudja, hogy több értesítés hogyan viselkedik, amikor eléri a 9-szigetes korlátot.\n\n&lt;b&gt;Alapértelmezett: Legújabb&lt;/b&gt;\nAz új értesítések automatikusan felülírják a legrégebbieket.</string>
+    <string name="priority_edu_desc">A Hyper Bridge mostantól kezelni tudja, hogy több értesítés hogyan viselkedik, amikor eléri a 9-szigetes korlátot.\n\n&lt;b&gt;Alapértelmezett: Legújabb&lt;/b&gt;\nAz új értesítések automatikusan felülírják a legrégebbieket.</string>
     <string name="badge_new">ÚJ</string>
     <string name="nav_layout_title">Navigációs elrendezés</string>
     <string name="nav_layout_desc">Információk megjelenési helyének kiválasztása</string>
@@ -279,7 +279,7 @@
     <string name="theme_installer_success_title">Téma kész</string>
     <string name="theme_installer_author">Alkotó: %s</string>
     <string name="theme_installer_version">Verzió %d</string>
-    <string name="theme_installer_apply_question">Szeretnéd ezt a témát alkalmazni a HyperBridge-re?</string>
+    <string name="theme_installer_apply_question">Szeretnéd ezt a témát alkalmazni a Hyper Bridge-re?</string>
     <string name="theme_installer_action_apply">Téma alkalmazása</string>
     <string name="theme_installer_action_later">Mentés későbbre</string>
     <string name="theme_installer_error_title">Behozatal sikertelen</string>
@@ -408,7 +408,7 @@
     <string name="colors_desc_material_you">A háttérképed színeit használja</string>
     <string name="kill_all_widgets">Aktív modulok megölése</string>
     <string name="permission_reminder_title">Frissítési értesítés</string>
-    <string name="permission_reminder_desc">HyperBridge frissítve lett! Ellenőrizd, hogy az Automatikus indítás és a Háttérben való futás nem lett-e csendben elvéve a rendszer által, hogy a modulok továbbra is folyékonyan tudjanak működni.</string>
+    <string name="permission_reminder_desc">Hyper Bridge frissítve lett! Ellenőrizd, hogy az Automatikus indítás és a Háttérben való futás nem lett-e csendben elvéve a rendszer által, hogy a modulok továbbra is folyékonyan tudjanak működni.</string>
     <string name="got_it">Értem</string>
     <string name="recommended">Ajánlott</string>
     <string name="all">Mind</string>
@@ -500,15 +500,15 @@
     <string name="widget_went_wrong">If you are seeing this, something went wrong! The system couldn\'t show the widget</string>
     <string name="troubleshoot_featured_notification">Troubleshoot</string>
     <string name="featured_notifications_check">Featured Notifications Check</string>
-    <string name="featured_notifications_check_desc">Let\'s verify if your system is configured correctly to display HyperBridge islands.</string>
+    <string name="featured_notifications_check_desc">Let\'s verify if your system is configured correctly to display Hyper Bridge islands.</string>
     <string name="featured_notifications_not_supported">Not Supported</string>
     <string name="featured_notifications_enabled">Enabled</string>
     <string name="featured_notifications_open_settings">Open System Settings</string>
     <string name="featured_notifications_troubleshoot_title">Why is this not an island?</string>
-    <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap \"Open System Settings\"\n2. Scroll down to \"Featured Notifications\" (or similar)\n3. Enable it for HyperBridge.</string>
+    <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap \"Open System Settings\"\n2. Scroll down to \"Featured Notifications\" (or similar)\n3. Enable it for Hyper Bridge.</string>
     <string name="featured_notifications_shizuku_alternative">Alternative: Shizuku Override</string>
-    <string name="featured_notifications_shizuku_desc">If your system doesn\'t show the setting or it\'s restricted, you can bypass the Xiaomi whitelist entirely by setting up Shizuku. HyperBridge will use Shizuku to post islands directly.</string>
-    <string name="migration_title">HyperBridge Update</string>
+    <string name="featured_notifications_shizuku_desc">If your system doesn\'t show the setting or it\'s restricted, you can bypass the Xiaomi whitelist entirely by setting up Shizuku. Hyper Bridge will use Shizuku to post islands directly.</string>
+    <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
     <string name="notification_management">Notification Management</string>

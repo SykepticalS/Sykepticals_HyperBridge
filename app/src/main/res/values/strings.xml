@@ -16,7 +16,7 @@
     <string name="get_started">Get Started</string>
 
     <string name="how_it_works">How it Works</string>
-    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). HyperBridge transforms their notifications into a sleek HyperIsland.</string>
+    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). Hyper Bridge transforms their notifications into a sleek HyperIsland.</string>
     <string name="beta_warning">Note: This app is in Beta. You may encounter bugs or incorrect visual information.</string>
 
     <string name="device_compatible">Device Compatible</string>
@@ -361,7 +361,7 @@
     <string name="theme_installer_success_title">Theme Ready</string>
     <string name="theme_installer_author">Created by %s</string>
     <string name="theme_installer_version">Version %d</string>
-    <string name="theme_installer_apply_question">Do you want to apply this theme to HyperBridge now?</string>
+    <string name="theme_installer_apply_question">Do you want to apply this theme to Hyper Bridge now?</string>
     <string name="theme_installer_action_apply">Apply Theme</string>
     <string name="theme_installer_action_later">Save for Later</string>
     <string name="theme_installer_error_title">Import Failed</string>
@@ -514,7 +514,7 @@
 
     <string name="kill_all_widgets">Kill Active Widgets</string>
     <string name="permission_reminder_title">Update Notice</string>
-    <string name="permission_reminder_desc">HyperBridge has been updated! Please ensure that your Autostart and Background Battery permissions haven\'t been silently revoked by the system to keep your widgets running smoothly.</string>
+    <string name="permission_reminder_desc">Hyper Bridge has been updated! Please ensure that your Autostart and Background Battery permissions haven\'t been silently revoked by the system to keep your widgets running smoothly.</string>
     <string name="got_it">Got it</string>
 
     <string name="recommended">Recommended</string>
@@ -626,16 +626,16 @@
     <string name="troubleshoot_featured_notification">Troubleshoot</string>
 
     <string name="featured_notifications_check">Featured Notifications Check</string>
-    <string name="featured_notifications_check_desc">Let\'s verify if your system is configured correctly to display HyperBridge islands.</string>
+    <string name="featured_notifications_check_desc">Let\'s verify if your system is configured correctly to display Hyper Bridge islands.</string>
     <string name="featured_notifications_not_supported">Not Supported</string>
     <string name="featured_notifications_enabled">Enabled</string>
     <string name="featured_notifications_open_settings">Open System Settings</string>
     <string name="featured_notifications_troubleshoot_title">Why is this not an island?</string>
-    <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap "Open System Settings"\n2. Scroll down to "Featured Notifications" (or similar)\n3. Enable it for HyperBridge.</string>
+    <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap "Open System Settings"\n2. Scroll down to "Featured Notifications" (or similar)\n3. Enable it for Hyper Bridge.</string>
     <string name="featured_notifications_shizuku_alternative">Alternative: Shizuku Override</string>
-    <string name="featured_notifications_shizuku_desc">If your system doesn\'t show the setting or it\'s restricted, you can bypass the Xiaomi whitelist entirely by setting up Shizuku. HyperBridge will use Shizuku to post islands directly.</string>
+    <string name="featured_notifications_shizuku_desc">If your system doesn\'t show the setting or it\'s restricted, you can bypass the Xiaomi whitelist entirely by setting up Shizuku. Hyper Bridge will use Shizuku to post islands directly.</string>
 
-    <string name="migration_title">HyperBridge Update</string>
+    <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
 
@@ -651,11 +651,62 @@
     <string name="group_guides">Guides &amp; Help</string>
     <string name="documentation_title">Guides &amp; Documentation</string>
     <string name="documentation_subtitle">Learn how to configure and customize Hyper Bridge</string>
-
     <!-- Changelog & Website -->
     <string name="view_changelog">View Changelog</string>
     <string name="view_full_changelog">View on Website</string>
     <string name="changelog_notice">Full release notes and changes are published on our website.</string>
     <string name="changelog_view_website_desc">Check out the latest release notes, improvements and new features on our website.</string>
+
+    <!-- Bug Report & Diagnostics -->
+    <string name="bug_report_title">Bug Report &amp; Diagnostics</string>
+    <string name="bug_report_subtitle">Generate system diagnostics and report issues</string>
+    <string name="bug_report_privacy_title">Privacy &amp; Disclosure</string>
+    <string name="bug_report_privacy_desc">Submitting an issue on GitHub will make this information PUBLIC to anyone on the internet. If you prefer to keep your report private, you can email it directly to the developer at %s.</string>
+    <string name="bug_report_view_privacy">View Privacy Policy</string>
+    <string name="bug_report_details_title">Issue Details</string>
+    <string name="bug_report_what_happened">What happened?</string>
+    <string name="bug_report_what_happened_hint">Describe the problem or unexpected behavior...</string>
+    <string name="bug_report_steps">Steps to Reproduce</string>
+    <string name="bug_report_steps_hint">1. Open Spotify&#8230;\n2. Lock screen&#8230;\n3. Island disappears</string>
+    <string name="bug_report_options_title">Information to Include</string>
+    <string name="bug_report_include_device">Device &amp; OS Info</string>
+    <string name="bug_report_include_device_desc">Model, HyperOS/MIUI version, Android version, ROM region</string>
+    <string name="bug_report_include_permissions">System Permissions &amp; Restricted Settings</string>
+    <string name="bug_report_include_permissions_desc">Notification listener, overlay, battery, and Android 13+ restricted settings</string>
+    <string name="bug_report_include_theme">Theme Configuration</string>
+    <string name="bug_report_include_theme_desc">Active theme, engine mode, custom theme metadata</string>
+    <string name="bug_report_include_widgets">Widget Configuration</string>
+    <string name="bug_report_include_widgets_desc">Saved widgets, update intervals, sizes, and shade visibility</string>
+    <string name="bug_report_widget_scope_all">All Widgets</string>
+    <string name="bug_report_include_app_config">App Settings &amp; Configuration</string>
+    <string name="bug_report_app_scope_none">None</string>
+    <string name="bug_report_app_scope_none_desc">Do not include any app configurations in the report</string>
+    <string name="bug_report_app_scope_specific">Specific App</string>
+    <string name="bug_report_app_scope_specific_desc">Share settings and overrides for a single application</string>
+    <string name="bug_report_app_scope_all">All Apps</string>
+    <string name="bug_report_app_scope_all_desc">Include configurations and overrides for all apps</string>
+    <string name="bug_report_select_app">Select App</string>
+    <string name="bug_report_include_logs">Recent App Logs (Logcat)</string>
+    <string name="bug_report_include_logs_desc">Last 500 lines of system and Hyper Bridge logs</string>
+    <string name="bug_report_preview_title">Report Preview</string>
+    <string name="bug_report_preview_desc">Review the exact data that will be shared</string>
+    <string name="bug_report_submit_github">Submit on GitHub</string>
+    <string name="bug_report_send_email">Send via Email</string>
+    <string name="bug_report_copy_clipboard">Copy to Clipboard</string>
+    <string name="bug_report_share">Share</string>
+    <string name="bug_report_copied_github_toast">Diagnostics copied to clipboard! Paste it into the Logs section on GitHub.</string>
+    <string name="bug_report_copied_toast">Report copied to clipboard.</string>
+    <string name="bug_report_email_subject">Hyper Bridge Bug Report</string>
+    <string name="bug_report_entry_title">Bug Report &amp; Diagnostics</string>
+    <string name="bug_report_entry_subtitle">Troubleshoot and report issues with system logs</string>
+    <string name="bug_report_need_help">Having issues with permissions or islands?</string>
+    <string name="bug_report_open_diagnostics">Open Diagnostics</string>
+    <string name="bug_report_bridged">Bridged</string>
+    <string name="bug_report_change_app">Change App</string>
+    <string name="privacy_policy_title">Privacy Policy</string>
+    <string name="privacy_policy_subtitle">Learn how your data is protected and handled</string>
+    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with Hyper Bridge.</string>
+    <string name="cancel">Cancel</string>
+    <string name="continue_action">Continue</string>
 </resources>
 

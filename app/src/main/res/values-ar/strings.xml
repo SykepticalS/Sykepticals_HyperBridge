@@ -17,7 +17,7 @@ Hyper Bridge</string>
     <string name="get_started">ابدأ الآن</string>
 
     <string name="how_it_works">كيف يعمل التطبيق؟</string>
-    <string name="how_it_works_desc">اختر تطبيقاتك المفضلة (مثل Spotify والخرائط والمؤقت). سيقوم HyperBridge بتحويل إشعاراتها إلى جزيرة تفاعلية أنيقة.</string>
+    <string name="how_it_works_desc">اختر تطبيقاتك المفضلة (مثل Spotify والخرائط والمؤقت). سيقوم Hyper Bridge بتحويل إشعاراتها إلى جزيرة تفاعلية أنيقة.</string>
     <string name="beta_warning">ملاحظة: هذا التطبيق في مرحلة تجريبية (Beta). قد تواجه بعض الأخطاء أو عدم دقة في بعض العناصر المرئية.</string>
 
     <string name="device_compatible">الجهاز متوافق</string>
@@ -367,7 +367,7 @@ Hyper Bridge</string>
     <string name="theme_installer_success_title">الثيم جاهز</string>
     <string name="theme_installer_author">صُمم بواسطة %s</string>
     <string name="theme_installer_version">الإصدار %d</string>
-    <string name="theme_installer_apply_question">هل تريد تطبيق هذا الثيم على HyperBridge الآن؟</string>
+    <string name="theme_installer_apply_question">هل تريد تطبيق هذا الثيم على Hyper Bridge الآن؟</string>
     <string name="theme_installer_action_apply">تطبيق الثيم</string>
     <string name="theme_installer_action_later">حفظ لوقت لاحق</string>
     <string name="theme_installer_error_title">فشل الاستيراد</string>
@@ -519,7 +519,7 @@ Hyper Bridge</string>
 
     <string name="kill_all_widgets">إيقاف الأدوات النشطة</string>
     <string name="permission_reminder_title">تنبيه التحديث</string>
-    <string name="permission_reminder_desc">تم تحديث HyperBridge! يُرجى التأكد من أن أذونات التشغيل التلقائي والبطارية في الخلفية لم يتم إلغاؤها تلقائياً من النظام لضمان استمرار عمل أدواتك بسلاسة.</string>
+    <string name="permission_reminder_desc">تم تحديث Hyper Bridge! يُرجى التأكد من أن أذونات التشغيل التلقائي والبطارية في الخلفية لم يتم إلغاؤها تلقائياً من النظام لضمان استمرار عمل أدواتك بسلاسة.</string>
     <string name="got_it">فهمت ذلك</string>
 
     <string name="recommended">موصى به</string>
@@ -632,7 +632,7 @@ Hyper Bridge</string>
     <string name="troubleshoot_featured_notification">استكشاف الأخطاء وإصلاحها</string>
 
     <string name="featured_notifications_check">فحص الإشعارات المميزة</string>
-    <string name="featured_notifications_check_desc">دعنا نتحقق مما إذا كان نظامك مهيأ بشكل صحيح لعرض جزر HyperBridge.</string>
+    <string name="featured_notifications_check_desc">دعنا نتحقق مما إذا كان نظامك مهيأ بشكل صحيح لعرض جزر Hyper Bridge.</string>
     <string name="featured_notifications_not_supported">غير مدعوم</string>
     <string name="featured_notifications_enabled">مفعل</string>
     <string name="featured_notifications_open_settings">فتح إعدادات النظام</string>
@@ -642,11 +642,11 @@ Hyper Bridge</string>
 للإصلاح:
 1. انقر على "فتح إعدادات النظام"
 2. مرر لأسفل إلى "الإشعارات المميزة" (أو ما يماثلها)
-3. قم بتفعيل الإذن لتطبيق HyperBridge.</string>
+3. قم بتفعيل الإذن لتطبيق Hyper Bridge.</string>
     <string name="featured_notifications_shizuku_alternative">بديل: التجاوز عبر Shizuku</string>
-    <string name="featured_notifications_shizuku_desc">إذا كان هاتفك لا يعرض الإعداد أو كان مقيداً، يمكنك تجاوز قائمة شاومي البيضاء تماماً عبر إعداد Shizuku. سيستخدم HyperBridge تطبيق Shizuku لإظهار الجزر مباشرة.</string>
+    <string name="featured_notifications_shizuku_desc">إذا كان هاتفك لا يعرض الإعداد أو كان مقيداً، يمكنك تجاوز قائمة شاومي البيضاء تماماً عبر إعداد Shizuku. سيستخدم Hyper Bridge تطبيق Shizuku لإظهار الجزر مباشرة.</string>
 
-    <string name="migration_title">تحديث HyperBridge</string>
+    <string name="migration_title">تحديث Hyper Bridge</string>
     <string name="migration_message">جاري ترحيل قاعدة البيانات إلى وحدة التخزين المحمية للجهاز…</string>
     <string name="migration_complete">اكتمل التحديث</string>
 

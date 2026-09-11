@@ -17,7 +17,7 @@
     <string name="get_started">はじめる</string>
 
     <string name="how_it_works">使い方</string>
-    <string name="how_it_works_desc">お気に入りのアプリ（Spotify、マップ、タイマーなど）を選択してください。HyperBridgeが通知をスタイリッシュなHyperIslandに変換します。</string>
+    <string name="how_it_works_desc">お気に入りのアプリ（Spotify、マップ、タイマーなど）を選択してください。Hyper Bridgeが通知をスタイリッシュなHyperIslandに変換します。</string>
     <string name="beta_warning">注意: このアプリはベータ版です。不具合や表示の誤りが発生する場合があります。</string>
 
     <string name="device_compatible">対応デバイス</string>
@@ -346,7 +346,7 @@
     <string name="theme_installer_success_title">テーマの準備が完了しました</string>
     <string name="theme_installer_author">作成者: %s</string>
     <string name="theme_installer_version">バージョン %d</string>
-    <string name="theme_installer_apply_question">このテーマを今すぐHyperBridgeに適用しますか？</string>
+    <string name="theme_installer_apply_question">このテーマを今すぐHyper Bridgeに適用しますか？</string>
     <string name="theme_installer_action_apply">テーマを適用</string>
     <string name="theme_installer_action_later">後で使用するため保存</string>
     <string name="theme_installer_error_title">インポートに失敗しました</string>
@@ -499,7 +499,7 @@
 
     <string name="kill_all_widgets">有効なウィジェットを終了</string>
     <string name="permission_reminder_title">更新のお知らせ</string>
-    <string name="permission_reminder_desc">HyperBridgeが更新されました！ウィジェットを問題なく動作させるため、自動起動とバックグラウンドでのバッテリー使用権限が、システムによって無効化されていないかご確認ください。</string>
+    <string name="permission_reminder_desc">Hyper Bridgeが更新されました！ウィジェットを問題なく動作させるため、自動起動とバックグラウンドでのバッテリー使用権限が、システムによって無効化されていないかご確認ください。</string>
     <string name="got_it">わかりました</string>
 
     <string name="recommended">おすすめ</string>

@@ -12,6 +12,7 @@ import com.d4viddf.hyperbridge.ui.screens.onboarding.OnboardingScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.AppPriorityScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.BackupSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.BlocklistAppListScreen
+import com.d4viddf.hyperbridge.ui.screens.settings.BugReportScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ChangelogHistoryScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.EngineSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalBlocklistScreen
@@ -60,7 +61,8 @@ fun mainNavGraph(
             onGlobalSettingsClick = { navigator.navigate(Screen.GlobalSettings) },
             onHistoryClick = { navigator.navigate(Screen.History) },
             onBlocklistClick = { navigator.navigate(Screen.GlobalBlocklist) },
-            onBackupClick = { navigator.navigate(Screen.Backup) }
+            onBackupClick = { navigator.navigate(Screen.Backup) },
+            onBugReportClick = { navigator.navigate(Screen.BugReport) }
         )
     }
     entry<Screen.GlobalSettings> {
@@ -93,7 +95,10 @@ fun mainNavGraph(
         EngineSettingsScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.Setup> {
-        SetupHealthScreen(onBack = { navigator.goBack() })
+        SetupHealthScreen(
+            onBack = { navigator.goBack() },
+            onNavigateToBugReport = { navigator.navigate(Screen.BugReport) }
+        )
     }
     entry<Screen.Licenses> {
         LicensesScreen(onBack = { navigator.goBack() })
@@ -150,5 +155,8 @@ fun mainNavGraph(
     }
     entry<Screen.IslandSettings> {
         IslandSettingsScreen(onBack = { navigator.goBack() })
+    }
+    entry<Screen.BugReport> {
+        BugReportScreen(onBack = { navigator.goBack() })
     }
 }
