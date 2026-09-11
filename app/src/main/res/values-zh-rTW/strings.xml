@@ -204,6 +204,8 @@
         <item>接聽</item>
         <item>接受</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>靜音</item><item>關閉麥克風</item></string-array>
+    <string-array name="call_keywords_unmute"><item>取消靜音</item><item>開啟麥克風</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>擴音</item>
         <item>聲音</item>

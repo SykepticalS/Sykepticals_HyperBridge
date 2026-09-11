@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Hyper Bridge</string>
 
     <string name="back">Back</string>
@@ -95,6 +95,7 @@
     <string name="type_nav">Maps &amp; GPS</string>
     <string name="type_call">Calls</string>
     <string name="type_timer">Timers &amp; Alarms</string>
+    <string name="type_screen_recording">Screen recording</string>
 
     <string name="download_complete">Download Complete</string>
     <string name="downloading">Downloading</string>
@@ -269,6 +270,16 @@
     <string-array name="call_keywords_answer">
         <item>answer</item>
         <item>accept</item>
+    </string-array>
+    <string-array name="call_keywords_mute">
+        <item>mute</item>
+        <item>mic off</item>
+        <item>microphone off</item>
+    </string-array>
+    <string-array name="call_keywords_unmute">
+        <item>unmute</item>
+        <item>mic on</item>
+        <item>microphone on</item>
     </string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
@@ -645,6 +656,8 @@
     <string name="behaviour_triggers"><![CDATA[Behaviour & Triggers]]></string>
     <string name="engine_timeouts_triggers"><![CDATA[Engine, timeouts & triggers]]></string>
     <string name="global_behavior">Global Behavior</string>
+    <string name="system_island_expiration">System Island expiration</string>
+    <string name="system_island_expiration_desc">How long this system Island remains visible</string>
     <string name="auto_hide_island">Auto-hide Island</string>
     <string name="hides_after_a_set_time">Hides after a set time</string>
     <string name="behavior_hide_desc">Visible until manually dismissed</string>
@@ -659,6 +672,29 @@
     <string name="type_nav_desc">Turn-by-turn directions and ETA</string>
     <string name="type_call_desc">Incoming and ongoing phone calls</string>
     <string name="type_timer_desc">Active timers and stopwatches</string>
+    <string name="type_screen_recording_desc">Xiaomi system screen recording sessions</string>
+    <string name="screen_recording_title">Screen recording</string>
+    <string name="screen_recording_active">Recording screen..</string>
+    <string name="screen_recording_compact">Recording..</string>
+    <string name="screen_recording_done">Done recording.</string>
+    <string name="screen_recording_stop">Stop</string>
+    <string name="system_integrations" tools:ignore="MissingTranslation">System</string>
+    <string name="vpn_title" tools:ignore="MissingTranslation">VPN</string>
+    <string name="vpn_island_enabled" tools:ignore="MissingTranslation">Watching for VPN connections</string>
+    <string name="vpn_island_disabled" tools:ignore="MissingTranslation">VPN Island is disabled</string>
+    <string name="vpn_is_connected" tools:ignore="MissingTranslation">VPN is connected</string>
+    <string name="vpn_connected_to" tools:ignore="MissingTranslation">Connected to %1$s</string>
+    <string name="vpn_connecting" tools:ignore="MissingTranslation">VPN is connecting</string>
+    <string name="vpn_reconnecting" tools:ignore="MissingTranslation">VPN is reconnecting</string>
+    <string name="vpn_waiting_for_network" tools:ignore="MissingTranslation">Waiting for network</string>
+    <string name="vpn_paused" tools:ignore="MissingTranslation">VPN is paused</string>
+    <string name="vpn_disconnecting" tools:ignore="MissingTranslation">Disconnecting VPN</string>
+    <string name="vpn_blocking" tools:ignore="MissingTranslation">Blocking internet</string>
+    <string name="vpn_error" tools:ignore="MissingTranslation">VPN error</string>
+    <string name="vpn_disconnected" tools:ignore="MissingTranslation">VPN is disconnected</string>
+    <string name="system_integration_enabled" tools:ignore="MissingTranslation">Enabled</string>
+    <string name="system_integration_disabled" tools:ignore="MissingTranslation">Disabled</string>
+    <string name="system_integration_unavailable" tools:ignore="MissingTranslation">Not available on this device</string>
     <string name="select_triggered_events">Select triggered events</string>
     <string name="override_global_triggers">Override Global Triggers</string>
     <string name="override_global_trigger_desc">Set custom allowed notifications for this app</string>
@@ -706,6 +742,8 @@
     <string name="behavior_desc_glob_config">Determines how the island behaves.</string>
     <string name="widget_layout_snapshot">Preview of the widget</string>
 
+    <string name="changelog_0_6_0_sykeptical">&#8226; Added native Xiaomi screen-recording Islands with live status, stop action, saved confirmation, and a configurable expiration.\n&#8226; Added VPN Islands with connection-state updates and quick power and manage actions.\n&#8226; Improved call detection, session transitions, microphone state, and in-Island call controls.\n&#8226; Strengthened message deduplication and Island lifecycle recovery during rapid notification updates.</string>
+    <string name="title_0_6_0_sykeptical">System Islands &amp; Call Controls</string>
     <string name="changelog_0_5_9_sykeptical">&#8226; Prevented the same WhatsApp or messaging notification from expanding again after it had already collapsed.\n&#8226; Message identity now survives Android post-time refreshes and notification source-key replacements.\n&#8226; Rendering-only refreshes now update the existing Island silently instead of creating a fresh floating presentation.</string>
     <string name="title_0_5_9_sykeptical">Duplicate Re-Expansion Fix</string>
     <string name="changelog_0_5_8_sykeptical">&#8226; Fixed standard and message Islands always disappearing after one minute.\n&#8226; Auto-hide now follows the effective global or per-app duration exactly.\n&#8226; Disabling auto-hide now prevents lifecycle cleanup from scheduling a hidden timeout.</string>

@@ -14,6 +14,7 @@ import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
@@ -44,6 +45,7 @@ import io.github.d4viddf.hyperisland_kit.HyperPicture
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.core.graphics.get
+import androidx.core.graphics.withClip
 
 abstract class BaseTranslator(
     protected val context: Context,
@@ -195,7 +197,8 @@ abstract class BaseTranslator(
     protected fun resolveIcon(
         sbn: StatusBarNotification,
         picKey: String,
-        preferNativeAppBadge: Boolean = false
+        preferNativeAppBadge: Boolean = false,
+        contentPaddingPercent: Int = 0
     ): HyperPicture {
         val visual = resolveNotificationVisual(sbn)
         var originalBitmap = visual.bitmap
@@ -208,6 +211,9 @@ abstract class BaseTranslator(
             isBitmapDarkAndMonochrome(originalBitmap)
         ) {
             originalBitmap = tintBitmap(originalBitmap, Color.WHITE)
+        }
+        if (contentPaddingPercent > 0) {
+            originalBitmap = createNormalizedActionGlyph(originalBitmap, contentPaddingPercent)
         }
         return HyperPicture(picKey, originalBitmap)
     }
@@ -305,7 +311,8 @@ abstract class BaseTranslator(
         sbn: StatusBarNotification,
         config: com.sykeptical.hyperbridge.models.IslandConfig,
         theme: HyperTheme? = null,
-        mode: ActionDisplayMode = ActionDisplayMode.BOTH
+        mode: ActionDisplayMode = ActionDisplayMode.BOTH,
+        outerPaddingPercent: Int = 0
     ): List<BridgeAction> {
         val bridgeActions = mutableListOf<BridgeAction>()
         val actions = sbn.notification.actions ?: return emptyList()
@@ -366,7 +373,12 @@ abstract class BaseTranslator(
             if (bitmapToUse == null && shouldLoadIcon) {
                 val originalIcon = androidAction.getIcon()
                 if (originalIcon != null) {
-                    bitmapToUse = loadIconBitmap(originalIcon, sbn.packageName)
+                    bitmapToUse = loadIconBitmap(
+                        originalIcon,
+                        sbn.packageName,
+                        width = 96,
+                        height = 96
+                    )
                 }
             }
 
@@ -378,8 +390,14 @@ abstract class BaseTranslator(
                     createRoundedIconWithBackground(bitmapToUse, finalBgColorInt, 12)
                 }
 
-                actionIcon = Icon.createWithBitmap(processedBitmap)
-                hyperPic = HyperPicture("${uniqueKey}_icon", processedBitmap)
+                val finalBitmap = if (outerPaddingPercent > 0) {
+                    insetBitmap(processedBitmap, outerPaddingPercent)
+                } else {
+                    processedBitmap
+                }
+
+                actionIcon = Icon.createWithBitmap(finalBitmap)
+                hyperPic = HyperPicture("${uniqueKey}_icon", finalBitmap)
             }
 
             val finalIntent = if (hasRemoteInput) {
@@ -432,6 +450,116 @@ abstract class BaseTranslator(
         val color = try { colorHex.toColorInt() } catch (e: Exception) { Color.WHITE }
         drawable?.setTint(color)
         val bitmap = drawable?.toBitmap() ?: createFallbackBitmap()
+        return HyperPicture(key, bitmap)
+    }
+
+    /**
+     * Builds the shared system-identity treatment used by system integrations: a monochrome
+     * primary glyph with the real, full-colour provider application icon as a corner badge.
+     * The existing badge compositor owns adaptive-icon loading, bounds fitting and filtering.
+     */
+    protected fun getBadgedColoredPicture(
+        key: String,
+        resId: Int,
+        colorHex: String,
+        providerPackage: String?
+    ): HyperPicture {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
+        val color = try { colorHex.toColorInt() } catch (_: Exception) { Color.WHITE }
+        drawable?.setTint(color)
+        val glyph = drawable?.toBitmap()?.let { source ->
+            createBitmap(96, 96).also { target ->
+                drawNormalizedBitmap(
+                    Canvas(target),
+                    source,
+                    RectF(0f, 0f, 96f, 96f),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                )
+            }
+        } ?: createFallbackBitmap()
+        val composed = providerPackage?.let { compositeAppBadge(glyph, it) } ?: glyph
+        return HyperPicture(key, composed)
+    }
+
+    /**
+     * Places a country flag behind Xiaomi's native app-icon badge position. The provider icon
+     * remains a separate native ChatInfo layer, so both identities stay visible as a stack.
+     */
+    protected fun getCountryFlagBadgedPicture(
+        key: String,
+        resId: Int,
+        colorHex: String,
+        countryFlagBitmap: Bitmap?,
+        flagEmoji: String?
+    ): HyperPicture {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
+        val color = try { colorHex.toColorInt() } catch (_: Exception) { Color.WHITE }
+        drawable?.setTint(color)
+        val glyph = drawable?.toBitmap()?.let { source ->
+            createBitmap(96, 96).also { target ->
+                drawNormalizedBitmap(
+                    Canvas(target),
+                    source,
+                    RectF(0f, 0f, 96f, 96f),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                )
+            }
+        } ?: createFallbackBitmap()
+        if (!isUsableBitmap(countryFlagBitmap) && flagEmoji.isNullOrBlank()) return HyperPicture(key, glyph)
+
+        val output = runCatching {
+            val width = glyph.width.coerceAtLeast(1)
+            val height = glyph.height.coerceAtLeast(1)
+            val bitmap = createBitmap(width, height)
+            val canvas = Canvas(bitmap)
+            canvas.drawBitmap(glyph, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+
+            val minSide = minOf(width, height).toFloat()
+            val radius = minSide * 0.235f
+            // Offset up and left so Xiaomi's native provider badge overlaps instead of hiding it.
+            val centerX = width - minSide * 0.31f
+            val centerY = height - minSide * 0.31f
+            canvas.drawCircle(centerX, centerY, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+            })
+            canvas.withClip(centerX - radius, centerY - radius, centerX + radius, centerY + radius) {
+                if (isUsableBitmap(countryFlagBitmap)) {
+                    drawNormalizedBitmap(
+                        canvas,
+                        checkNotNull(countryFlagBitmap),
+                        RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius),
+                        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                    )
+                } else {
+                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                        textAlign = Paint.Align.CENTER
+                        textSize = radius * 1.65f
+                        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                    }
+                    val metrics = textPaint.fontMetrics
+                    val baseline = centerY - (metrics.ascent + metrics.descent) / 2f
+                    canvas.drawText(checkNotNull(flagEmoji), centerX, baseline, textPaint)
+                }
+            }
+            bitmap
+        }.getOrDefault(glyph)
+        return HyperPicture(key, output)
+    }
+
+    protected fun getThemedActionPicture(
+        key: String,
+        resId: Int,
+        theme: HyperTheme?,
+        packageName: String?,
+        backgroundColor: Int
+    ): HyperPicture {
+        val source = ContextCompat.getDrawable(context, resId)?.mutate()?.toBitmap(width = 96, height = 96)
+            ?: createFallbackBitmap()
+        val bitmap = if (theme != null && packageName != null) {
+            applyThemeToActionIcon(source, theme, packageName, backgroundColor)
+        } else {
+            applyThemeToActionIcon(source, "circle", 24, backgroundColor)
+        }
         return HyperPicture(key, bitmap)
     }
 
@@ -570,6 +698,22 @@ abstract class BaseTranslator(
         return output
     }
 
+    private fun insetBitmap(source: Bitmap, paddingPercent: Int): Bitmap {
+        val safePadding = paddingPercent.coerceIn(0, 49)
+        if (safePadding == 0) return source
+
+        val size = 96
+        val output = createBitmap(size, size)
+        val padding = size * (safePadding / 100f)
+        Canvas(output).drawBitmap(
+            source,
+            null,
+            RectF(padding, padding, size - padding, size - padding),
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        )
+        return output
+    }
+
     private fun tintBitmap(source: Bitmap, color: Int): Bitmap {
         val result = createBitmap(source.width, source.height)
         val canvas = Canvas(result)
@@ -581,7 +725,12 @@ abstract class BaseTranslator(
         return result
     }
 
-    protected fun loadIconBitmap(icon: Icon, packageName: String): Bitmap? {
+    protected fun loadIconBitmap(
+        icon: Icon,
+        packageName: String,
+        width: Int? = null,
+        height: Int? = null
+    ): Bitmap? {
         return try {
             val drawable = if (icon.type == Icon.TYPE_RESOURCE) {
                 try {
@@ -593,7 +742,7 @@ abstract class BaseTranslator(
             } else {
                 icon.loadDrawable(context)
             }
-            drawable?.toBitmap()
+            drawable?.toBitmap(width = width, height = height)
         } catch (e: Exception) {
             null
         }

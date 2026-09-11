@@ -141,6 +141,56 @@ class MessageEventFingerprintResolverTest {
     }
 
     @Test
+    fun coupledChildRepostWithRefreshedWhenRemainsTheOriginalEvent() {
+        val tracker = MessageEventFallbackTracker(duplicateWindowMs = 120L)
+
+        val originalUserX = tracker.resolve(
+            "conversation-x", 7,
+            MessageEventSignals(notificationWhen = 200L, sourcePostTime = 300L),
+            1L, 1_000L, recovery = false
+        )
+        val userXRepostedWhileUserYArrives = tracker.resolve(
+            "conversation-x", 7,
+            MessageEventSignals(notificationWhen = 400L, sourcePostTime = 500L),
+            2L, 5_000L, recovery = false
+        )
+
+        assertEquals(originalUserX, userXRepostedWhileUserYArrives)
+    }
+
+    @Test
+    fun coupledChildRepostWithOnlyRefreshedPostTimeRemainsTheOriginalEvent() {
+        val tracker = MessageEventFallbackTracker(duplicateWindowMs = 120L)
+
+        val originalUserX = tracker.resolve(
+            "conversation-x", 7, MessageEventSignals(sourcePostTime = 300L),
+            1L, 1_000L, recovery = false
+        )
+        val userXRepostedWhileUserYArrives = tracker.resolve(
+            "conversation-x", 7, MessageEventSignals(sourcePostTime = 500L),
+            2L, 5_000L, recovery = false
+        )
+
+        assertEquals(originalUserX, userXRepostedWhileUserYArrives)
+    }
+
+    @Test
+    fun changedContentWithOnlyRefreshedPostTimeIsANewEvent() {
+        val tracker = MessageEventFallbackTracker(duplicateWindowMs = 120L)
+
+        val original = tracker.resolve(
+            "conversation", 7, MessageEventSignals(sourcePostTime = 300L),
+            1L, 1_000L, recovery = false
+        )
+        val changed = tracker.resolve(
+            "conversation", 8, MessageEventSignals(sourcePostTime = 500L),
+            2L, 5_000L, recovery = false
+        )
+
+        assertNotEquals(original, changed)
+    }
+
+    @Test
     fun rapidMessagesWithRealMetadataNeverEnterCallbackDebounce() {
         val tracker = MessageEventFallbackTracker(duplicateWindowMs = 120L)
         val first = tracker.resolve(
@@ -226,6 +276,26 @@ class MessageEventFingerprintResolverTest {
                     packageName = "com.example.calls",
                     isStandardNotificationType = false,
                     hasConversationShortcut = true,
+                    hasUsefulContent = true
+                )
+            )
+        )
+        assertTrue(
+            isMessagingEvent(
+                MessagingEventSignals(
+                    packageName = "com.google.android.gm",
+                    isStandardNotificationType = true,
+                    hasEmailCategory = true,
+                    hasUsefulContent = true
+                )
+            )
+        )
+        assertFalse(
+            isMessagingEvent(
+                MessagingEventSignals(
+                    packageName = "com.google.android.gm",
+                    isStandardNotificationType = true,
+                    hasEmailCategory = false,
                     hasUsefulContent = true
                 )
             )

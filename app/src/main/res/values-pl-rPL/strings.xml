@@ -204,6 +204,8 @@
         <item>odbierz</item>
         <item>zaakceptuj</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>wycisz</item><item>wyłącz mikrofon</item></string-array>
+    <string-array name="call_keywords_unmute"><item>wyłącz wyciszenie</item><item>włącz mikrofon</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>głośnik</item>
         <item>audio</item>

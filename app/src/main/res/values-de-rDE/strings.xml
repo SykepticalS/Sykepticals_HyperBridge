@@ -204,6 +204,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>stummschalten</item><item>mikrofon aus</item></string-array>
+    <string-array name="call_keywords_unmute"><item>stummschaltung aufheben</item><item>mikrofon an</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>

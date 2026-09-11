@@ -37,10 +37,9 @@ class TimerTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(
         val timerType = if (isCountdown) -1 else 1
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.isFloat ?: false, isUpdate)
         builder.setIslandConfig(timeout = config.timeout)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
         val hiddenKey = "hidden_pixel"
         builder.addPicture(resolveIcon(sbn, picKey))

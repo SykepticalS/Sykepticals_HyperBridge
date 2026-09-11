@@ -52,7 +52,8 @@ The current fork includes the following work on top of upstream `v0.5.6`:
 * **Reliable notification lifecycle:** Reworked notification intake, reconciliation, expiry, and recovery to reduce missing, duplicated, stale, or reappearing islands.
 * **Messaging deduplication:** Added content-aware message fingerprinting and grouping for rapid WhatsApp and other chat updates.
 * **Latest-update-wins processing:** Serializes rapid source changes and prevents older work from overwriting newer notification state.
-* **Improved call handling:** Added call classification and session tracking for more reliable incoming, active, answered, declined, and ended call transitions.
+* **System Islands:** Added native Xiaomi screen-recording status and controls, plus VPN connection-state Islands with quick power and manage actions.
+* **Improved call handling:** Added call classification, session tracking, microphone state, and Island controls for more reliable incoming, active, answered, declined, and ended call transitions.
 * **Better visual resolution:** Improved icon sourcing, bitmap bounds, and rendered-data normalization for more consistent island artwork.
 * **Setup and diagnostics:** Added setup-health diagnostics, safer onboarding migration, and a guided floating-notification settings flow.
 * **Duplicate-banner guidance:** Recommends disabling an app's **Floating notifications** setting when HyperBridge is providing its banner.
@@ -102,7 +103,9 @@ These changes are designed to reduce redundant allocations, database access, ren
     * **🎵 Media:** Show album art and "Now Playing" status with visualizer support.
     * **🧭 Navigation:** Real-time turn-by-turn instructions (Google Maps, Waze).
     * **⬇️ Downloads:** Dedicated circular progress layout with a satisfying "Green Tick" animation upon completion.
-    * **📞 Calls:** Dedicated layout for incoming and active calls with timers.
+    * **📞 Calls:** Dedicated layout for incoming and active calls with timers, microphone state, and contextual controls.
+    * **🎥 Screen recording:** Xiaomi recorder status, stop action, saved confirmation, and configurable expiration.
+    * **🔐 VPN:** Connection-state Islands with quick power and manage actions.
 * **🛡️ Spoiler Protection:** Define blocked terms globally or per-app to prevent specific notifications (e.g., message spoilers) from popping up on the Island.
 * **Sui & Shizuku Support:** Fully supports Sui and Shizuku for enhanced network operations and seamless integration on rooted devices.
 * **Total Control:** Choose exactly which apps trigger the island, customize timeouts, and toggle floating behavior per app.
@@ -155,7 +158,7 @@ Requirements: Android 15 or newer (`minSdk 35`) on a compatible Xiaomi, POCO, or
 
 ### Option 1: Release APK (Recommended)
 
-1. Download the latest `0.5.9-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/Sykepticals_HyperBridge/releases).
+1. Download the latest `0.6.0-sykeptical` or newer APK from [GitHub Releases](https://github.com/SykepticalS/Sykepticals_HyperBridge/releases).
 2. Install it on your Xiaomi, POCO, or Redmi device.
 
 ### Option 2: Build from source

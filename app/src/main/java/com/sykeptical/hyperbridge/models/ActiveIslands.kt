@@ -20,5 +20,7 @@ data class ActiveIsland(
     val lastContentHash: Int,
     /** Distinguishes repeated, semantically identical message events. */
     val messageEventFingerprint: MessageEventFingerprint? = null,
-    val deleteIntent: android.app.PendingIntent? = null
+    val deleteIntent: android.app.PendingIntent? = null,
+    /** The mirrored source should be retired when this bridge notification is opened. */
+    val dismissSourceOnContentClick: Boolean = false
 )

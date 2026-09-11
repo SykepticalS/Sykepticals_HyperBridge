@@ -84,11 +84,38 @@ class IslandUpdateResolverTest {
     }
 
     @Test
-    fun onlyNewEventMayAutoExpand() {
+    fun onlyNewEventAndSourcePromotionMayAutoExpand() {
         assertTrue(IslandPresentationReason.NEW_EVENT.mayAutoExpand)
+        assertTrue(IslandPresentationReason.SOURCE_PROMOTION.mayAutoExpand)
         assertFalse(IslandPresentationReason.CONTENT_UPDATE.mayAutoExpand)
         assertFalse(IslandPresentationReason.RESTORE.mayAutoExpand)
         assertFalse(IslandPresentationReason.RECONCILE.mayAutoExpand)
+    }
+
+    @Test
+    fun richerCompanionPromotionKeepsBridgeIdAndFirstFloatDispatch() {
+        val event = messageEvent(timestamp = 200L, messageCount = 1)
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "gmail-email",
+            candidateBridgeId = 999,
+            contentHash = 2,
+            previous = PreviousIslandPresentation(
+                logicalId = "gmail-email",
+                bridgeId = 42,
+                contentHash = 1,
+                messageEventFingerprint = event
+            ),
+            notificationType = NotificationType.STANDARD,
+            presentationReason = IslandPresentationReason.SOURCE_PROMOTION,
+            isMessagingEvent = true,
+            messageEventFingerprint = event
+        )
+
+        assertEquals(IslandPresentationKind.UPDATE, decision.kind)
+        assertEquals(42, decision.bridgeId)
+        assertFalse(decision.onlyAlertOnce)
+        assertTrue(decision.presentationReason.mayAutoExpand)
+        assertFalse(decision.cancelBeforeNotify)
     }
 
     @Test

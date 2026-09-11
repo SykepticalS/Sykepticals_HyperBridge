@@ -86,6 +86,7 @@ fun HomeScreen(
 
     val activeApps by viewModel.activeAppsState.collectAsState()
     val libraryApps by viewModel.libraryAppsState.collectAsState()
+    val systemIntegrations by viewModel.systemIntegrationsState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     val context = LocalContext.current
@@ -322,8 +323,12 @@ fun HomeScreen(
                         2 -> LibraryPage(
                             apps = libraryApps,
                             isLoading = isLoading,
+                            systemIntegrations = systemIntegrations,
                             viewModel = viewModel,
                             onConfig = { configApp = it },
+                            onSystemConfig = { integration ->
+                                integration.configurationApp?.let { configApp = it }
+                            },
                             onSettingsClick = onSettingsClick
                         )
                     }

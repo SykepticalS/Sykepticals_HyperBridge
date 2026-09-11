@@ -12,12 +12,14 @@ enum class IslandPresentationKind {
 
 enum class IslandPresentationReason {
     NEW_EVENT,
+    /** A richer alias replaced an aggregate source before HyperOS displayed the first payload. */
+    SOURCE_PROMOTION,
     CONTENT_UPDATE,
     RESTORE,
     RECONCILE;
 
     val mayAutoExpand: Boolean
-        get() = this == NEW_EVENT
+        get() = this == NEW_EVENT || this == SOURCE_PROMOTION
 }
 
 data class PreviousIslandPresentation(
@@ -100,7 +102,7 @@ object IslandUpdateResolver {
         return IslandUpdateDecision(
             kind = IslandPresentationKind.UPDATE,
             bridgeId = previous.bridgeId,
-            onlyAlertOnce = true,
+            onlyAlertOnce = !presentationReason.mayAutoExpand,
             presentationReason = presentationReason
         )
     }
@@ -179,6 +181,22 @@ object PermanentIslandVisibilityPolicy {
 }
 
 object NotificationLifecyclePolicy {
+    fun dismissesWithSource(type: NotificationType?): Boolean = when (type) {
+        NotificationType.CALL,
+        NotificationType.MEDIA,
+        NotificationType.NAVIGATION,
+        NotificationType.SCREEN_RECORDING -> true
+        else -> false
+    }
+
+    fun canIntentionallyMirrorSource(type: NotificationType): Boolean =
+        type == NotificationType.MESSAGE || type == NotificationType.STANDARD
+
+    fun shouldDismissSourceAfterBridgeRemoval(
+        dismissSourceOnContentClick: Boolean,
+        wasContentClick: Boolean
+    ): Boolean = dismissSourceOnContentClick && wasContentClick
+
     fun presentationReason(hasPrevious: Boolean, recovery: Boolean): IslandPresentationReason = when {
         recovery -> IslandPresentationReason.RECONCILE
         hasPrevious -> IslandPresentationReason.CONTENT_UPDATE

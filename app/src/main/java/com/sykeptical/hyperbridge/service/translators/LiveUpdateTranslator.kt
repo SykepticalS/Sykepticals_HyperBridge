@@ -11,6 +11,11 @@ import com.sykeptical.hyperbridge.data.theme.ThemeRepository
 import com.sykeptical.hyperbridge.models.NavContent
 import com.sykeptical.hyperbridge.models.NotificationType
 import com.sykeptical.hyperbridge.service.call.CallActionIconSizingPolicy
+import com.sykeptical.hyperbridge.service.call.CallActionRole
+import com.sykeptical.hyperbridge.service.call.CallActionSelectionPolicy
+import com.sykeptical.hyperbridge.service.call.CallActionSignal
+import com.sykeptical.hyperbridge.service.call.CallMicrophoneState
+import com.sykeptical.hyperbridge.service.call.CallNotificationClassifier
 import com.sykeptical.hyperbridge.service.call.CallSession
 import com.sykeptical.hyperbridge.service.call.CallState
 import com.sykeptical.hyperbridge.service.call.CallTimerPolicy
@@ -19,6 +24,17 @@ class LiveUpdateTranslator(
     context: Context,
     repo: ThemeRepository
 ) : BaseTranslator(context, repo) {
+
+    private val callClassifier by lazy {
+        CallNotificationClassifier(
+            answerKeywords = context.resources.getStringArray(R.array.call_keywords_answer).toList(),
+            declineKeywords = context.resources.getStringArray(R.array.call_keywords_hangup).toList(),
+            hangUpKeywords = context.resources.getStringArray(R.array.call_keywords_hangup).toList(),
+            muteKeywords = context.resources.getStringArray(R.array.call_keywords_mute).toList(),
+            unmuteKeywords = context.resources.getStringArray(R.array.call_keywords_unmute).toList(),
+            speakerKeywords = context.resources.getStringArray(R.array.call_keywords_speaker).toList()
+        )
+    }
 
     fun translateToLiveUpdate(
         sbn: StatusBarNotification?,
@@ -105,10 +121,49 @@ class LiveUpdateTranslator(
 
         // --- ACTIONS ---
         val rawActions = original?.actions ?: emptyArray()
-        rawActions.forEachIndexed { index, action ->
+        val selectedCallActions = if (type == NotificationType.CALL && callSession != null) {
+            CallActionSelectionPolicy.select(
+                actions = rawActions.map { action ->
+                    CallActionSignal(
+                        title = action.title?.toString().orEmpty(),
+                        semanticAction = action.semanticAction,
+                        hasPendingIntent = action.actionIntent != null,
+                        hasRemoteInput = !action.remoteInputs.isNullOrEmpty()
+                    )
+                },
+                isIncoming = callSession.state == CallState.INCOMING_RINGING,
+                classifier = callClassifier
+            ).associateBy { it.index }
+        } else {
+            emptyMap()
+        }
+        val actionIndices = if (type == NotificationType.CALL && callSession != null) {
+            selectedCallActions.keys
+        } else {
+            rawActions.indices.toSet()
+        }
+
+        actionIndices.forEach { index ->
+            val action = rawActions[index]
+            val selectedCallAction = selectedCallActions[index]
             val sourceIcon = action.getIcon()
-            val iconCompat = if (type == NotificationType.CALL && sourceIcon != null && sbn != null) {
-                val normalizedBitmap = loadIconBitmap(sourceIcon, sbn.packageName)?.let {
+            val iconCompat = if (
+                selectedCallAction?.role == CallActionRole.MICROPHONE &&
+                selectedCallAction.microphoneState != CallMicrophoneState.UNKNOWN
+            ) {
+                val iconRes = if (selectedCallAction.microphoneState == CallMicrophoneState.MUTED) {
+                    R.drawable.ic_call_microphone_muted
+                } else {
+                    R.drawable.ic_call_microphone_live
+                }
+                IconCompat.createWithResource(context, iconRes)
+            } else if (type == NotificationType.CALL && sourceIcon != null && sbn != null) {
+                val normalizedBitmap = loadIconBitmap(
+                    sourceIcon,
+                    sbn.packageName,
+                    width = 96,
+                    height = 96
+                )?.let {
                     createNormalizedActionGlyph(
                         it,
                         CallActionIconSizingPolicy.NATIVE_PADDING_PERCENT
@@ -144,7 +199,11 @@ class LiveUpdateTranslator(
                 action.actionIntent
             }
 
-            builder.addAction(NotificationCompat.Action.Builder(iconCompat, action.title, finalIntent).build())
+            builder.addAction(
+                NotificationCompat.Action.Builder(iconCompat, action.title, finalIntent)
+                    .setSemanticAction(action.semanticAction)
+                    .build()
+            )
         }
 
         // --- APPLY STYLES ---

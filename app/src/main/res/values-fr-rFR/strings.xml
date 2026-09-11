@@ -204,6 +204,8 @@
         <item>répondre</item>
         <item>accepter</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>couper le micro</item><item>désactiver le micro</item></string-array>
+    <string-array name="call_keywords_unmute"><item>réactiver le micro</item><item>activer le micro</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>appelant</item>
         <item>audio</item>

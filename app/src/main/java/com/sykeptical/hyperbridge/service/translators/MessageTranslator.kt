@@ -48,11 +48,10 @@ class MessageTranslator(
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         // --- CONFIGURATION ---
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.isFloat ?: false, isUpdate)
         builder.setIslandConfig(timeout = config.timeout , dismissible = true, highlightColor = highlightColor, expandedTimeMs = config.floatTimeout)
         builder.setShowNotification(config.isShowShade ?: false)
         if (!isUpdate) builder.setReopen(true)
-        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
         val hiddenKey = "hidden_pixel"
         builder.addPicture(resolveIcon(sbn, picKey))

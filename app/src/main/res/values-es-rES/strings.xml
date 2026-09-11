@@ -205,6 +205,8 @@
         <item>responder</item>
         <item>contestar</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>silenciar</item><item>apagar micrófono</item></string-array>
+    <string-array name="call_keywords_unmute"><item>activar sonido</item><item>encender micrófono</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>altavoz</item>
         <item>audio</item>

@@ -26,7 +26,8 @@ data class CallSessionInput(
     val classification: CallClassification,
     val showsChronometer: Boolean,
     val chronometerBase: Long,
-    val observedAt: Long
+    val observedAt: Long,
+    val isVideoCall: Boolean = false
 )
 
 data class CallSession(
@@ -47,7 +48,9 @@ data class CallSession(
     val previousState: CallState? = null,
     val candidateState: CallState = state,
     val activeEvidence: CallActiveEvidence = CallActiveEvidence.NONE,
-    val sourceReplacement: Boolean = false
+    val sourceReplacement: Boolean = false,
+    val isVideoCall: Boolean = false,
+    val transitionReason: String = "pre-connected-no-active-evidence"
 )
 
 /** The translator must never create a timer for a pre-connected call state. */
@@ -99,7 +102,9 @@ class CallSessionTracker(
             previousState = previous?.state,
             candidateState = input.classification.state,
             activeEvidence = resolvedState.activeEvidence,
-            sourceReplacement = previous != null && previous.sourceKey != input.sourceKey
+            sourceReplacement = previous != null && previous.sourceKey != input.sourceKey,
+            isVideoCall = input.isVideoCall,
+            transitionReason = resolvedState.reason
         )
         sessions[logicalId] = session
         sourceIndex[input.sourceKey] = logicalId
@@ -138,9 +143,12 @@ class CallSessionTracker(
     }
 
     private fun findCandidate(input: CallSessionInput): CallSession? {
+        // Android keeps the notification key stable for in-place updates, including the privacy
+        // rewrite some calling apps post when the device is locked. That rewrite can redact or
+        // replace Person metadata, so participant compatibility must not split an already tracked
+        // source into a new session and regress an ACTIVE call back to OUTGOING_CALLING.
         sourceIndex[input.sourceKey]
             ?.let(sessions::get)
-            ?.takeIf { participantsCompatible(it.participantId, input.participantId) }
             ?.let { return it }
 
         val stableId = stableNotificationId(input)
@@ -158,6 +166,35 @@ class CallSessionTracker(
                     it.sourceKey != input.sourceKey &&
                     input.observedAt - it.lastSeen in 0..replacementGraceMs &&
                     sameNonBlank(it.participantId, input.participantId)
+        }.singleOrNull()?.let { return it }
+
+        // Dialers can replace their short-lived "dialing" notification before Android delivers
+        // removal for the old source. During that handoff Person metadata is often absent, which
+        // previously split one outgoing call into two logical sessions and made the replacement
+        // auto-expand the Island again. A unique, recent, pre-connected outgoing session is safe
+        // to rebind when participant metadata is missing on either side. Known conflicts, incoming
+        // calls, active calls, and ambiguous candidates remain separate.
+        sessions.values.filter {
+            it.packageName == input.packageName &&
+                    it.sourceKey != input.sourceKey &&
+                    input.observedAt - it.lastSeen in 0..replacementGraceMs &&
+                    isOutgoingPreConnected(it.state) &&
+                    isOutgoingPreConnected(input.classification.state) &&
+                    participantsCompatible(it.participantId, input.participantId) &&
+                    (it.participantId.isNullOrBlank() || input.participantId.isNullOrBlank())
+        }.singleOrNull()?.let { return it }
+
+        // Switching an established call between audio and video can replace the source before
+        // Android reports the old notification as removed. Some apps also rewrite Person metadata
+        // at that boundary. A unique, recent ACTIVE session from the same package is sufficient to
+        // preserve the call, but never use this fallback for a new incoming call.
+        sessions.values.filter {
+            it.packageName == input.packageName &&
+                    it.sourceKey != input.sourceKey &&
+                    it.state == CallState.ACTIVE &&
+                    it.isVideoCall != input.isVideoCall &&
+                    input.classification.state != CallState.INCOMING_RINGING &&
+                    input.observedAt - it.lastSeen in 0..replacementGraceMs
         }.singleOrNull()?.let { return it }
 
         val replacementCandidates = sessions.values.filter {
@@ -179,7 +216,8 @@ class CallSessionTracker(
                 CallState.ENDED,
                 null,
                 null,
-                CallActiveEvidence.NONE
+                CallActiveEvidence.NONE,
+                "not-a-live-call"
             )
         }
 
@@ -188,44 +226,68 @@ class CallSessionTracker(
                 CallState.ACTIVE,
                 previous.connectedAt,
                 previous.connectedAtSource,
-                CallActiveEvidence.NONE
+                CallActiveEvidence.NONE,
+                "active-sticky"
             )
         }
 
         val plausibleBase = input.chronometerBase.takeIf {
             input.showsChronometer && isPlausibleBase(it, input.observedAt)
         }
-        val chronometerStarted = classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
+        val sourceReplacement = previous != null && previous.sourceKey != input.sourceKey
+        val rawChronometerStarted = classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
                 previous != null && !previous.showsChronometer && plausibleBase != null
-        val chronometerBaseReset = classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
+        val rawChronometerBaseReset = classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
                 previous?.showsChronometer == true &&
                 previous.lastChronometerBase != null &&
                 plausibleBase != null &&
                 abs(previous.lastChronometerBase - plausibleBase) >= MATERIAL_BASE_CHANGE_MS
         val answeredIncoming = previous?.state == CallState.INCOMING_RINGING &&
                 !classification.hasAnswer && classification.hasDeclineOrHangUp
-        val connectedActionsAppeared = previous != null &&
+        val rawConnectedActionsAppeared = previous != null &&
                 isOutgoingPreConnected(previous.state) &&
                 !previous.hasConnectedControl &&
                 classification.hasConnectedControl &&
                 classification.hasDeclineOrHangUp
+        // A new source commonly has a different action set and may enable a call-start
+        // chronometer while the remote video participant is still ringing. Across a source-key
+        // boundary neither signal is independently sufficient; require both to change together.
+        val compoundReplacementBoundary = sourceReplacement &&
+                (rawChronometerStarted || rawChronometerBaseReset) &&
+                rawConnectedActionsAppeared
+        val chronometerStarted = rawChronometerStarted && !sourceReplacement
+        val chronometerBaseReset = rawChronometerBaseReset && !sourceReplacement
+        val connectedActionsAppeared = rawConnectedActionsAppeared && !sourceReplacement
 
-        if (chronometerStarted || chronometerBaseReset || answeredIncoming || connectedActionsAppeared) {
+        if (chronometerStarted || chronometerBaseReset || answeredIncoming ||
+            connectedActionsAppeared || compoundReplacementBoundary
+        ) {
             val transitionEvidence = when {
                 chronometerStarted -> CallActiveEvidence.CHRONOMETER_STARTED
                 chronometerBaseReset -> CallActiveEvidence.CHRONOMETER_BASE_RESET
                 answeredIncoming -> CallActiveEvidence.INCOMING_ANSWERED
-                else -> CallActiveEvidence.CONNECTED_ACTIONS_APPEARED
+                connectedActionsAppeared -> CallActiveEvidence.CONNECTED_ACTIONS_APPEARED
+                else -> CallActiveEvidence.COMPOUND_SOURCE_REPLACEMENT
             }
+            val usesChronometerBase = chronometerStarted || chronometerBaseReset ||
+                    compoundReplacementBoundary
             val connectedAt = when {
-                chronometerStarted || chronometerBaseReset -> requireNotNull(plausibleBase)
+                usesChronometerBase -> requireNotNull(plausibleBase)
                 else -> input.observedAt
             }
             val source = when {
-                chronometerStarted || chronometerBaseReset -> ConnectedAtSource.SOURCE_CHRONOMETER
+                usesChronometerBase -> ConnectedAtSource.SOURCE_CHRONOMETER
                 else -> ConnectedAtSource.OBSERVED_CONNECTION_TRANSITION
             }
-            return ResolvedState(CallState.ACTIVE, connectedAt, source, transitionEvidence)
+            val reason = when (transitionEvidence) {
+                CallActiveEvidence.CHRONOMETER_STARTED -> "chronometer-start-transition"
+                CallActiveEvidence.CHRONOMETER_BASE_RESET -> "chronometer-base-reset-transition"
+                CallActiveEvidence.INCOMING_ANSWERED -> "incoming-answer-controls-disappeared"
+                CallActiveEvidence.CONNECTED_ACTIONS_APPEARED -> "connected-controls-transition"
+                CallActiveEvidence.COMPOUND_SOURCE_REPLACEMENT -> "replacement-chronometer-and-controls-transition"
+                else -> "active-transition"
+            }
+            return ResolvedState(CallState.ACTIVE, connectedAt, source, transitionEvidence, reason)
         }
 
         if (previous == null && classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT) {
@@ -233,7 +295,7 @@ class CallSessionTracker(
             // only Hang Up is not enough evidence that the remote party answered.
             val initialState = classification.state.takeUnless { it == CallState.ACTIVE }
                 ?: CallState.OUTGOING_CALLING
-            return ResolvedState(initialState, null, null, CallActiveEvidence.NONE)
+            return ResolvedState(initialState, null, null, CallActiveEvidence.NONE, "initial-chronometer-not-connection")
         }
 
         // Some apps expose no observable answer boundary at all. In that case retaining Calling,
@@ -242,7 +304,12 @@ class CallSessionTracker(
             preservePreConnectedProgress(previous?.state, classification.state),
             null,
             null,
-            CallActiveEvidence.NONE
+            CallActiveEvidence.NONE,
+            if (sourceReplacement && (rawChronometerStarted || rawConnectedActionsAppeared)) {
+                "source-replacement-signals-not-connection"
+            } else {
+                classification.reason
+            }
         )
     }
 
@@ -302,7 +369,8 @@ class CallSessionTracker(
         val state: CallState,
         val connectedAt: Long?,
         val connectedAtSource: ConnectedAtSource?,
-        val activeEvidence: CallActiveEvidence
+        val activeEvidence: CallActiveEvidence,
+        val reason: String
     )
 
     private companion object {

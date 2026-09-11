@@ -204,6 +204,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>вимкнути мікрофон</item><item>без звуку</item></string-array>
+    <string-array name="call_keywords_unmute"><item>увімкнути мікрофон</item><item>увімкнути звук</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>

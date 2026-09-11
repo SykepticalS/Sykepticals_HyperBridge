@@ -204,6 +204,8 @@
         <item>fogadás</item>
         <item>fogadás</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>némítás</item><item>mikrofon ki</item></string-array>
+    <string-array name="call_keywords_unmute"><item>némítás feloldása</item><item>mikrofon be</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>hangszóró</item>
         <item>Hang</item>

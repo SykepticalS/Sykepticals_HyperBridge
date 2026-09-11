@@ -23,8 +23,19 @@ enum class CallPresentationType {
 enum class CallActionRole {
     ANSWER,
     DECLINE_OR_HANG_UP,
+    MICROPHONE,
     SPEAKER,
     OTHER
+}
+
+/**
+ * State reported by the source application's notification action. An action named "Mute" means
+ * the microphone is currently live; an action named "Unmute" means it is currently muted.
+ */
+enum class CallMicrophoneState {
+    UNKNOWN,
+    UNMUTED,
+    MUTED
 }
 
 enum class CallActiveEvidence {
@@ -34,13 +45,15 @@ enum class CallActiveEvidence {
     CHRONOMETER_STARTED,
     CHRONOMETER_BASE_RESET,
     CONNECTED_ACTIONS_APPEARED,
-    INCOMING_ANSWERED
+    INCOMING_ANSWERED,
+    COMPOUND_SOURCE_REPLACEMENT
 }
 
 data class CallActionSignal(
     val title: String,
     val semanticAction: Int,
-    val hasPendingIntent: Boolean
+    val hasPendingIntent: Boolean,
+    val hasRemoteInput: Boolean = false
 )
 
 data class CallNotificationSignals(
@@ -50,7 +63,9 @@ data class CallNotificationSignals(
     val showsChronometer: Boolean,
     val whenTime: Long,
     val actions: List<CallActionSignal>,
-    val isOngoingEvent: Boolean = false
+    val isOngoingEvent: Boolean = false,
+    val isForegroundService: Boolean = false,
+    val isVideoCall: Boolean = false
 )
 
 data class CallClassification(
@@ -62,6 +77,7 @@ data class CallClassification(
     val hasAnswer: Boolean = false,
     val hasDeclineOrHangUp: Boolean = false,
     val hasConnectedControl: Boolean = false,
+    val microphoneState: CallMicrophoneState = CallMicrophoneState.UNKNOWN,
     val actionRoles: Set<CallActionRole> = emptySet()
 )
 
@@ -69,6 +85,8 @@ class CallNotificationClassifier(
     private val answerKeywords: List<String>,
     private val declineKeywords: List<String>,
     private val hangUpKeywords: List<String>,
+    private val muteKeywords: List<String>,
+    private val unmuteKeywords: List<String>,
     private val speakerKeywords: List<String>
 ) {
     fun classify(signals: CallNotificationSignals): CallClassification {
@@ -76,7 +94,18 @@ class CallNotificationClassifier(
         val roles = signals.actions.map { roleForAction(it) }.toSet()
         val hasAnswer = roles.any { it == CallActionRole.ANSWER }
         val hasDeclineOrHangUp = roles.any { it == CallActionRole.DECLINE_OR_HANG_UP }
-        val hasConnectedControl = roles.any { it == CallActionRole.SPEAKER }
+        val hasConnectedControl = signals.actions.any { action ->
+            action.hasPendingIntent && when (roleForAction(action)) {
+                CallActionRole.MICROPHONE,
+                CallActionRole.SPEAKER -> true
+                else -> false
+            }
+        }
+        val microphoneState = signals.actions.asSequence()
+            .filter { it.hasPendingIntent }
+            .map(::microphoneStateForAction)
+            .firstOrNull { it != CallMicrophoneState.UNKNOWN }
+            ?: CallMicrophoneState.UNKNOWN
         val hasSemanticCallAction = signals.actions.any { it.semanticAction == SEMANTIC_ACTION_CALL }
         val callType = signals.callType ?: CALL_TYPE_UNKNOWN
         val presentationType = when (callType) {
@@ -144,6 +173,7 @@ class CallNotificationClassifier(
             hasAnswer = hasAnswer,
             hasDeclineOrHangUp = hasDeclineOrHangUp,
             hasConnectedControl = hasConnectedControl,
+            microphoneState = microphoneState,
             actionRoles = roles
         )
     }
@@ -154,13 +184,33 @@ class CallNotificationClassifier(
             answerKeywords.any { title.contains(it.lowercase()) } -> CallActionRole.ANSWER
             declineKeywords.any { title.contains(it.lowercase()) } -> CallActionRole.DECLINE_OR_HANG_UP
             hangUpKeywords.any { title.contains(it.lowercase()) } -> CallActionRole.DECLINE_OR_HANG_UP
-            // Android has semantic mute/unmute actions but no semantic speaker action. Prefer the
-            // semantic signal when present and retain localized speaker keywords as a fallback.
             action.semanticAction == SEMANTIC_ACTION_MUTE ||
-                    action.semanticAction == SEMANTIC_ACTION_UNMUTE -> CallActionRole.SPEAKER
+                    action.semanticAction == SEMANTIC_ACTION_UNMUTE -> CallActionRole.MICROPHONE
+            // Check unmute first because labels such as "Unmute" also contain "mute".
+            unmuteKeywords.any { matchesActionKeyword(title, it) } -> CallActionRole.MICROPHONE
+            muteKeywords.any { matchesActionKeyword(title, it) } -> CallActionRole.MICROPHONE
             speakerKeywords.any { title.contains(it.lowercase()) } -> CallActionRole.SPEAKER
             else -> CallActionRole.OTHER
         }
+    }
+
+    fun microphoneStateForAction(action: CallActionSignal): CallMicrophoneState {
+        val title = action.title.lowercase()
+        return when {
+            action.semanticAction == SEMANTIC_ACTION_UNMUTE -> CallMicrophoneState.MUTED
+            action.semanticAction == SEMANTIC_ACTION_MUTE -> CallMicrophoneState.UNMUTED
+            unmuteKeywords.any { matchesActionKeyword(title, it) } -> CallMicrophoneState.MUTED
+            muteKeywords.any { matchesActionKeyword(title, it) } -> CallMicrophoneState.UNMUTED
+            else -> CallMicrophoneState.UNKNOWN
+        }
+    }
+
+    private fun matchesActionKeyword(normalizedTitle: String, keyword: String): Boolean {
+        val normalizedKeyword = keyword.trim().lowercase()
+        if (normalizedKeyword.isEmpty()) return false
+        return normalizedTitle == normalizedKeyword ||
+                normalizedTitle.startsWith("$normalizedKeyword ") ||
+                normalizedTitle.endsWith(" $normalizedKeyword")
     }
 
     companion object {

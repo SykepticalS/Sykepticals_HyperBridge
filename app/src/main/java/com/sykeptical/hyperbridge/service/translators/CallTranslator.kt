@@ -5,6 +5,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.service.notification.StatusBarNotification
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.graphics.toColorInt
 import com.sykeptical.hyperbridge.R
 import com.sykeptical.hyperbridge.data.theme.ThemeRepository
@@ -13,7 +15,10 @@ import com.sykeptical.hyperbridge.models.HyperIslandData
 import com.sykeptical.hyperbridge.models.IslandConfig
 import com.sykeptical.hyperbridge.models.theme.HyperTheme
 import com.sykeptical.hyperbridge.service.call.CallActionIconSizingPolicy
+import com.sykeptical.hyperbridge.service.call.CallActionRole
+import com.sykeptical.hyperbridge.service.call.CallActionSelectionPolicy
 import com.sykeptical.hyperbridge.service.call.CallActionSignal
+import com.sykeptical.hyperbridge.service.call.CallMicrophoneState
 import com.sykeptical.hyperbridge.service.call.CallNotificationClassifier
 import com.sykeptical.hyperbridge.service.call.CallSession
 import com.sykeptical.hyperbridge.service.call.CallState
@@ -39,6 +44,8 @@ class CallTranslator(
             answerKeywords = answerKeywords,
             declineKeywords = hangUpKeywords,
             hangUpKeywords = hangUpKeywords,
+            muteKeywords = context.resources.getStringArray(R.array.call_keywords_mute).toList(),
+            unmuteKeywords = context.resources.getStringArray(R.array.call_keywords_unmute).toList(),
             speakerKeywords = speakerKeywords
         )
     }
@@ -49,18 +56,20 @@ class CallTranslator(
         config: IslandConfig,
         theme: HyperTheme?,
         session: CallSession,
-        isUpdate: Boolean
+        isUpdate: Boolean,
+        resolvedTitle: String? = null
     ): HyperIslandData {
         val extras = sbn.notification.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "Call"
+        val title = resolvedTitle?.takeIf { it.isNotBlank() }
+            ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+            ?: "Call"
         val now = System.currentTimeMillis()
 
         val isIncoming = session.state == CallState.INCOMING_RINGING
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.isFloat ?: false, isUpdate)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
         val hiddenKey = "hidden_pixel"
         builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = true))
@@ -159,49 +168,38 @@ class CallTranslator(
         val customAnswerBitmap = getThemeBitmap(theme, "call_answer")
         val customDeclineBitmap = getThemeBitmap(theme, "call_decline")
 
-        var answerIndex = -1
-        var hangUpIndex = -1
-        var speakerIndex = -1
-
-        rawActions.forEachIndexed { index, action ->
-            val role = classifier.roleForAction(
-                CallActionSignal(
-                    title = action.title?.toString().orEmpty(),
-                    semanticAction = action.semanticAction,
-                    hasPendingIntent = action.actionIntent != null
-                )
+        val actionSignals = rawActions.map { action ->
+            CallActionSignal(
+                title = action.title?.toString().orEmpty(),
+                semanticAction = action.semanticAction,
+                hasPendingIntent = action.actionIntent != null
             )
-            when (role) {
-                com.sykeptical.hyperbridge.service.call.CallActionRole.ANSWER -> answerIndex = index
-                com.sykeptical.hyperbridge.service.call.CallActionRole.DECLINE_OR_HANG_UP -> hangUpIndex = index
-                com.sykeptical.hyperbridge.service.call.CallActionRole.SPEAKER -> speakerIndex = index
-                com.sykeptical.hyperbridge.service.call.CallActionRole.OTHER -> Unit
-            }
         }
+        val selectedActions = CallActionSelectionPolicy.select(
+            actions = actionSignals,
+            isIncoming = isIncoming,
+            classifier = classifier
+        )
 
-        val indicesToShow = mutableListOf<Int>()
-        if (isIncoming) {
-            if (hangUpIndex != -1) indicesToShow.add(hangUpIndex)
-            if (answerIndex != -1) indicesToShow.add(answerIndex)
-        } else {
-            if (speakerIndex != -1) indicesToShow.add(speakerIndex)
-            if (hangUpIndex != -1) indicesToShow.add(hangUpIndex)
-        }
-
-        if (indicesToShow.isEmpty()) {
-            if (rawActions.isNotEmpty()) { indicesToShow.add(0); hangUpIndex = 0 }
-            if (rawActions.size > 1) { indicesToShow.add(1); answerIndex = 1 }
-        }
-
-        indicesToShow.take(2).forEach { index ->
+        selectedActions.forEach { selected ->
+            val index = selected.index
             val action = rawActions[index]
-            val uniqueKey = "act_${picKey.removePrefix("pic_")}_$index"
-            val isHangUp = index == hangUpIndex
-            val isAnswer = index == answerIndex
+            val role = selected.role
+            val microphoneState = selected.microphoneState
+            val stateKey = if (role == CallActionRole.MICROPHONE) {
+                "_${microphoneState.name.lowercase()}"
+            } else {
+                ""
+            }
+            val uniqueKey = "act_${picKey.removePrefix("pic_")}_${index}$stateKey"
+            val isHangUp = role == CallActionRole.DECLINE_OR_HANG_UP
+            val isAnswer = role == CallActionRole.ANSWER
+            val isMicrophone = role == CallActionRole.MICROPHONE
 
             val bgColorHex = when {
                 isHangUp -> hangUpColor
                 isAnswer -> answerColor
+                isMicrophone && microphoneState == CallMicrophoneState.MUTED -> "#FF9500"
                 else -> neutralColor
             }
             val bgColorInt = try { bgColorHex.toColorInt() } catch(e: Exception) { 0xFF8E8E93.toInt() }
@@ -211,9 +209,25 @@ class CallTranslator(
                 originalBitmap = customAnswerBitmap
             } else if (isHangUp && customDeclineBitmap != null) {
                 originalBitmap = customDeclineBitmap
+            } else if (isMicrophone && microphoneState != CallMicrophoneState.UNKNOWN) {
+                val microphoneIcon = if (microphoneState == CallMicrophoneState.MUTED) {
+                    R.drawable.ic_call_microphone_muted
+                } else {
+                    R.drawable.ic_call_microphone_live
+                }
+                originalBitmap = ContextCompat.getDrawable(context, microphoneIcon)
+                    ?.mutate()
+                    ?.toBitmap(width = 96, height = 96)
             } else {
                 val originalIcon = action.getIcon()
-                if (originalIcon != null) originalBitmap = loadIconBitmap(originalIcon, sbn.packageName)
+                if (originalIcon != null) {
+                    originalBitmap = loadIconBitmap(
+                        originalIcon,
+                        sbn.packageName,
+                        width = 96,
+                        height = 96
+                    )
+                }
             }
 
             var actionIcon: Icon? = null
@@ -243,9 +257,9 @@ class CallTranslator(
                     bgColorInt
                 )
 
-                val picKey = "${uniqueKey}_icon"
+                val actionPictureKey = "${uniqueKey}_icon"
                 actionIcon = Icon.createWithBitmap(processedBitmap)
-                hyperPic = HyperPicture(picKey, processedBitmap)
+                hyperPic = HyperPicture(actionPictureKey, processedBitmap)
             }
 
             val hyperAction = io.github.d4viddf.hyperisland_kit.HyperAction(

@@ -204,6 +204,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>ztlumit</item><item>vypnout mikrofon</item></string-array>
+    <string-array name="call_keywords_unmute"><item>zrušit ztlumení</item><item>zapnout mikrofon</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>

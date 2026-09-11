@@ -193,6 +193,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>silenciar</item><item>apagar micrófono</item></string-array>
+    <string-array name="call_keywords_unmute"><item>activar son</item><item>acender micrófono</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>
@@ -439,5 +441,4 @@
         <item quantity="other">%1$d custom actions</item>
     </plurals>
 </resources>
-
 

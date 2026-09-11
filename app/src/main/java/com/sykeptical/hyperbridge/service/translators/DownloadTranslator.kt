@@ -43,8 +43,7 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         builder.setShowNotification(config.isShowShade ?: true)
         
         val isFloatEnabled = config.isFloat ?: false
-        builder.setEnableFloat(isFloatEnabled)
-        builder.setIslandFirstFloat(!isUpdate && isFloatEnabled)
+        builder.applyFloatingPresentation(isFloatEnabled, isUpdate)
 
         val extras = sbn.notification.extras
         val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
@@ -65,7 +64,14 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         val tickKey = "${picKey}_tick"
         val hiddenKey = "hidden_pixel"
 
-        builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = true))
+        builder.addPicture(
+            resolveIcon(
+                sbn,
+                picKey,
+                preferNativeAppBadge = true,
+                contentPaddingPercent = 18
+            )
+        )
         builder.addPicture(getTransparentPicture(hiddenKey))
 
         if (isFinished) {
@@ -76,7 +82,12 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             }
         }
 
-        val actions = extractBridgeActions(sbn, config, theme)
+        val actions = extractBridgeActions(
+            sbn,
+            config,
+            theme,
+            outerPaddingPercent = 14
+        )
 
         builder.setChatInfo(
             title = title,

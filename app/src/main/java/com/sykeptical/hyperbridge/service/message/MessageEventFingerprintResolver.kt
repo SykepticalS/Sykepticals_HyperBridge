@@ -95,6 +95,22 @@ class MessageEventFallbackTracker(
             return strongFingerprint
         }
 
+        // Grouped social and messaging apps commonly rebuild already-active child notifications
+        // when another child is added to the group. That refresh can replace both Notification.when
+        // and StatusBarNotification.postTime even though the child's semantic payload is unchanged.
+        // Neither timestamp is sufficient evidence of a new user-visible event in that case.
+        // MessagingStyle is excluded because its latest-message timestamp is app-provided event
+        // identity and must continue to distinguish repeated messages with identical visible text.
+        if (previous != null &&
+            previous.contentHash == contentHash &&
+            strongFingerprint != null &&
+            previous.signalFingerprint != strongFingerprint
+        ) {
+            val stableEvent = previous.eventFingerprint
+            remember(sourceKey, State(contentHash, strongFingerprint, stableEvent, observedAt))
+            return stableEvent
+        }
+
         if (strongFingerprint?.source == MessageEventFingerprintSource.NOTIFICATION_WHEN) {
             val previousSignal = previous?.signalFingerprint
             val sameNotificationWhen = previousSignal?.source == MessageEventFingerprintSource.NOTIFICATION_WHEN &&
@@ -198,6 +214,7 @@ data class MessagingEventSignals(
     val hasConversationLocus: Boolean = false,
     val hasMessagePersonMetadata: Boolean = false,
     val hasRemoteInputReply: Boolean = false,
+    val hasEmailCategory: Boolean = false,
     val hasUsefulContent: Boolean = false
 )
 
@@ -220,7 +237,9 @@ fun isMessagingEvent(signals: MessagingEventSignals): Boolean {
     // not inspect localized text and does not suppress WhatsApp aggregate notifications.
     return signals.isStandardNotificationType &&
             signals.hasUsefulContent &&
-            signals.packageName in WHATSAPP_PACKAGES
+            (signals.packageName in WHATSAPP_PACKAGES ||
+                    (signals.packageName in GMAIL_PACKAGES && signals.hasEmailCategory))
 }
 
 private val WHATSAPP_PACKAGES = setOf("com.whatsapp", "com.whatsapp.w4b")
+private val GMAIL_PACKAGES = setOf("com.google.android.gm")

@@ -193,6 +193,8 @@
         <item>responder</item>
         <item>contestar</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>silenciar</item><item>apagar micrófono</item></string-array>
+    <string-array name="call_keywords_unmute"><item>activar sonido</item><item>encender micrófono</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>altavoz</item>
         <item>audio</item>
@@ -479,4 +481,3 @@
     <string name="perm_display_title">Mostrar sobre otras aplicaciones</string>
     <string name="perm_display_onboard_desc">Requerido para mostrar la ventana de respuesta rápida.</string>
 </resources>
-

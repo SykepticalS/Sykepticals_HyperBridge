@@ -75,6 +75,7 @@
     <string name="type_nav">Maps &amp; GPS</string>
     <string name="type_call">Calls</string>
     <string name="type_timer">Timers &amp; Alarms</string>
+    <string name="type_screen_recording">Ekran kaydı</string>
     <string name="download_complete">Download Complete</string>
     <string name="downloading">Downloading</string>
     <string name="maps_title">Maps</string>
@@ -204,6 +205,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>sessize al</item><item>mikrofonu kapat</item></string-array>
+    <string-array name="call_keywords_unmute"><item>sesi aç</item><item>mikrofonu aç</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>
@@ -530,6 +533,12 @@
     <string name="type_nav_desc">Turn-by-turn directions and ETA</string>
     <string name="type_call_desc">Incoming and ongoing phone calls</string>
     <string name="type_timer_desc">Active timers and stopwatches</string>
+    <string name="type_screen_recording_desc">Xiaomi sistem ekran kaydı oturumları</string>
+    <string name="screen_recording_title">Ekran kaydı</string>
+    <string name="screen_recording_active">Ekran kaydediliyor..</string>
+    <string name="screen_recording_compact">Kaydediliyor..</string>
+    <string name="screen_recording_done">Kayıt tamamlandı</string>
+    <string name="screen_recording_stop">Durdur</string>
     <string name="select_triggered_events">Select triggered events</string>
     <string name="override_global_triggers">Override Global Triggers</string>
     <string name="override_global_trigger_desc">Set custom allowed notifications for this app</string>
@@ -643,4 +652,21 @@
     <string name="reply_hint">Reply...</string>
     <string name="perm_display_title">Display over other apps</string>
     <string name="perm_display_onboard_desc">Required to show the custom inline reply overlay.</string>
+    <string name="system_integrations">Sistem</string>
+    <string name="vpn_title">VPN</string>
+    <string name="vpn_island_enabled">VPN bağlantıları izleniyor</string>
+    <string name="vpn_island_disabled">VPN Adası devre dışı</string>
+    <string name="vpn_is_connected">VPN bağlı</string>
+    <string name="vpn_connected_to">%1$s konumuna bağlı</string>
+    <string name="vpn_connecting">VPN bağlanıyor</string>
+    <string name="vpn_reconnecting">VPN yeniden bağlanıyor</string>
+    <string name="vpn_waiting_for_network">Ağ bekleniyor</string>
+    <string name="vpn_paused">VPN duraklatıldı</string>
+    <string name="vpn_disconnecting">VPN bağlantısı kesiliyor</string>
+    <string name="vpn_blocking">İnternet engelleniyor</string>
+    <string name="vpn_error">VPN hatası</string>
+    <string name="vpn_disconnected">VPN bağlantısı kesildi</string>
+    <string name="system_integration_enabled">Etkin</string>
+    <string name="system_integration_disabled">Devre dışı</string>
+    <string name="system_integration_unavailable">Bu cihazda kullanılamıyor</string>
 </resources>

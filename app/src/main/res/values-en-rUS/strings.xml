@@ -237,6 +237,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>mute</item><item>mic off</item><item>microphone off</item></string-array>
+    <string-array name="call_keywords_unmute"><item>unmute</item><item>mic on</item><item>microphone on</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>
@@ -631,5 +633,4 @@
     <string name="onboard_theme_desc">Fully customize colors, shapes and icons of your island.</string>
     <string name="onboard_design_desc">Expand the possibilities with different customization options</string>
 </resources>
-
 

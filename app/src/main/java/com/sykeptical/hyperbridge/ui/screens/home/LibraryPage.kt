@@ -42,22 +42,29 @@ import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperbridge.R
 import com.sykeptical.hyperbridge.ui.AppInfo
 import com.sykeptical.hyperbridge.ui.AppListViewModel
+import com.sykeptical.hyperbridge.ui.SystemIntegrationInfo
 import com.sykeptical.hyperbridge.ui.components.AppListFilterSection
 import com.sykeptical.hyperbridge.ui.components.AppListItem
 import com.sykeptical.hyperbridge.ui.components.EmptyState
+import com.sykeptical.hyperbridge.ui.components.SystemIntegrationListItem
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LibraryPage(
     apps: List<AppInfo>,
     isLoading: Boolean,
+    systemIntegrations: List<SystemIntegrationInfo>,
     viewModel: AppListViewModel,
     onConfig: (AppInfo) -> Unit,
+    onSystemConfig: (SystemIntegrationInfo) -> Unit,
     onSettingsClick: () -> Unit
 ) {
     val searchQuery = viewModel.librarySearch.collectAsState().value
     val selectedCategory = viewModel.libraryCategory.collectAsState().value
     val sortOption = viewModel.librarySort.collectAsState().value
+    val systemSelected = viewModel.librarySystemSelected.collectAsState().value
+    val showSystem = systemSelected || (selectedCategory == com.sykeptical.hyperbridge.ui.AppCategory.ALL && searchQuery.isBlank())
+    val hasSystemContent = showSystem && systemIntegrations.isNotEmpty()
 
     val isRefreshing = isLoading && apps.isNotEmpty()
     val pullState = rememberPullToRefreshState()
@@ -91,9 +98,12 @@ fun LibraryPage(
                 searchQuery = searchQuery,
                 onSearchChange = { viewModel.librarySearch.value = it },
                 selectedCategory = selectedCategory,
-                onCategoryChange = { viewModel.libraryCategory.value = it },
+                onCategoryChange = viewModel::selectLibraryAppCategory,
                 sortOption = sortOption,
-                onSortChange = { viewModel.librarySort.value = it }
+                onSortChange = { viewModel.librarySort.value = it },
+                showSystemCategory = true,
+                systemSelected = systemSelected,
+                onSystemSelected = viewModel::selectLibrarySystem
             )
 
             Box(
@@ -115,12 +125,12 @@ fun LibraryPage(
                         )
                     }
                 ) {
-                    if (apps.isEmpty() && isLoading) {
+                    if (apps.isEmpty() && !hasSystemContent && isLoading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             LoadingIndicator()
                         }
                     }
-                    else if (apps.isEmpty()) {
+                    else if (apps.isEmpty() && !hasSystemContent) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             EmptyState(
                                 title = stringResource(R.string.no_apps_found),
@@ -134,6 +144,31 @@ fun LibraryPage(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 80.dp)
                         ) {
+                            if (hasSystemContent) {
+                                item(key = "system_header") {
+                                    Text(
+                                        text = stringResource(R.string.system_integrations),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                                    )
+                                }
+                                items(systemIntegrations, key = { "system_${it.id.name}" }) { integration ->
+                                    Column(modifier = Modifier.animateItem()) {
+                                        SystemIntegrationListItem(
+                                            integration = integration,
+                                            onToggle = { viewModel.toggleSystemIntegration(integration.id, it) },
+                                            onSettingsClick = integration.configurationApp?.let {
+                                                { onSystemConfig(integration) }
+                                            }
+                                        )
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                        )
+                                    }
+                                }
+                            }
                             items(apps, key = { it.packageName }) { app ->
                                 Column(modifier = Modifier.animateItem()) {
                                     AppListItem(

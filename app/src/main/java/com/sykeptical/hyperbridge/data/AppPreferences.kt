@@ -17,6 +17,7 @@ import com.sykeptical.hyperbridge.models.WidgetConfig
 import com.sykeptical.hyperbridge.models.WidgetRenderMode
 import com.sykeptical.hyperbridge.models.WidgetSize
 import com.sykeptical.hyperbridge.service.floating.FloatingNotificationSetup
+import com.sykeptical.hyperbridge.service.recording.ScreenRecordingClassifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +42,8 @@ class AppPreferences(context: Context) {
         get() = sharedMemoryCache
 
     companion object {
+        private const val VPN_ISLAND_ENABLED = "vpn_island_enabled"
+        private const val SYSTEM_ISLAND_DEFAULT_TIMEOUT = 4
         private val sharedMemoryCache = ConcurrentHashMap<String, String>()
         private val sharedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val cacheObserverLock = Any()
@@ -207,12 +210,16 @@ class AppPreferences(context: Context) {
     }
 
     // --- CORE SETTINGS ---
-    val allowedPackagesFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.ALLOWED_PACKAGES).map { it.deserializeSet() }
+    val allowedPackagesFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.ALLOWED_PACKAGES).map {
+        it?.deserializeSet() ?: setOf(ScreenRecordingClassifier.PACKAGE_NAME)
+    }
+    val vpnIslandEnabledFlow: Flow<Boolean> = dao.getSettingFlow(VPN_ISLAND_ENABLED).map { it.toBoolean(true) }
     val isSetupComplete: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.SETUP_COMPLETE).map { it.toBoolean(false) }
     val lastSeenVersion: Flow<Int> = dao.getSettingFlow(SettingsKeys.LAST_VERSION).map { it.toInt(0) }
 
     suspend fun setSetupComplete(isComplete: Boolean) = save(SettingsKeys.SETUP_COMPLETE, isComplete.toString())
     suspend fun setLastSeenVersion(versionCode: Int) = save(SettingsKeys.LAST_VERSION, versionCode.toString())
+    suspend fun setVpnIslandEnabled(enabled: Boolean) = save(VPN_ISLAND_ENABLED, enabled.toString())
     suspend fun setPriorityEduShown(shown: Boolean) = save(SettingsKeys.PRIORITY_EDU, shown.toString())
 
     val featuredPermissionWarningFlow: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.FEATURED_PERMISSION_WARNING).map { it.toBoolean(false) }
@@ -235,7 +242,7 @@ class AppPreferences(context: Context) {
 
     suspend fun toggleApp(packageName: String, isEnabled: Boolean) {
         val currentString = dao.getSetting(SettingsKeys.ALLOWED_PACKAGES)
-        val currentSet = currentString.deserializeSet()
+        val currentSet = currentString?.deserializeSet() ?: setOf(ScreenRecordingClassifier.PACKAGE_NAME)
         val shouldShowFirstActivationPrompt = FloatingNotificationSetup.shouldShowFirstActivationPrompt(
             selectedPackagesBeforeToggle = currentSet,
             packageName = packageName,
@@ -308,6 +315,12 @@ class AppPreferences(context: Context) {
             args[6]?.toBooleanStrictOrNull()
         )
     }
+
+    val screenRecordingTimeoutFlow: Flow<Int> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_TIMEOUT).map { it.toInt(SYSTEM_ISLAND_DEFAULT_TIMEOUT) }
+
+    suspend fun setScreenRecordingTimeout(seconds: Int) =
+        save(SettingsKeys.SCREEN_RECORDING_TIMEOUT, seconds.toString())
 
     suspend fun updateGlobalConfig(config: IslandConfig) {
         config.isFloat?.let { save(SettingsKeys.GLOBAL_FLOAT, it.toString()) }
@@ -672,6 +685,9 @@ class AppPreferences(context: Context) {
         )
     }
 
+    fun getScreenRecordingTimeoutSync(): Int =
+        memoryCache[SettingsKeys.SCREEN_RECORDING_TIMEOUT].toInt(SYSTEM_ISLAND_DEFAULT_TIMEOUT)
+
     fun getGlobalNavLayoutSync(): Pair<NavContent, NavContent> {
         val l = memoryCache[SettingsKeys.NAV_LEFT]
         val r = memoryCache[SettingsKeys.NAV_RIGHT]
@@ -714,4 +730,7 @@ class AppPreferences(context: Context) {
     fun useNativeLiveUpdatesSync(): Boolean {
         return memoryCache[USE_NATIVE_ENGINE]?.toBoolean() ?: false
     }
+
+    fun isVpnIslandEnabledSync(): Boolean = memoryCache[VPN_ISLAND_ENABLED].toBoolean(true)
+
 }

@@ -204,6 +204,8 @@
         <item>odpovedať</item>
         <item>prijať</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>stlmiť</item><item>vypnúť mikrofón</item></string-array>
+    <string-array name="call_keywords_unmute"><item>zrušiť stlmenie</item><item>zapnúť mikrofón</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>reproduktor</item>
         <item>audio</item>

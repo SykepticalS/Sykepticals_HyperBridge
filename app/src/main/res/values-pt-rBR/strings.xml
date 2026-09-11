@@ -206,6 +206,8 @@ Novas notificações substituem as mais antigas automaticamente.</string>
         <item>responder</item>
         <item>aceitar</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>silenciar</item><item>desligar microfone</item></string-array>
+    <string-array name="call_keywords_unmute"><item>ativar som</item><item>ligar microfone</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>palestrante</item>
         <item>áudio</item>

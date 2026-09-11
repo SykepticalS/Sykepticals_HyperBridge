@@ -77,10 +77,9 @@ class MediaTranslator(context: Context) : BaseTranslator(context) {
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         val finalTimeout = config.timeout ?: 0
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.isFloat ?: false, isUpdate)
         builder.setIslandConfig(timeout = finalTimeout)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(!isUpdate && (config.isFloat ?: false))
 
 
         // --- RESOURCES ---

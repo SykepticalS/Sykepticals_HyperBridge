@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -599,6 +600,7 @@ fun TriggersConfigPage(prefs: AppPreferences) {
                                         NotificationType.NAVIGATION -> R.string.type_nav_desc
                                         NotificationType.CALL -> R.string.type_call_desc
                                         NotificationType.TIMER -> R.string.type_timer_desc
+                                        NotificationType.SCREEN_RECORDING -> R.string.type_screen_recording_desc
                                         NotificationType.MESSAGE -> R.string.type_message_desc
                                     }
                                     Text(
@@ -849,6 +851,7 @@ fun BehaviorConfigPage(prefs: AppPreferences) {
 @Composable
 fun AutoHideConfigPage(prefs: AppPreferences) {
     val config by prefs.globalConfigFlow.collectAsState(initial = IslandConfig())
+    val screenRecordingTimeout by prefs.screenRecordingTimeoutFlow.collectAsState(initial = 4)
     val scope = rememberCoroutineScope()
     // Timeout is "Enabled" if it's > 0
     val currentTimeout = config.timeout ?: 10
@@ -923,6 +926,55 @@ fun AutoHideConfigPage(prefs: AppPreferences) {
                         )
                     }
                 }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+        Text(
+            text = stringResource(R.string.system_island_expiration),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(8.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Videocam, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(20.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.screen_recording_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            stringResource(R.string.system_island_expiration_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    formatSeconds(screenRecordingTimeout),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                val screenRecordingIndex = timeoutSteps.indexOf(screenRecordingTimeout)
+                    .let { if (it >= 0) it else timeoutSteps.indexOf(4) }
+                Slider(
+                    value = screenRecordingIndex.toFloat(),
+                    onValueChange = { index ->
+                        scope.launch { prefs.setScreenRecordingTimeout(timeoutSteps[index.toInt()]) }
+                    },
+                    valueRange = 0f..(timeoutSteps.size - 1).toFloat(),
+                    steps = timeoutSteps.size - 2
+                )
             }
         }
     }

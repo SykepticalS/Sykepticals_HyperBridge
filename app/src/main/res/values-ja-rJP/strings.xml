@@ -248,6 +248,8 @@
         <item>応答</item>
         <item>出る</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>ミュート</item><item>マイクをオフ</item></string-array>
+    <string-array name="call_keywords_unmute"><item>ミュート解除</item><item>マイクをオン</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>

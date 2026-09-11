@@ -204,6 +204,8 @@
         <item>answer</item>
         <item>accept</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>음소거</item><item>마이크 끄기</item></string-array>
+    <string-array name="call_keywords_unmute"><item>음소거 해제</item><item>마이크 켜기</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>speaker</item>
         <item>audio</item>

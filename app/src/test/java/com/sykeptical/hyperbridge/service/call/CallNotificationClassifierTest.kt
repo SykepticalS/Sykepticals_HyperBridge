@@ -11,6 +11,8 @@ class CallNotificationClassifierTest {
         answerKeywords = listOf("answer", "accept"),
         declineKeywords = listOf("decline", "reject"),
         hangUpKeywords = listOf("hang", "end"),
+        muteKeywords = listOf("mute", "mic off"),
+        unmuteKeywords = listOf("unmute", "mic on"),
         speakerKeywords = listOf("speaker")
     )
 
@@ -133,7 +135,99 @@ class CallNotificationClassifierTest {
         )
 
         assertTrue(result.hasConnectedControl)
-        assertTrue(CallActionRole.SPEAKER in result.actionRoles)
+        assertTrue(CallActionRole.MICROPHONE in result.actionRoles)
+        assertEquals(CallMicrophoneState.UNMUTED, result.microphoneState)
+    }
+
+    @Test
+    fun semanticUnmuteReportsCurrentlyMutedWithoutDependingOnLabel() {
+        val result = classifier.classify(
+            baseSignals(
+                category = CallNotificationClassifier.CATEGORY_CALL,
+                actions = listOf(
+                    action("Hang up"),
+                    CallActionSignal("Mikrofon", CallNotificationClassifier.SEMANTIC_ACTION_UNMUTE, true)
+                )
+            )
+        )
+
+        assertEquals(CallMicrophoneState.MUTED, result.microphoneState)
+    }
+
+    @Test
+    fun unmuteKeywordIsCheckedBeforeItsMuteSubstring() {
+        val action = CallActionSignal("Unmute", 0, true)
+
+        assertEquals(CallActionRole.MICROPHONE, classifier.roleForAction(action))
+        assertEquals(CallMicrophoneState.MUTED, classifier.microphoneStateForAction(action))
+    }
+
+    @Test
+    fun ongoingControlsPreferAppMuteThenHangUp() {
+        val actions = listOf(
+            CallActionSignal("Speaker", 0, true),
+            CallActionSignal("Hang up", 0, true),
+            CallActionSignal("Mute", CallNotificationClassifier.SEMANTIC_ACTION_MUTE, true)
+        )
+
+        val selected = CallActionSelectionPolicy.select(
+            actions,
+            isIncoming = false,
+            classifier = classifier
+        )
+
+        assertEquals(listOf(2, 1), selected.map { it.index })
+        assertEquals(CallMicrophoneState.UNMUTED, selected.first().microphoneState)
+    }
+
+    @Test
+    fun ongoingControlsNeverInventMuteWhenAppDoesNotExposeIt() {
+        val actions = listOf(
+            CallActionSignal("Open call", 0, true),
+            CallActionSignal("Hang up", 0, true),
+            CallActionSignal("Mute", CallNotificationClassifier.SEMANTIC_ACTION_MUTE, false)
+        )
+
+        val selected = CallActionSelectionPolicy.select(
+            actions,
+            isIncoming = false,
+            classifier = classifier
+        )
+
+        assertEquals(listOf(1), selected.map { it.index })
+    }
+
+    @Test
+    fun initialOutgoingVideoOngoingWithChronometerIsStillCalling() {
+        val result = classifier.classify(
+            baseSignals(
+                category = CallNotificationClassifier.CATEGORY_CALL,
+                template = CallNotificationClassifier.CALL_STYLE_TEMPLATE,
+                callType = CallNotificationClassifier.CALL_TYPE_ONGOING,
+                showsChronometer = true,
+                whenTime = 50_000L,
+                actions = listOf(action("Hang up")),
+                isVideo = true
+            )
+        )
+
+        assertTrue(result.isCall)
+        assertEquals(CallState.OUTGOING_CALLING, result.state)
+        assertEquals(CallActiveEvidence.CHRONOMETER_PRESENT, result.activeEvidence)
+    }
+
+    @Test
+    fun incomingVideoAnswerAndDeclineIsRinging() {
+        val result = classifier.classify(
+            baseSignals(
+                category = CallNotificationClassifier.CATEGORY_CALL,
+                callType = CallNotificationClassifier.CALL_TYPE_INCOMING,
+                actions = listOf(action("Answer"), action("Decline")),
+                isVideo = true
+            )
+        )
+
+        assertEquals(CallState.INCOMING_RINGING, result.state)
     }
 
     private fun action(title: String) = CallActionSignal(title, 0, true)
@@ -164,13 +258,15 @@ class CallNotificationClassifierTest {
         callType: Int? = null,
         showsChronometer: Boolean = false,
         whenTime: Long = 0L,
-        actions: List<CallActionSignal> = emptyList()
+        actions: List<CallActionSignal> = emptyList(),
+        isVideo: Boolean = false
     ) = CallNotificationSignals(
         category = category,
         template = template,
         callType = callType,
         showsChronometer = showsChronometer,
         whenTime = whenTime,
-        actions = actions
+        actions = actions,
+        isVideoCall = isVideo
     )
 }

@@ -204,6 +204,8 @@
         <item>rispondi</item>
         <item>accetta</item>
     </string-array>
+    <string-array name="call_keywords_mute"><item>silenzia</item><item>disattiva microfono</item></string-array>
+    <string-array name="call_keywords_unmute"><item>riattiva microfono</item><item>attiva audio</item></string-array>
     <string-array name="call_keywords_speaker">
         <item>altoparlante</item>
         <item>audio</item>
