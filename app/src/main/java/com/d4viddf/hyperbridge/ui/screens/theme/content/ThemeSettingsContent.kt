@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -127,6 +128,9 @@ fun NotificationTypesContent() {
     val enabledTypesStr by preferences.globalNotificationTypesFlow.collectAsState(
         initial = NotificationType.entries.map { it.name }.toSet()
     )
+    val enabledCallStages by preferences.globalCallStagesFlow.collectAsState(
+        initial = com.d4viddf.hyperbridge.models.CallStage.entries.toSet()
+    )
 
     Column(
         Modifier
@@ -149,6 +153,7 @@ fun NotificationTypesContent() {
                 NotificationType.CALL -> Icons.Outlined.Call to stringResource(R.string.type_call_desc)
                 NotificationType.TIMER -> Icons.Outlined.Timer to stringResource(R.string.type_timer_desc)
                 NotificationType.MESSAGE -> Icons.AutoMirrored.Outlined.Message to stringResource(R.string.type_message_desc)
+                NotificationType.SCREEN_RECORDING -> Icons.Outlined.Videocam to stringResource(R.string.type_screen_recording_desc)
             }
 
             // Calculate expressive rounded corners to group them beautifully
@@ -171,6 +176,58 @@ fun NotificationTypesContent() {
                 },
                 shape = shape
             )
+
+            if (type == NotificationType.CALL && enabledTypesStr.contains(type.name)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 8.dp, bottom = 8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.call_stage_settings),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = stringResource(R.string.call_stage_settings_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    com.d4viddf.hyperbridge.models.CallStage.entries.forEach { stage ->
+                        val checked = stage in enabledCallStages
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch { preferences.updateGlobalCallStage(stage, !checked) }
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(stage.labelRes),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = stringResource(stage.descriptionRes),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Switch(
+                                checked = checked,
+                                onCheckedChange = { enabled ->
+                                    scope.launch { preferences.updateGlobalCallStage(stage, enabled) }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
 
             // Add a small spacer between cards to make the 4dp corners distinct
             if (index < NotificationType.entries.size - 1) {

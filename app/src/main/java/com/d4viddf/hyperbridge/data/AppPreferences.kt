@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import com.d4viddf.hyperbridge.data.db.AppDatabase
 import com.d4viddf.hyperbridge.data.db.AppSetting
+import com.d4viddf.hyperbridge.data.db.SettingsDao
 import com.d4viddf.hyperbridge.data.db.SettingsKeys
+import com.d4viddf.hyperbridge.models.CallStage
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.IslandLimitMode
 import com.d4viddf.hyperbridge.models.NavContent
@@ -26,16 +28,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 private val Context.legacyDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class AppPreferences(context: Context) {
+class AppPreferences internal constructor(
+    private val dao: SettingsDao,
+    private val legacyDataStore: DataStore<Preferences>?,
+    context: Context?,
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+) {
 
-    private val dao = AppDatabase.getDatabase(context).settingsDao()
-    private val legacyDataStore = context.applicationContext.legacyDataStore
+    constructor(context: Context) : this(
+        dao = AppDatabase.getDatabase(context).settingsDao(),
+        legacyDataStore = context.applicationContext.legacyDataStore,
+        context = context
+    )
 
     private val memoryCache = ConcurrentHashMap<String, String>()
 
     init {
         // --- MEMORY CACHE LOGIC ---
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             dao.getAllFlow().collect { list ->
                 val newCache = ConcurrentHashMap<String, String>()
                 list.forEach { newCache[it.key] = it.value }
@@ -45,13 +55,14 @@ class AppPreferences(context: Context) {
         }
 
         // --- MIGRATION LOGIC ---
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                // Wait for user unlock before attempting to migrate from legacy DataStore (CE storage)
-                val userManager = context.getSystemService(Context.USER_SERVICE) as android.os.UserManager
-                if (!userManager.isUserUnlocked) {
-                    return@launch 
-                }
+        if (context != null && legacyDataStore != null) {
+            scope.launch {
+                try {
+                    // Wait for user unlock before attempting to migrate from legacy DataStore (CE storage)
+                    val userManager = context.getSystemService(Context.USER_SERVICE) as? android.os.UserManager
+                    if (userManager != null && !userManager.isUserUnlocked) {
+                        return@launch 
+                    }
 
                 // Force Onboarding reset for new permissions
                 val lastResetVersion = dao.getSetting("onboarding_reset_version")?.toIntOrNull() ?: 0
@@ -74,6 +85,17 @@ class AppPreferences(context: Context) {
                         legacyDataStore.edit { it.clear() }
                     }
                     dao.insert(AppSetting(SettingsKeys.MIGRATION_COMPLETE, "true"))
+                }
+
+                if (dao.getSetting(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING) == null) {
+                    val setupComplete = dao.getSetting(SettingsKeys.SETUP_COMPLETE).toBoolean(false)
+                    val hasSelectedApps = !dao.getSetting(SettingsKeys.ALLOWED_PACKAGES).isNullOrBlank()
+                    dao.insert(
+                        AppSetting(
+                            SettingsKeys.FLOATING_SETUP_NOTICE_PENDING,
+                            (setupComplete && hasSelectedApps).toString()
+                        )
+                    )
                 }
 
                 // Grant DOWNLOAD notification type if PROGRESS was previously enabled
@@ -138,6 +160,7 @@ class AppPreferences(context: Context) {
             }
         }
     }
+}
 
     // --- HELPERS ---
     private fun String?.toBoolean(default: Boolean = false): Boolean = this?.toBooleanStrictOrNull() ?: default
@@ -147,32 +170,60 @@ class AppPreferences(context: Context) {
     private fun Set<String>.serialize(): String = this.joinToString(",")
     private fun String?.deserializeSet(): Set<String> = this?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     private fun String?.deserializeList(): List<String> = this?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
+    private fun String?.deserializeCallStages(default: Set<CallStage>): Set<CallStage> {
+        if (this == null) return default
+        return deserializeSet().mapNotNull { value ->
+            try { CallStage.valueOf(value) } catch (_: IllegalArgumentException) { null }
+        }.toSet()
+    }
 
     private suspend fun save(key: String, value: String) {
+        memoryCache[key] = value
         dao.insert(AppSetting(key, value))
     }
 
     private suspend fun remove(key: String) {
+        memoryCache.remove(key)
         dao.delete(key)
     }
 
     // --- CORE SETTINGS ---
     val allowedPackagesFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.ALLOWED_PACKAGES).map { it.deserializeSet() }
+    val vpnIslandEnabledFlow: Flow<Boolean> = dao.getSettingFlow("vpn_island_enabled").map { it.toBoolean(true) }
     val isSetupComplete: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.SETUP_COMPLETE).map { it.toBoolean(false) }
     val lastSeenVersion: Flow<Int> = dao.getSettingFlow(SettingsKeys.LAST_VERSION).map { it.toInt(0) }
 
     suspend fun setSetupComplete(isComplete: Boolean) = save(SettingsKeys.SETUP_COMPLETE, isComplete.toString())
     suspend fun setLastSeenVersion(versionCode: Int) = save(SettingsKeys.LAST_VERSION, versionCode.toString())
+    suspend fun setVpnIslandEnabled(enabled: Boolean) = save("vpn_island_enabled", enabled.toString())
     suspend fun setPriorityEduShown(shown: Boolean) = save(SettingsKeys.PRIORITY_EDU, shown.toString())
 
     val featuredPermissionWarningFlow: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.FEATURED_PERMISSION_WARNING).map { it.toBoolean(false) }
     suspend fun setFeaturedPermissionWarning(show: Boolean) = save(SettingsKeys.FEATURED_PERMISSION_WARNING, show.toString())
+
+    val floatingSetupNoticePendingFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING).map { it.toBoolean(false) }
+
+    val floatingSetupConfirmedPackagesFlow: Flow<Set<String>> =
+        dao.getSettingFlow(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).map { it.deserializeSet() }
+
+    suspend fun setFloatingSetupNoticePending(show: Boolean) =
+        save(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING, show.toString())
+
+    suspend fun setFloatingSetupConfirmed(packageName: String, confirmed: Boolean) {
+        val current = dao.getSetting(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).deserializeSet()
+        val updated = if (confirmed) current + packageName else current - packageName
+        save(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES, updated.serialize())
+    }
 
     suspend fun toggleApp(packageName: String, isEnabled: Boolean) {
         val currentString = dao.getSetting(SettingsKeys.ALLOWED_PACKAGES)
         val currentSet = currentString.deserializeSet()
         val newSet = if (isEnabled) currentSet + packageName else currentSet - packageName
         save(SettingsKeys.ALLOWED_PACKAGES, newSet.serialize())
+        if (isEnabled && packageName !in dao.getSetting(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).deserializeSet()) {
+            save(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING, "true")
+        }
     }
 
     // ========================================================================
@@ -281,6 +332,37 @@ class AppPreferences(context: Context) {
         if (config.dismissWithOriginal != null) save(dwoKey, config.dismissWithOriginal.toString()) else remove(dwoKey)
         if (config.enableInlineReply != null) save(eirKey, config.enableInlineReply.toString()) else remove(eirKey)
     }
+
+    // --- SYSTEM ISLAND: SCREEN RECORDING ---
+    val screenRecordingTimeoutFlow: Flow<Int> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_TIMEOUT).map { it.toInt(SYSTEM_ISLAND_DEFAULT_TIMEOUT) }
+
+    suspend fun setScreenRecordingTimeout(seconds: Int) =
+        save(SettingsKeys.SCREEN_RECORDING_TIMEOUT, seconds.toString())
+
+    val screenRecordingLeftDesignFlow: Flow<com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_LEFT_DESIGN).map { value ->
+            value?.let { runCatching { com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign.valueOf(it) }.getOrNull() }
+                ?: com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign.ICON_AND_TEXT
+        }
+
+    val screenRecordingRightDesignFlow: Flow<com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_RIGHT_DESIGN).map { value ->
+            value?.let { runCatching { com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign.valueOf(it) }.getOrNull() }
+                ?: com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign.TIMER
+        }
+
+    val screenRecordingDesignFlow: Flow<com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig> =
+        combine(screenRecordingLeftDesignFlow, screenRecordingRightDesignFlow) { left, right ->
+            com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig(left = left, right = right)
+        }
+
+    suspend fun setScreenRecordingLeftDesign(design: com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign) =
+        save(SettingsKeys.SCREEN_RECORDING_LEFT_DESIGN, design.name)
+
+    suspend fun setScreenRecordingRightDesign(design: com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign) =
+        save(SettingsKeys.SCREEN_RECORDING_RIGHT_DESIGN, design.name)
+
 
     // --- NAVIGATION ---
     val globalBlockedTermsFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.GLOBAL_BLOCKED_TERMS).map { it.deserializeSet() }
@@ -456,6 +538,39 @@ class AppPreferences(context: Context) {
     }
 
     // ========================================================================
+    //                        Call Stages Configuration
+    // ========================================================================
+
+    val GLOBAL_CALL_STAGES_KEY = "global_call_stages"
+
+    val globalCallStagesFlow: Flow<Set<CallStage>> = dao.getSettingFlow(GLOBAL_CALL_STAGES_KEY).map { raw ->
+        raw.deserializeCallStages(CallStage.entries.toSet())
+    }
+
+    suspend fun updateGlobalCallStage(stage: CallStage, isEnabled: Boolean) {
+        val current = dao.getSetting(GLOBAL_CALL_STAGES_KEY)
+            .deserializeCallStages(CallStage.entries.toSet())
+        val updated = if (isEnabled) current + stage else current - stage
+        save(GLOBAL_CALL_STAGES_KEY, updated.map { it.name }.toSet().serialize())
+    }
+
+    fun getAppCallStagesFlow(packageName: String): Flow<Set<CallStage>?> {
+        return dao.getSettingFlow("config_${packageName}_call_stages").map { raw ->
+            raw?.deserializeCallStages(emptySet())
+        }
+    }
+
+    suspend fun updateAppCallStage(packageName: String, stage: CallStage, isEnabled: Boolean) {
+        val key = "config_${packageName}_call_stages"
+        val appValue = dao.getSetting(key)
+        val inherited = dao.getSetting(GLOBAL_CALL_STAGES_KEY)
+            .deserializeCallStages(CallStage.entries.toSet())
+        val current = appValue.deserializeCallStages(inherited)
+        val updated = if (isEnabled) current + stage else current - stage
+        save(key, updated.map { it.name }.toSet().serialize())
+    }
+
+    // ========================================================================
     //                        THEME ENGINE CONFIGURATION
     // ========================================================================
 
@@ -594,11 +709,112 @@ class AppPreferences(context: Context) {
         return str?.deserializeSet()
     }
 
+    fun getEffectiveCallStagesSync(packageName: String): Set<CallStage> {
+        val appValue = memoryCache["config_${packageName}_call_stages"]
+        val globalValue = memoryCache[GLOBAL_CALL_STAGES_KEY]
+        return appValue.deserializeCallStages(
+            globalValue.deserializeCallStages(CallStage.entries.toSet())
+        )
+    }
+
     fun getAppEnginePreferenceSync(packageName: String): Boolean? {
         return memoryCache["config_${packageName}_use_native"]?.toBooleanStrictOrNull()
     }
 
     fun useNativeLiveUpdatesSync(): Boolean {
         return memoryCache[USE_NATIVE_ENGINE]?.toBoolean() ?: false
+    }
+
+    fun isAppAllowedSync(packageName: String): Boolean {
+        val raw = memoryCache[SettingsKeys.ALLOWED_PACKAGES] ?: return false
+        return raw.deserializeSet().contains(packageName)
+    }
+
+    fun getAppPriorityOrderSync(): List<String> {
+        val raw = memoryCache[SettingsKeys.PRIORITY_ORDER]
+        return raw.deserializeList()
+    }
+
+    fun getAppPriorityFast(packageName: String): Int {
+        val priorityList = getAppPriorityOrderSync()
+        val index = priorityList.indexOf(packageName)
+        return if (index == -1) Int.MAX_VALUE else index
+    }
+
+    fun getLimitModeSync(): IslandLimitMode {
+        val raw = memoryCache["limit_mode"]
+        return try {
+            IslandLimitMode.valueOf(raw ?: IslandLimitMode.MOST_RECENT.name)
+        } catch (_: Exception) {
+            IslandLimitMode.MOST_RECENT
+        }
+    }
+
+    fun getGlobalBlockedTermsSync(): Set<String> {
+        return memoryCache[SettingsKeys.GLOBAL_BLOCKED_TERMS].deserializeSet()
+    }
+
+    fun isBlockedTermFast(packageName: String, title: String, text: String): Boolean {
+        val appBlocked = getAppBlockedTermsSync(packageName)
+        val globalBlocked = getGlobalBlockedTermsSync()
+        if (appBlocked.isEmpty() && globalBlocked.isEmpty()) return false
+
+        val combinedContent = "$title $text"
+        if (appBlocked.isNotEmpty() && appBlocked.any { combinedContent.contains(it, ignoreCase = true) }) {
+            return true
+        }
+        if (globalBlocked.isNotEmpty() && globalBlocked.any { combinedContent.contains(it, ignoreCase = true) }) {
+            return true
+        }
+        return false
+    }
+
+    fun isDndModeEnabledSync(): Boolean {
+        return memoryCache["dnd_mode_enabled"]?.toBoolean() ?: false
+    }
+
+    fun autoDetectDndSync(): Boolean {
+        return memoryCache["auto_detect_dnd"]?.toBoolean() ?: false
+    }
+
+    fun getScreenRecordingTimeoutSync(): Int =
+        memoryCache[SettingsKeys.SCREEN_RECORDING_TIMEOUT].toInt(SYSTEM_ISLAND_DEFAULT_TIMEOUT)
+
+    fun getScreenRecordingLeftDesignSync(): com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign =
+        memoryCache[SettingsKeys.SCREEN_RECORDING_LEFT_DESIGN]?.let {
+            runCatching { com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign.valueOf(it) }.getOrNull()
+        } ?: com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign.ICON_AND_TEXT
+
+    fun getScreenRecordingRightDesignSync(): com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign =
+        memoryCache[SettingsKeys.SCREEN_RECORDING_RIGHT_DESIGN]?.let {
+            runCatching { com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign.valueOf(it) }.getOrNull()
+        } ?: com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign.TIMER
+
+    fun getScreenRecordingDesignSync(): com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig =
+        com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig(
+            left = getScreenRecordingLeftDesignSync(),
+            right = getScreenRecordingRightDesignSync()
+        )
+
+    fun isVpnIslandEnabledSync(): Boolean = memoryCache["vpn_island_enabled"]?.toBoolean(true) ?: true
+
+
+    companion object {
+        const val SYSTEM_ISLAND_DEFAULT_TIMEOUT = 4
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun putInCacheForTesting(key: String, value: String) {
+        memoryCache[key] = value
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun removeFromCacheForTesting(key: String) {
+        memoryCache.remove(key)
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun clearCacheForTesting() {
+        memoryCache.clear()
     }
 }

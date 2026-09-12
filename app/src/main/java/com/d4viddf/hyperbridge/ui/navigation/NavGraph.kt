@@ -14,7 +14,9 @@ import com.d4viddf.hyperbridge.ui.screens.settings.BackupSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.BlocklistAppListScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.BugReportScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ChangelogHistoryScreen
+import com.d4viddf.hyperbridge.ui.screens.settings.DiagnosticsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.EngineSettingsScreen
+import com.d4viddf.hyperbridge.ui.screens.settings.FloatingNotificationSetupScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalBlocklistScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ImportPreviewScreen
@@ -49,9 +51,11 @@ fun mainNavGraph(
     entry<Screen.Home> {
         HomeScreen(
             onSettingsClick = { navigator.navigate(Screen.Info) },
-            onNavConfigClick = { pkg -> navigator.navigate(Screen.NavCustomization(pkg)) }
+            onNavConfigClick = { pkg -> navigator.navigate(Screen.NavCustomization(pkg)) },
+            onScreenRecordingConfigClick = { navigator.navigate(Screen.ScreenRecordingCustomization) }
         )
     }
+
     entry<Screen.Info> {
         InfoScreen(
             onBack = { if (!navigator.goBack()) onExit() },
@@ -62,7 +66,9 @@ fun mainNavGraph(
             onHistoryClick = { navigator.navigate(Screen.History) },
             onBlocklistClick = { navigator.navigate(Screen.GlobalBlocklist) },
             onBackupClick = { navigator.navigate(Screen.Backup) },
-            onBugReportClick = { navigator.navigate(Screen.BugReport) }
+            onBugReportClick = { navigator.navigate(Screen.BugReport) },
+            onFloatingSetupClick = { navigator.navigate(Screen.FloatingSetup) },
+            onDiagnosticsClick = { navigator.navigate(Screen.Diagnostics) }
         )
     }
     entry<Screen.GlobalSettings> {
@@ -98,6 +104,15 @@ fun mainNavGraph(
         SetupHealthScreen(
             onBack = { navigator.goBack() },
             onNavigateToBugReport = { navigator.navigate(Screen.BugReport) }
+        )
+    }
+    entry<Screen.FloatingSetup> {
+        FloatingNotificationSetupScreen(onBack = { navigator.goBack() })
+    }
+    entry<Screen.Diagnostics> {
+        DiagnosticsScreen(
+            onBack = { navigator.goBack() },
+            onReportError = { navigator.navigate(Screen.BugReport) }
         )
     }
     entry<Screen.Licenses> {
@@ -157,6 +172,13 @@ fun mainNavGraph(
         IslandSettingsScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.BugReport> {
-        BugReportScreen(onBack = { navigator.goBack() })
+        BugReportScreen(
+            onBack = { navigator.goBack() },
+            onNavigateToDiagnostics = { navigator.navigate(Screen.Diagnostics) }
+        )
+    }
+    entry<Screen.ScreenRecordingCustomization> {
+        com.d4viddf.hyperbridge.ui.screens.settings.ScreenRecordingSettingsScreen(onBack = { navigator.goBack() })
     }
 }
+
