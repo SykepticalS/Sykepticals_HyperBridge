@@ -113,7 +113,10 @@ import com.d4viddf.hyperbridge.ui.components.EnginePreview
 import com.d4viddf.hyperbridge.ui.components.PermanentIslandPreview
 import com.d4viddf.hyperbridge.ui.components.formatSeconds
 import com.d4viddf.hyperbridge.ui.components.timeoutSteps
+import com.d4viddf.hyperbridge.ui.screens.settings.AutomaticPopupControlOnboardingPage
 import com.d4viddf.hyperbridge.ui.theme.HyperBridgeTheme
+import com.d4viddf.hyperbridge.service.popup.PopupSuppressionCapabilityState
+import com.d4viddf.hyperbridge.service.popup.PopupOnboardingPolicy
 import com.d4viddf.hyperbridge.util.DeviceUtils
 import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
 import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
@@ -136,7 +139,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     val isShizukuWorkaroundEnabled by prefs.isShizukuWorkaroundEnabled.collectAsState(initial = false)
     val isShizukuPermissionGranted by com.d4viddf.hyperbridge.util.ShizukuManager.isPermissionGranted.collectAsState()
 
-    val totalPages = if (needsShizuku) 18 else 17
+    val totalPages = if (needsShizuku) 19 else 18
     val pagerState = rememberPagerState(pageCount = { totalPages })
     val scope = rememberCoroutineScope()
 
@@ -149,6 +152,8 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     var isListenerGranted by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var isPostGranted by remember { mutableStateOf(isPostNotificationsEnabled(context)) }
     var isOverlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var popupCapability by remember { mutableStateOf(PopupSuppressionCapabilityState.VERIFYING) }
+    var popupControlEnabled by remember { mutableStateOf(false) }
 
     // --- Compatibility Logic ---
     // Moved up
@@ -208,8 +213,9 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                             1 -> canProceedCompat || BuildConfig.DEBUG
                             2 -> isPostGranted
                             3 -> isListenerGranted
-                            4 -> isOverlayGranted
-                            12 -> {
+                            4 -> PopupOnboardingPolicy.canFinishFreshSetup(popupCapability, popupControlEnabled)
+                            5 -> isOverlayGranted
+                            13 -> {
                                 // If they turn the workaround off, they can proceed without permission
                                 !isShizukuWorkaroundEnabled || isShizukuPermissionGranted || BuildConfig.DEBUG
                             }
@@ -220,7 +226,8 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                             1 -> canProceedCompat || BuildConfig.DEBUG
                             2 -> isPostGranted
                             3 -> isListenerGranted
-                            4 -> isOverlayGranted
+                            4 -> PopupOnboardingPolicy.canFinishFreshSetup(popupCapability, popupControlEnabled)
+                            5 -> isOverlayGranted
                             else -> true
                         }
                     }
@@ -276,9 +283,9 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 .fillMaxSize(),
             userScrollEnabled = false
         ) { page ->
-            val adjustedPage = if (needsShizuku && page > 12) page - 1 else page
+            val adjustedPage = if (needsShizuku && page > 13) page - 1 else page
             
-            if (needsShizuku && page == 12) {
+            if (needsShizuku && page == 13) {
                 ShizukuPage(prefs)
             } else {
                 when (adjustedPage) {
@@ -291,19 +298,23 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                         }
                     )
                     3 -> ListenerPermissionPage(context, isListenerGranted)
-                    4 -> OverlayPermissionPage(context, isOverlayGranted)
-                    5 -> FeaturedNotificationCheckPage(context)
-                    6 -> OptimizationPage(context)
-                    7 -> ExplanationPage()
-                    8 -> PrivacyPage()
-                    9 -> CustomizationPage()
-                    10 -> TriggersConfigPage(prefs)
-                    11 -> EngineConfigPage(prefs)
-                    12 -> PriorityEducationPage(prefs)
-                    13 -> BehaviorConfigPage(prefs)
-                    14 -> DndConfigPage(prefs)
-                    15 -> AutoHideConfigPage(prefs)
-                    16 -> PermanentIslandConfigPage(prefs)
+                    4 -> AutomaticPopupControlOnboardingPage { state, enabled ->
+                        popupCapability = state
+                        popupControlEnabled = enabled
+                    }
+                    5 -> OverlayPermissionPage(context, isOverlayGranted)
+                    6 -> FeaturedNotificationCheckPage(context)
+                    7 -> OptimizationPage(context)
+                    8 -> ExplanationPage()
+                    9 -> PrivacyPage()
+                    10 -> CustomizationPage()
+                    11 -> TriggersConfigPage(prefs)
+                    12 -> EngineConfigPage(prefs)
+                    13 -> PriorityEducationPage(prefs)
+                    14 -> BehaviorConfigPage(prefs)
+                    15 -> DndConfigPage(prefs)
+                    16 -> AutoHideConfigPage(prefs)
+                    17 -> PermanentIslandConfigPage(prefs)
                 }
             }
         }
@@ -439,33 +450,6 @@ fun ExplanationPage() {
         )
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text(
-                        stringResource(R.string.floating_setup_onboarding_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        stringResource(R.string.floating_setup_onboarding_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),

@@ -811,7 +811,7 @@
     <string name="view_diagnostics" translatable="false">View Diagnostics</string>
     <string name="diagnostic_section_service" translatable="false">Service &amp; Bridge State</string>
     <string name="diagnostic_section_permissions" translatable="false">Permissions &amp; HyperOS Integration</string>
-    <string name="diagnostic_section_apps" translatable="false">Apps &amp; Floating Setup</string>
+    <string name="diagnostic_section_apps" translatable="false">Apps &amp; Popup Control</string>
     <string name="diagnostic_no_events" translatable="false">No recent events recorded</string>
     <string name="diagnostic_no_events_desc" translatable="false">System and notification interactions will appear here in real time.</string>
     <string name="diagnostic_copied_toast" translatable="false">Sanitized diagnostics copied to clipboard</string>
@@ -860,6 +860,37 @@
     <string name="custom_behavior_desc">Using custom behavior for this app. Enable to use global defaults.</string>
     <string name="no_blocked_terms">No blocked terms configured</string>
     <string name="no_blocked_terms_desc">Notifications containing added words will not trigger an island.</string>
+    <string name="popup_control_title">Automatic Popup Control</string>
+    <string name="popup_control_explanation">HyperBridge blocks normal popups only for notification types currently replaced by your Island. Other notification types keep their normal Android behavior.</string>
+    <string name="popup_control_privacy">Android asks you to select a nearby device once. HyperBridge does not send notifications or other data to that device.</string>
+    <string name="popup_control_setup">Set up automatic popup control</string>
+    <string name="popup_control_resume">Resume automatic popup control</string>
+    <string name="popup_control_repair">Repair setup</string>
+    <string name="popup_control_restore_disable">Restore all managed channels and turn off</string>
+    <string name="popup_control_mixed_note">If an app uses one channel for both handled and unhandled notification types, HyperBridge leaves that channel unchanged to avoid silencing notifications.</string>
+    <string name="popup_control_onboarding_title">Automatic Popup Control</string>
+    <string name="popup_control_onboarding_desc">Prevent duplicate popups when an Island replaces a notification, while leaving all other notifications alone.</string>
+    <string name="popup_control_status_ready">Ready</string>
+    <string name="popup_control_status_notification_access">Notification access is required</string>
+    <string name="popup_control_status_association">Connect a device once to continue</string>
+    <string name="popup_control_status_listener">Waiting for the notification listener</string>
+    <string name="popup_control_status_verifying">Verifying channel access</string>
+    <string name="popup_control_status_unsupported">Unavailable on this device; HyperBridge will continue without automatic popup control</string>
+    <string name="popup_control_status_error">Setup needs repair</string>
+    <string name="popup_control_status_available">Ready to enable</string>
+    <string name="popup_control_upgrade_title">Enable Automatic Popup Control</string>
+    <string name="popup_control_upgrade_desc">This update can automatically prevent duplicate notification popups for Island-handled types.</string>
+    <string name="popup_control_continue_degraded">Continue without popup control</string>
+    <string name="diagnostic_popup_mixed">Mixed</string>
+    <string name="diagnostic_popup_status">Capability: %1$s</string>
+    <string name="diagnostic_popup_mixed_count">%1$d mixed</string>
+    <string name="diagnostic_popup_managed_count">%1$d managed</string>
+    <string name="popup_control_channel_managed">Managed</string>
+    <string name="popup_control_channel_normal">Normal</string>
+    <string name="popup_control_diagnostics">Capability diagnostics</string>
+    <string name="popup_control_diagnostic_association">Companion association: %1$s</string>
+    <string name="popup_control_diagnostic_listener">Listener connected: %1$s</string>
+    <string name="popup_control_diagnostic_probe">Channel API probe: %1$s</string>
 </resources>
 
 

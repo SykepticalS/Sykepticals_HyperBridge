@@ -41,6 +41,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.data.db.AppDatabase
 import com.d4viddf.hyperbridge.ui.components.ChangelogSheet
+import com.d4viddf.hyperbridge.ui.screens.settings.AutomaticPopupControlUpgradeGate
 import com.d4viddf.hyperbridge.ui.navigation.Navigator
 import com.d4viddf.hyperbridge.ui.navigation.Screen
 import com.d4viddf.hyperbridge.ui.navigation.mainNavGraph
@@ -261,5 +262,9 @@ private fun MainNavigationContent(
                 }
             }
         )
+    }
+
+    if (isSetupComplete) {
+        AutomaticPopupControlUpgradeGate()
     }
 }

@@ -72,12 +72,15 @@ import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
 import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
 import com.d4viddf.hyperbridge.util.openAutoStartSettings
 import com.d4viddf.hyperbridge.util.openBatterySettings
+import com.d4viddf.hyperbridge.service.popup.CompanionAssociationManager
+import com.d4viddf.hyperbridge.service.popup.PopupSuppressionCapabilityState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetupHealthScreen(
     onBack: () -> Unit,
-    onNavigateToBugReport: () -> Unit = {}
+    onNavigateToBugReport: () -> Unit = {},
+    onNavigateToPopupControl: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -91,6 +94,10 @@ fun SetupHealthScreen(
     var isOverlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var isBatteryOptimized by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     var isFeaturedGranted by remember { mutableStateOf(false) }
+    val popupAssociation = remember { CompanionAssociationManager(context.applicationContext) }
+    var popupState by remember {
+        mutableStateOf(popupAssociation.currentState(isListenerGranted))
+    }
 
     // --- LIFECYCLE ---
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -102,6 +109,7 @@ fun SetupHealthScreen(
                 isOverlayGranted = Settings.canDrawOverlays(context)
                 isBatteryOptimized = isIgnoringBatteryOptimizations(context)
                 isFeaturedGranted = XiaomiNotificationHelper.hasFocusPermission(context)
+                popupState = popupAssociation.currentState(isListenerGranted)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -194,6 +202,15 @@ fun SetupHealthScreen(
                     icon = Icons.Default.NotificationsActive,
                     isGranted = isListenerGranted,
                     onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
+
+                HealthItem(
+                    title = stringResource(R.string.popup_control_title),
+                    subtitle = popupState.name.replace('_', ' ').lowercase(),
+                    icon = Icons.Default.NotificationsActive,
+                    isGranted = popupState == PopupSuppressionCapabilityState.READY,
+                    onClick = onNavigateToPopupControl
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
 

@@ -20,8 +20,16 @@ object SettingsKeys {
     const val ALLOWED_PACKAGES = "allowed_packages"
     const val PRIORITY_ORDER = "priority_app_order"
     const val FEATURED_PERMISSION_WARNING = "featured_permission_warning"
+    @Deprecated("Migrated to automatic popup control")
     const val FLOATING_SETUP_NOTICE_PENDING = "floating_setup_notice_pending"
+    @Deprecated("Migrated to automatic popup control")
     const val FLOATING_SETUP_CONFIRMED_PACKAGES = "floating_setup_confirmed_packages"
+    const val POPUP_CONTROL_ENABLED = "popup_control_enabled"
+    const val POPUP_CONTROL_UPGRADE_REQUIRED = "popup_control_upgrade_required"
+    const val POPUP_CONTROL_INTENTIONALLY_DISABLED = "popup_control_intentionally_disabled"
+    const val POPUP_CONTROL_MIGRATION_COMPLETE = "popup_control_migration_complete"
+    const val POPUP_CONTROL_OPT_IN_REQUESTED = "popup_control_opt_in_requested"
+    const val POPUP_SEMANTIC_RULES_FINGERPRINT = "popup_semantic_rules_fingerprint"
 
     // Global Configs
     const val GLOBAL_FLOAT = "global_float"

@@ -51,6 +51,7 @@ class BackupManager(
             val filteredSettings = allSettings.filter { setting ->
                 val key = setting.key
                 when {
+                    BackupPolicy.isDeviceLocalOperationalKey(key) -> false
                     // Blocklist keys
                     key == SettingsKeys.GLOBAL_BLOCKED_TERMS || key.endsWith("_blocked") -> selection.includeBlocklist
 
@@ -100,6 +101,7 @@ class BackupManager(
             val entitiesToRestore = backup.settings.filter { item ->
                 val key = item.key
                 when {
+                    BackupPolicy.isDeviceLocalOperationalKey(key) -> false
                     key == SettingsKeys.GLOBAL_BLOCKED_TERMS || key.endsWith("_blocked") -> selection.includeBlocklist
                     key == SettingsKeys.PRIORITY_ORDER -> selection.includePriorities
                     else -> selection.includeSettings
@@ -122,4 +124,9 @@ class BackupManager(
             return "HyperBridge_Backup_$date.hbr"
         }
     }
+}
+
+object BackupPolicy {
+    /** Popup ownership and capability state is valid only for the device that created it. */
+    fun isDeviceLocalOperationalKey(key: String): Boolean = key.startsWith("popup_")
 }

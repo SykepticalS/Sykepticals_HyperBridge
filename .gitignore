@@ -58,6 +58,7 @@ captures/
 
 # Custom HyperBridge project additions
 caps_build.txt
+reference-apps/popupControl/
 gradle/gradle-daemon-jvm.properties
 .idea/deploymentTargetSelector.xml
 .idea/deploymentTargetSelector.xml

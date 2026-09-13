@@ -79,6 +79,10 @@ import com.d4viddf.hyperbridge.service.message.MessagePresentationSource
 import com.d4viddf.hyperbridge.service.message.MessageSourceQuality
 import com.d4viddf.hyperbridge.service.message.MessagingEventSignals
 import com.d4viddf.hyperbridge.service.message.isMessagingEvent
+import com.d4viddf.hyperbridge.service.popup.ChannelSemanticRegistry
+import com.d4viddf.hyperbridge.service.popup.PopupChannelAccess
+import com.d4viddf.hyperbridge.service.popup.PopupControlRuntime
+import com.d4viddf.hyperbridge.service.popup.PopupSuppressionController
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -99,6 +103,9 @@ class NotificationReaderService : NotificationListenerService() {
     companion object {
         const val ACTION_RELOAD_THEME = "com.d4viddf.hyperbridge.ACTION_RELOAD_THEME"
         const val ACTION_PERFORM_MIGRATION = "com.d4viddf.hyperbridge.ACTION_PERFORM_MIGRATION"
+        const val ACTION_VERIFY_POPUP_CONTROL = "com.d4viddf.hyperbridge.ACTION_VERIFY_POPUP_CONTROL"
+        const val ACTION_RECONCILE_POPUP_CONTROL = "com.d4viddf.hyperbridge.ACTION_RECONCILE_POPUP_CONTROL"
+        const val ACTION_RESTORE_POPUP_CONTROL = "com.d4viddf.hyperbridge.ACTION_RESTORE_POPUP_CONTROL"
         private val GMAIL_PACKAGES = setOf("com.google.android.gm")
 
         @Volatile
@@ -164,6 +171,8 @@ class NotificationReaderService : NotificationListenerService() {
     private var watchRelaySlot = 0
 
     private lateinit var preferences: AppPreferences
+    private lateinit var effectiveTypeResolver: EffectiveNotificationTypeResolver
+    private lateinit var popupController: PopupSuppressionController
 
     // --- THEME ENGINE ---
     private lateinit var themeRepository: ThemeRepository
@@ -204,6 +213,24 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
+    private val packageLifecycleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val packageName = intent.data?.schemeSpecificPart ?: return
+            when (intent.action) {
+                Intent.ACTION_PACKAGE_REMOVED -> if (!intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                    serviceScope.launch { popupController.deletePackageState(packageName) }
+                }
+                Intent.ACTION_PACKAGE_ADDED,
+                Intent.ACTION_PACKAGE_REPLACED -> if (isAppAllowed(packageName)) {
+                    serviceScope.launch {
+                        bootstrapPopupSemantics(setOf(packageName))
+                        popupController.reconcilePackage(packageName)
+                    }
+                }
+            }
+        }
+    }
+
     private val islandClickReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == "com.d4viddf.hyperbridge.ISLAND_CLICKED") {
@@ -239,6 +266,19 @@ class NotificationReaderService : NotificationListenerService() {
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         registerReceiver(systemReceiver, filter)
+
+        val packageFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            packageLifecycleReceiver,
+            packageFilter,
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
         
         val clickFilter = IntentFilter("com.d4viddf.hyperbridge.ISLAND_CLICKED")
         androidx.core.content.ContextCompat.registerReceiver(
@@ -279,6 +319,32 @@ class NotificationReaderService : NotificationListenerService() {
         screenRecordingSavedTranslator = ScreenRecordingSavedTranslator(this, themeRepository)
         screenRecordingControlBackend = XiaomiScreenRecordingControlBackend(this)
 
+        effectiveTypeResolver = EffectiveNotificationTypeResolver(preferences) {
+            themeRepository.activeTheme.value
+        }
+        val popupDao = AppDatabase.getDatabase(applicationContext).popupControlDao()
+        val semanticRegistry = ChannelSemanticRegistry(applicationContext, popupDao)
+        popupController = PopupSuppressionController(
+            context = applicationContext,
+            preferences = preferences,
+            dao = popupDao,
+            registry = semanticRegistry,
+            typeResolver = effectiveTypeResolver,
+            access = object : PopupChannelAccess {
+                override val isConnected: Boolean
+                    get() = NotificationReaderService.isConnected
+
+                override fun getChannels(packageName: String, user: android.os.UserHandle): List<NotificationChannel> =
+                    this@NotificationReaderService.getNotificationChannels(packageName, user).orEmpty()
+
+                override fun updateChannel(
+                    packageName: String,
+                    user: android.os.UserHandle,
+                    channel: NotificationChannel
+                ) = this@NotificationReaderService.updateNotificationChannel(packageName, user, channel)
+            }
+        )
+
         val userManager = getSystemService(USER_SERVICE) as android.os.UserManager
         if (userManager.isUserUnlocked) {
             WidgetManager.init(this)
@@ -298,7 +364,21 @@ class NotificationReaderService : NotificationListenerService() {
         )
         vpnIslandController.start()
 
-        serviceScope.launch { preferences.allowedPackagesFlow.collectLatest { allowedPackageSet = it } }
+        serviceScope.launch {
+            preferences.allowedPackagesFlow.collect { updated ->
+                val previous = allowedPackageSet
+                allowedPackageSet = updated
+                (previous - updated).forEach { popupController.restorePackage(it) }
+                val added = updated - previous
+                if (added.isNotEmpty()) bootstrapPopupSemantics(added)
+                popupController.reconcilePackages(updated)
+            }
+        }
+        serviceScope.launch {
+            preferences.notificationTypePolicyFlow.collect {
+                popupController.reconcilePackages(allowedPackageSet)
+            }
+        }
         serviceScope.launch { preferences.limitModeFlow.collectLatest { currentMode = it } }
         serviceScope.launch { preferences.appPriorityListFlow.collectLatest { appPriorityList = it } }
         serviceScope.launch { preferences.globalBlockedTermsFlow.collectLatest { globalBlockedTerms = it } }
@@ -314,6 +394,8 @@ class NotificationReaderService : NotificationListenerService() {
                 } else {
                     themeRepository.activateTheme("")
                 }
+                handleSemanticThemeChange()
+                popupController.reconcilePackages(allowedPackageSet)
             }
         }
 
@@ -352,6 +434,8 @@ class NotificationReaderService : NotificationListenerService() {
                     Log.d(TAG, "Hot-reloading theme: $themeId")
                     themeRepository.activateTheme(themeId)
                 }
+                handleSemanticThemeChange()
+                popupController.reconcilePackages(allowedPackageSet)
             }
         } else if (intent?.action == ACTION_PERFORM_MIGRATION) {
             serviceScope.launch(Dispatchers.IO) {
@@ -361,6 +445,18 @@ class NotificationReaderService : NotificationListenerService() {
                     }
                 }
             }
+        } else if (intent?.action == ACTION_VERIFY_POPUP_CONTROL) {
+            serviceScope.launch {
+                popupController.verifyPrivilegedAccess()
+                if (preferences.popupControlEnabledSync()) {
+                    bootstrapPopupSemantics(allowedPackageSet)
+                    popupController.reconcilePackages(allowedPackageSet)
+                }
+            }
+        } else if (intent?.action == ACTION_RECONCILE_POPUP_CONTROL) {
+            serviceScope.launch { popupController.reconcilePackages(allowedPackageSet) }
+        } else if (intent?.action == ACTION_RESTORE_POPUP_CONTROL) {
+            serviceScope.launch { popupController.restoreAllAndDisable(allowedPackageSet) }
         }
         return START_STICKY
     }
@@ -426,20 +522,7 @@ class NotificationReaderService : NotificationListenerService() {
     // =========================================================================
 
     private fun getEffectiveTypes(pkg: String): Set<String> {
-        val themeOverride = themeRepository.activeTheme.value?.apps?.get(pkg)
-        val rawTypes = if (themeOverride?.activeNotificationTypes != null) {
-            themeOverride.activeNotificationTypes
-        } else {
-            val localPref = preferences.getAppConfigSync(pkg)
-            localPref ?: preferences.getGlobalNotificationTypesSync()
-        }
-
-        // Fallback: if PROGRESS is enabled but DOWNLOAD is missing, implicitly enable DOWNLOAD
-        return if (rawTypes.contains("PROGRESS") && !rawTypes.contains("DOWNLOAD")) {
-            rawTypes + "DOWNLOAD"
-        } else {
-            rawTypes
-        }
+        return effectiveTypeResolver.getEffectiveTypes(pkg)
     }
 
     private fun getEffectiveCallStages(pkg: String): Set<CallStage> = preferences.getEffectiveCallStagesSync(pkg)
@@ -881,16 +964,25 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
+    override fun onNotificationChannelModified(
+        pkg: String,
+        user: android.os.UserHandle,
+        channel: NotificationChannel,
+        modificationType: Int
+    ) {
+        super.onNotificationChannelModified(pkg, user, channel, modificationType)
+        if (::popupController.isInitialized) {
+            serviceScope.launch {
+                popupController.onChannelModified(pkg, user, channel, modificationType)
+            }
+        }
+    }
+
     private fun enqueueSourceNotification(sbn: StatusBarNotification, recovery: Boolean = false) {
         if (shouldIgnore(sbn.packageName) || !isAppAllowed(sbn.packageName)) return
         if (!recovery) {
             DiagnosticsStore.record("CALLBACK", "received", sbn.packageName)
         }
-        if (!com.d4viddf.hyperbridge.util.isPostNotificationsEnabled(this)) {
-            DiagnosticsStore.record("PERMISSION", "ignored", sbn.packageName, "post-notifications-missing")
-            return
-        }
-
         val sourceSlot = sourceSlotIdentity(sbn)
         val callbackObservedAt = System.currentTimeMillis()
         val rawQuality = sourceCandidateQuality(sbn)
@@ -920,6 +1012,49 @@ class NotificationReaderService : NotificationListenerService() {
         job.invokeOnCompletion { cause ->
             processingJobs.remove(processingGeneration, job)
             sourceProcessingGeneration.finish(sourceSlot, processingGeneration)
+        }
+    }
+
+    private suspend fun bootstrapPopupSemantics(packageNames: Set<String>) {
+        if (!::popupController.isInitialized || packageNames.isEmpty()) return
+        val current = try {
+            activeNotifications?.filter { it.packageName in packageNames }.orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        current.forEach { sbn ->
+            val content = resolveNotificationContent(sbn)
+            val title = content.title.ifEmpty { getCachedAppLabel(sbn.packageName) }
+            val rawType = detectNotificationType(sbn)
+            val rule = rulesEngine.match(sbn, title, content.text, themeRepository.activeTheme.value)
+            val directMessagingStyle = sbn.notification.extras
+                .getString(Notification.EXTRA_TEMPLATE)
+                ?.contains("MessagingStyle") == true
+            val semantic = SemanticNotificationResolver.resolve(
+                rawType,
+                rule?.targetLayout,
+                directMessagingStyle,
+                getEffectiveTypes(sbn.packageName)
+            )
+            popupController.observe(
+                sbn.user,
+                sbn.packageName,
+                sbn.notification.channelId,
+                semantic.signature,
+                reconcileImmediately = false
+            )
+        }
+    }
+
+    private suspend fun handleSemanticThemeChange() {
+        val fingerprint = themeRepository.activeTheme.value?.rules?.hashCode()?.toString() ?: "none"
+        val previous = preferences.popupSemanticRulesFingerprintSync()
+        if (previous != fingerprint) {
+            if (previous != null) {
+                popupController.invalidateSemantics(allowedPackageSet)
+                bootstrapPopupSemantics(allowedPackageSet)
+            }
+            preferences.setPopupSemanticRulesFingerprint(fingerprint)
         }
     }
 
@@ -1175,20 +1310,10 @@ class NotificationReaderService : NotificationListenerService() {
         val dndActive = preferences.isDndModeEnabledSync() || isDndModeEnabled || 
                 ((preferences.autoDetectDndSync() || autoDetectDnd) && isSystemDndActive)
 
-        if (dndActive) {
-            Log.d(TAG, "DND active. Skipping notification ${rawSbn.packageName}")
-            return
-        }
-
         try {
             val extras = sbn.notification.extras
             val resolvedContent = resolveNotificationContent(sbn)
             val typeBeforeRules = detectNotificationType(sbn)
-
-            if (isJunkNotification(sbn, resolvedContent)) {
-                DiagnosticsStore.record(typeBeforeRules.name, "ignored", sbn.packageName, "junk-or-empty")
-                return
-            }
 
             var effectiveTitle = resolvedContent.title
             val effectiveText = resolvedContent.text
@@ -1196,35 +1321,52 @@ class NotificationReaderService : NotificationListenerService() {
                 effectiveTitle = getCachedAppLabel(sbn.packageName)
             }
 
+            val activeTheme = themeRepository.activeTheme.value
+            val ruleMatch = rulesEngine.match(sbn, effectiveTitle, effectiveText, activeTheme)
+            val effectiveTypes = getEffectiveTypes(sbn.packageName)
+            val hasDirectMessagingStyle = extras.getString(Notification.EXTRA_TEMPLATE)
+                ?.contains("MessagingStyle") == true
+            val semanticResult = SemanticNotificationResolver.resolve(
+                rawType = typeBeforeRules,
+                ruleTargetLayout = ruleMatch?.targetLayout,
+                hasDirectMessagingStyle = hasDirectMessagingStyle,
+                effectiveTypes = effectiveTypes
+            )
+
+            popupController.observe(
+                user = sbn.user,
+                packageName = sbn.packageName,
+                channelId = sbn.notification.channelId,
+                signature = semanticResult.signature
+            )
+
+            if (!com.d4viddf.hyperbridge.util.isPostNotificationsEnabled(this)) {
+                DiagnosticsStore.record("PERMISSION", "ignored", sbn.packageName, "post-notifications-missing")
+                return
+            }
+
+            if (dndActive) {
+                Log.d(TAG, "DND active. Skipping notification ${rawSbn.packageName}")
+                return
+            }
+
+            if (isJunkNotification(sbn, resolvedContent)) {
+                DiagnosticsStore.record(typeBeforeRules.name, "ignored", sbn.packageName, "junk-or-empty")
+                return
+            }
+
             val hasProgress = hasProgressNotification(sbn, effectiveTitle, effectiveText)
             if (effectiveTitle.isEmpty() && !hasProgress) return
 
             if (preferences.isBlockedTermFast(sbn.packageName, effectiveTitle, effectiveText)) return
 
-            val activeTheme = themeRepository.activeTheme.value
-            val ruleMatch = rulesEngine.match(sbn, effectiveTitle, effectiveText, activeTheme)
-
-            val detectedType = if (ruleMatch?.targetLayout != null) {
-                try { NotificationType.valueOf(ruleMatch.targetLayout) }
-                catch (_: Exception) { typeBeforeRules }
-            } else {
-                typeBeforeRules
-            }
-
-            val effectiveTypes = getEffectiveTypes(sbn.packageName)
-            val hasDirectMessagingStyle = extras.getString(Notification.EXTRA_TEMPLATE)
-                ?.contains("MessagingStyle") == true
-            val enabledTypeName = NotificationTypeEnablementPolicy.resolveEnabledType(
-                effectiveTypes = effectiveTypes,
-                detectedType = detectedType.name,
-                hasDirectMessagingStyle = hasDirectMessagingStyle
-            )
-            if (enabledTypeName == null) {
-                Log.d(TAG, " ABORTING: Type $detectedType disabled by user/theme for ${sbn.packageName}")
-                DiagnosticsStore.record(detectedType.name, "ignored", sbn.packageName, "type-disabled")
+            val enabledType = semanticResult.enabledType
+            if (enabledType == null) {
+                Log.d(TAG, " ABORTING: Type ${semanticResult.detectedType} disabled by user/theme for ${sbn.packageName}")
+                DiagnosticsStore.record(semanticResult.detectedType.name, "ignored", sbn.packageName, "type-disabled")
                 return
             }
-            val type = NotificationType.valueOf(enabledTypeName)
+            val type = enabledType
             val isSavedScreenRecording = isSavedScreenRecordingNotification(sbn)
             val isMessagingLifecycle = isMessagingLifecycleEvent(sbn, type, resolvedContent)
 
@@ -1524,7 +1666,7 @@ class NotificationReaderService : NotificationListenerService() {
 
             // --- LAYERED CUSTOM ISLAND LOGIC ---
             val picKey = "pic_${candidateBridgeId}"
-            val data: HyperIslandData = if (isSavedScreenRecording) {
+            var data: HyperIslandData = if (isSavedScreenRecording) {
                 screenRecordingSavedTranslator.translate(sbn, picKey, finalConfig, activeTheme)
             } else when (type) {
                 NotificationType.CALL -> callTranslator.translate(
@@ -1574,6 +1716,25 @@ class NotificationReaderService : NotificationListenerService() {
 
             if (decision.kind == IslandPresentationKind.UNCHANGED) {
                 return
+            }
+
+            // Message notifications commonly reuse the same Android notification slot. We can
+            // only tell whether that slot contains a refresh or a genuinely new message after
+            // comparing its event fingerprint above. Rebuild a new event with the floating
+            // presentation flags enabled so an already-active, collapsed Island expands again.
+            if (type == NotificationType.MESSAGE &&
+                isUpdate &&
+                decision.presentationReason.mayAutoExpand
+            ) {
+                data = messageTranslator.translate(
+                    sbn,
+                    effectiveTitle,
+                    effectiveText,
+                    picKey,
+                    finalConfig,
+                    activeTheme,
+                    isUpdate = false
+                )
             }
 
             if (decision.cancelBeforeNotify) {
@@ -1856,22 +2017,18 @@ class NotificationReaderService : NotificationListenerService() {
             )
         )
 
-        return when {
-            isScreenRecording -> NotificationType.SCREEN_RECORDING
-            isCall -> NotificationType.CALL
-            isNav -> NotificationType.NAVIGATION
-            isTimer -> NotificationType.TIMER
-            isMedia -> NotificationType.MEDIA
-            isMessage -> NotificationType.MESSAGE
-            hasProgress -> {
-                if (isDownload) {
-                    NotificationType.DOWNLOAD
-                } else {
-                    NotificationType.PROGRESS
-                }
-            }
-            else -> NotificationType.STANDARD
-        }
+        return RawNotificationTypeClassifier.classify(
+            RawNotificationTypeSignals(
+                isScreenRecording = isScreenRecording,
+                isCall = isCall,
+                isNavigation = isNav,
+                isTimer = isTimer,
+                isMedia = isMedia,
+                isMessage = isMessage,
+                hasProgress = hasProgress,
+                isDownload = isDownload
+            )
+        )
     }
 
     private fun isSavedScreenRecordingNotification(sbn: StatusBarNotification): Boolean {
@@ -2133,6 +2290,13 @@ class NotificationReaderService : NotificationListenerService() {
         Log.i(TAG, "HyperBridge Service Connected")
         isConnected = true
         DiagnosticsStore.setServiceConnected(true)
+        if (::popupController.isInitialized) {
+            serviceScope.launch {
+                popupController.verifyPrivilegedAccess()
+                bootstrapPopupSemantics(allowedPackageSet)
+                popupController.reconcilePackages(allowedPackageSet)
+            }
+        }
         syncNotifications(refresh = true)
         syncJob?.cancel()
         syncJob = serviceScope.launch {
@@ -2152,6 +2316,7 @@ class NotificationReaderService : NotificationListenerService() {
         Log.i(TAG, "HyperBridge Service Disconnected")
         isConnected = false
         DiagnosticsStore.setServiceConnected(false)
+        PopupControlRuntime.disconnected()
     }
 
     private fun syncNotifications(refresh: Boolean = false) {
@@ -2280,6 +2445,7 @@ class NotificationReaderService : NotificationListenerService() {
         if (::vpnIslandController.isInitialized) vpnIslandController.stop()
         unregisterReceiver(systemReceiver)
         unregisterReceiver(islandClickReceiver)
+        unregisterReceiver(packageLifecycleReceiver)
         syncJob?.cancel()
         callSessionTracker.clear()
         screenRecordingSessionTracker.clear()

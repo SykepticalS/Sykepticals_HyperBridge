@@ -21,12 +21,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
 private val Context.legacyDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+data class NotificationTypePreferenceSnapshot(
+    val globalTypes: Set<String>,
+    val appOverrides: Map<String, Set<String>>
+)
 
 class AppPreferences internal constructor(
     private val dao: SettingsDao,
@@ -64,10 +70,10 @@ class AppPreferences internal constructor(
                         return@launch 
                     }
 
-                // Force Onboarding reset for new permissions
+                // This legacy checkpoint used to replay all onboarding. Keep its marker, but
+                // preserve setup state; popup control has its own focused upgrade gate.
                 val lastResetVersion = dao.getSetting("onboarding_reset_version")?.toIntOrNull() ?: 0
                 if (lastResetVersion < 19) {
-                    dao.insert(AppSetting(SettingsKeys.SETUP_COMPLETE, "false"))
                     dao.insert(AppSetting("onboarding_reset_version", "19"))
                 }
 
@@ -87,15 +93,20 @@ class AppPreferences internal constructor(
                     dao.insert(AppSetting(SettingsKeys.MIGRATION_COMPLETE, "true"))
                 }
 
-                if (dao.getSetting(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING) == null) {
+                if (dao.getSetting(SettingsKeys.POPUP_CONTROL_MIGRATION_COMPLETE) != "true") {
                     val setupComplete = dao.getSetting(SettingsKeys.SETUP_COMPLETE).toBoolean(false)
-                    val hasSelectedApps = !dao.getSetting(SettingsKeys.ALLOWED_PACKAGES).isNullOrBlank()
+                    val intentionallyDisabled = dao.getSetting(SettingsKeys.POPUP_CONTROL_INTENTIONALLY_DISABLED)
+                        .toBoolean(false)
+                    @Suppress("DEPRECATION")
+                    val obsoleteFloatingNoticeKey = SettingsKeys.FLOATING_SETUP_NOTICE_PENDING
+                    dao.insert(AppSetting(obsoleteFloatingNoticeKey, "false"))
                     dao.insert(
                         AppSetting(
-                            SettingsKeys.FLOATING_SETUP_NOTICE_PENDING,
-                            (setupComplete && hasSelectedApps).toString()
+                            SettingsKeys.POPUP_CONTROL_UPGRADE_REQUIRED,
+                            (setupComplete && !intentionallyDisabled).toString()
                         )
                     )
+                    dao.insert(AppSetting(SettingsKeys.POPUP_CONTROL_MIGRATION_COMPLETE, "true"))
                 }
 
                 // Grant DOWNLOAD notification type if PROGRESS was previously enabled
@@ -192,45 +203,83 @@ class AppPreferences internal constructor(
     val vpnIslandEnabledFlow: Flow<Boolean> = dao.getSettingFlow("vpn_island_enabled").map { it.toBoolean(true) }
     val isSetupComplete: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.SETUP_COMPLETE).map { it.toBoolean(false) }
     val lastSeenVersion: Flow<Int> = dao.getSettingFlow(SettingsKeys.LAST_VERSION).map { it.toInt(0) }
+    val popupControlEnabledFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.POPUP_CONTROL_ENABLED).map { it.toBoolean(false) }
+    val popupControlUpgradeRequiredFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.POPUP_CONTROL_UPGRADE_REQUIRED).map { it.toBoolean(false) }
+    val popupControlIntentionallyDisabledFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.POPUP_CONTROL_INTENTIONALLY_DISABLED).map { it.toBoolean(false) }
 
     suspend fun setSetupComplete(isComplete: Boolean) = save(SettingsKeys.SETUP_COMPLETE, isComplete.toString())
     suspend fun setLastSeenVersion(versionCode: Int) = save(SettingsKeys.LAST_VERSION, versionCode.toString())
     suspend fun setVpnIslandEnabled(enabled: Boolean) = save("vpn_island_enabled", enabled.toString())
     suspend fun setPriorityEduShown(shown: Boolean) = save(SettingsKeys.PRIORITY_EDU, shown.toString())
 
+    suspend fun setPopupControlReady() {
+        save(SettingsKeys.POPUP_CONTROL_ENABLED, "true")
+        save(SettingsKeys.POPUP_CONTROL_UPGRADE_REQUIRED, "false")
+        save(SettingsKeys.POPUP_CONTROL_INTENTIONALLY_DISABLED, "false")
+        save(SettingsKeys.POPUP_CONTROL_OPT_IN_REQUESTED, "false")
+    }
+
+    suspend fun beginPopupControlSetup() {
+        save(SettingsKeys.POPUP_CONTROL_OPT_IN_REQUESTED, "true")
+        save(SettingsKeys.POPUP_CONTROL_INTENTIONALLY_DISABLED, "false")
+    }
+
+    suspend fun setPopupControlDisabledByUser() {
+        save(SettingsKeys.POPUP_CONTROL_ENABLED, "false")
+        save(SettingsKeys.POPUP_CONTROL_UPGRADE_REQUIRED, "false")
+        save(SettingsKeys.POPUP_CONTROL_INTENTIONALLY_DISABLED, "true")
+        save(SettingsKeys.POPUP_CONTROL_OPT_IN_REQUESTED, "false")
+    }
+
+    suspend fun setPopupControlNeedsRepair() {
+        save(SettingsKeys.POPUP_CONTROL_ENABLED, "false")
+        if (!popupControlIntentionallyDisabledSync()) {
+            save(SettingsKeys.POPUP_CONTROL_UPGRADE_REQUIRED, "true")
+        }
+    }
+
+    suspend fun acknowledgePopupControlUnsupported() {
+        save(SettingsKeys.POPUP_CONTROL_ENABLED, "false")
+        save(SettingsKeys.POPUP_CONTROL_UPGRADE_REQUIRED, "false")
+        save(SettingsKeys.POPUP_CONTROL_OPT_IN_REQUESTED, "false")
+    }
+
+    fun popupControlEnabledSync(): Boolean =
+        memoryCache[SettingsKeys.POPUP_CONTROL_ENABLED].toBoolean(false)
+
+    suspend fun popupControlEnabled(): Boolean =
+        dao.getSetting(SettingsKeys.POPUP_CONTROL_ENABLED).toBoolean(false)
+
+    fun popupControlIntentionallyDisabledSync(): Boolean =
+        memoryCache[SettingsKeys.POPUP_CONTROL_INTENTIONALLY_DISABLED].toBoolean(false)
+
+    fun popupControlOptInRequestedSync(): Boolean =
+        memoryCache[SettingsKeys.POPUP_CONTROL_OPT_IN_REQUESTED].toBoolean(false)
+
+    fun popupSemanticRulesFingerprintSync(): String? =
+        memoryCache[SettingsKeys.POPUP_SEMANTIC_RULES_FINGERPRINT]
+
+    suspend fun setPopupSemanticRulesFingerprint(value: String) =
+        save(SettingsKeys.POPUP_SEMANTIC_RULES_FINGERPRINT, value)
+
     val featuredPermissionWarningFlow: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.FEATURED_PERMISSION_WARNING).map { it.toBoolean(false) }
     suspend fun setFeaturedPermissionWarning(show: Boolean) = save(SettingsKeys.FEATURED_PERMISSION_WARNING, show.toString())
-
-    val floatingSetupNoticePendingFlow: Flow<Boolean> =
-        dao.getSettingFlow(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING).map { it.toBoolean(false) }
-
-    val floatingSetupConfirmedPackagesFlow: Flow<Set<String>> =
-        dao.getSettingFlow(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).map { it.deserializeSet() }
-
-    suspend fun setFloatingSetupNoticePending(show: Boolean) =
-        save(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING, show.toString())
-
-    suspend fun setFloatingSetupConfirmed(packageName: String, confirmed: Boolean) {
-        val current = dao.getSetting(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).deserializeSet()
-        val updated = if (confirmed) current + packageName else current - packageName
-        save(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES, updated.serialize())
-    }
 
     suspend fun toggleApp(packageName: String, isEnabled: Boolean) {
         val currentString = dao.getSetting(SettingsKeys.ALLOWED_PACKAGES)
         val currentSet = currentString.deserializeSet()
         val newSet = if (isEnabled) currentSet + packageName else currentSet - packageName
         save(SettingsKeys.ALLOWED_PACKAGES, newSet.serialize())
-        if (isEnabled && packageName !in dao.getSetting(SettingsKeys.FLOATING_SETUP_CONFIRMED_PACKAGES).deserializeSet()) {
-            save(SettingsKeys.FLOATING_SETUP_NOTICE_PENDING, "true")
-        }
     }
 
     // ========================================================================
     //                        THEME ENGINE
     // ========================================================================
 
-    val activeThemeIdFlow: Flow<String?> = dao.getSettingFlow("active_theme_id")
+    val activeThemeIdFlow: Flow<String?> = dao.getSettingFlow("active_theme_id").distinctUntilChanged()
 
     suspend fun setActiveThemeId(id: String?) {
         if (id == null) {
@@ -513,6 +562,21 @@ class AppPreferences internal constructor(
         str?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
     }
 
+    val notificationTypePolicyFlow: Flow<NotificationTypePreferenceSnapshot> = dao.getAllFlow()
+        .map { settings ->
+            val values = settings.associate { it.key to it.value }
+            val selectedPackages = values[SettingsKeys.ALLOWED_PACKAGES].deserializeSet()
+            val appOverrides = selectedPackages.mapNotNull { packageName ->
+                values["config_$packageName"]?.let { packageName to it.deserializeSet() }
+            }.toMap()
+            NotificationTypePreferenceSnapshot(
+                globalTypes = values[GLOBAL_NOTIFICATION_TYPES_KEY]?.deserializeSet()
+                    ?: NotificationType.configurableEntries.map { it.name }.toSet(),
+                appOverrides = appOverrides
+            )
+        }
+        .distinctUntilChanged()
+
     suspend fun updateGlobalNotificationType(type: NotificationType, isEnabled: Boolean) {
         val currentStr = dao.getSetting(GLOBAL_NOTIFICATION_TYPES_KEY)
         val currentSet = currentStr?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
@@ -704,10 +768,18 @@ class AppPreferences internal constructor(
         return str?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
     }
 
+    suspend fun getGlobalNotificationTypes(): Set<String> {
+        val value = dao.getSetting(GLOBAL_NOTIFICATION_TYPES_KEY)
+        return value?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
+    }
+
     fun getAppConfigSync(packageName: String): Set<String>? {
         val str = memoryCache["config_$packageName"]
         return str?.deserializeSet()
     }
+
+    suspend fun getAppConfigFresh(packageName: String): Set<String>? =
+        dao.getSetting("config_$packageName")?.deserializeSet()
 
     fun getEffectiveCallStagesSync(packageName: String): Set<CallStage> {
         val appValue = memoryCache["config_${packageName}_call_stages"]
@@ -729,6 +801,9 @@ class AppPreferences internal constructor(
         val raw = memoryCache[SettingsKeys.ALLOWED_PACKAGES] ?: return false
         return raw.deserializeSet().contains(packageName)
     }
+
+    suspend fun isAppAllowed(packageName: String): Boolean =
+        packageName in dao.getSetting(SettingsKeys.ALLOWED_PACKAGES).deserializeSet()
 
     fun getAppPriorityOrderSync(): List<String> {
         val raw = memoryCache[SettingsKeys.PRIORITY_ORDER]

@@ -86,6 +86,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.service.NotificationReaderService
+import com.d4viddf.hyperbridge.service.popup.ChannelSemanticState
+import com.d4viddf.hyperbridge.service.popup.CompanionAssociationManager
+import com.d4viddf.hyperbridge.service.popup.PopupControlRuntime
+import com.d4viddf.hyperbridge.service.popup.PopupChannelDiagnostic
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticEvent
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsStore
 import com.d4viddf.hyperbridge.ui.components.ExpressiveGroupCard
@@ -105,7 +109,10 @@ data class DiagnosticsData(
     val focusSupported: Boolean,
     val focusPermission: Boolean,
     val selectedAppsCount: Int,
-    val floatingReviewCount: Int,
+    val popupControlStatus: String,
+    val managedChannelCount: Int,
+    val mixedChannelCount: Int,
+    val popupChannels: List<PopupChannelDiagnostic>,
     val activeIslands: Int,
     val lastClassification: String?,
     val lastCallState: String?,
@@ -122,12 +129,14 @@ fun DiagnosticsScreen(
     val preferences = remember { AppPreferences(context.applicationContext) }
     val state by DiagnosticsStore.state.collectAsState()
     val selectedApps by preferences.allowedPackagesFlow.collectAsState(initial = emptySet())
-    val confirmedApps by preferences.floatingSetupConfirmedPackagesFlow.collectAsState(initial = emptySet())
+    val popupDiagnostics by PopupControlRuntime.channelDiagnostics.collectAsState()
+    val popupVerification by PopupControlRuntime.apiVerification.collectAsState()
     var notificationAccess by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var postPermission by remember { mutableStateOf(isPostNotificationsEnabled(context)) }
     var restrictedSettingsAllowed by remember { mutableStateOf(isRestrictedSettingsAllowed(context)) }
     var focusPermission by remember { mutableStateOf(XiaomiNotificationHelper.hasFocusPermission(context)) }
     val focusSupported = remember { XiaomiNotificationHelper.isSupportIsland() }
+    val popupAssociation = remember { CompanionAssociationManager(context.applicationContext) }
     val diagnosticsTitle = stringResource(R.string.diagnostics_title)
     val exportHeader = stringResource(R.string.diagnostic_export_header)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -175,7 +184,10 @@ fun DiagnosticsScreen(
         focusSupported = focusSupported,
         focusPermission = focusPermission,
         selectedAppsCount = selectedApps.size,
-        floatingReviewCount = (selectedApps - confirmedApps).size,
+        popupControlStatus = popupAssociation.currentState(notificationAccess).name.also { popupVerification },
+        managedChannelCount = popupDiagnostics.count { it.managed },
+        mixedChannelCount = popupDiagnostics.count { it.state == ChannelSemanticState.MIXED },
+        popupChannels = popupDiagnostics,
         activeIslands = state.activeIslands,
         lastClassification = state.lastClassification,
         lastCallState = state.lastCallState,
@@ -334,10 +346,10 @@ fun DiagnosticsContent(
                             )
                             DiagnosticMetricPill(
                                 modifier = Modifier.weight(1f),
-                                label = stringResource(R.string.diagnostic_metric_review),
-                                value = if (data.floatingReviewCount > 0) data.floatingReviewCount.toString() else "0",
+                                label = stringResource(R.string.diagnostic_popup_mixed),
+                                value = data.mixedChannelCount.toString(),
                                 icon = Icons.Default.Warning,
-                                isWarning = data.floatingReviewCount > 0
+                                isWarning = data.mixedChannelCount > 0
                             )
                         }
                     }
@@ -440,6 +452,25 @@ fun DiagnosticsContent(
                             ValueBadge(text = data.lastCallState ?: "—")
                         }
                     )
+                    data.popupChannels.take(20).forEach { channel ->
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        )
+                        ExpressiveDiagnosticRow(
+                            icon = if (channel.state == ChannelSemanticState.MIXED) Icons.Default.Warning else Icons.Default.Notifications,
+                            title = "${channel.packageName} / ${channel.channelId}",
+                            subtitle = channel.state.name,
+                            trailingBadge = {
+                                StatusBadge(
+                                    text = if (channel.managed) stringResource(R.string.popup_control_channel_managed)
+                                    else stringResource(R.string.popup_control_channel_normal),
+                                    isSuccess = channel.managed,
+                                    isWarning = channel.state == ChannelSemanticState.MIXED
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -526,7 +557,7 @@ fun DiagnosticsContent(
                 }
             }
 
-            // --- 5. APPS & FLOATING SETUP ---
+            // --- 5. APPS & AUTOMATIC POPUP CONTROL ---
             item {
                 ExpressiveSectionTitle(stringResource(R.string.diagnostic_section_apps))
                 ExpressiveGroupCard {
@@ -544,19 +575,19 @@ fun DiagnosticsContent(
                     )
                     ExpressiveDiagnosticRow(
                         icon = Icons.Default.Warning,
-                        title = stringResource(R.string.diagnostic_floating_review),
-                        subtitle = stringResource(R.string.diagnostic_floating_review_desc),
+                        title = stringResource(R.string.popup_control_title),
+                        subtitle = stringResource(R.string.diagnostic_popup_status, data.popupControlStatus),
                         trailingBadge = {
-                            if (data.floatingReviewCount > 0) {
+                            if (data.mixedChannelCount > 0) {
                                 StatusBadge(
-                                    text = stringResource(R.string.diagnostic_pending_count, data.floatingReviewCount),
+                                    text = stringResource(R.string.diagnostic_popup_mixed_count, data.mixedChannelCount),
                                     isSuccess = false,
                                     isWarning = true
                                 )
                             } else {
                                 StatusBadge(
-                                    text = stringResource(R.string.diagnostic_all_clear),
-                                    isSuccess = true
+                                    text = stringResource(R.string.diagnostic_popup_managed_count, data.managedChannelCount),
+                                    isSuccess = data.popupControlStatus == "READY"
                                 )
                             }
                         }
@@ -922,7 +953,10 @@ fun DiagnosticsScreenPreview() {
                 focusSupported = true,
                 focusPermission = true,
                 selectedAppsCount = 5,
-                floatingReviewCount = 2,
+                popupControlStatus = "READY",
+                managedChannelCount = 3,
+                mixedChannelCount = 1,
+                popupChannels = emptyList(),
                 activeIslands = 1,
                 lastClassification = "MESSAGE",
                 lastCallState = "RINGING",
