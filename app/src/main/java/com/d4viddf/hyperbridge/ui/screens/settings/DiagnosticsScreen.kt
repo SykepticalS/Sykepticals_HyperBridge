@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Phone
@@ -93,12 +94,14 @@ import com.d4viddf.hyperbridge.ui.theme.HyperBridgeTheme
 import com.d4viddf.hyperbridge.util.XiaomiNotificationHelper
 import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
 import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
+import com.d4viddf.hyperbridge.util.isRestrictedSettingsAllowed
 import java.text.DateFormat
 import java.util.Date
 
 data class DiagnosticsData(
     val notificationAccess: Boolean,
     val postPermission: Boolean,
+    val restrictedSettingsAllowed: Boolean,
     val focusSupported: Boolean,
     val focusPermission: Boolean,
     val selectedAppsCount: Int,
@@ -122,6 +125,7 @@ fun DiagnosticsScreen(
     val confirmedApps by preferences.floatingSetupConfirmedPackagesFlow.collectAsState(initial = emptySet())
     var notificationAccess by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var postPermission by remember { mutableStateOf(isPostNotificationsEnabled(context)) }
+    var restrictedSettingsAllowed by remember { mutableStateOf(isRestrictedSettingsAllowed(context)) }
     var focusPermission by remember { mutableStateOf(XiaomiNotificationHelper.hasFocusPermission(context)) }
     val focusSupported = remember { XiaomiNotificationHelper.isSupportIsland() }
     val diagnosticsTitle = stringResource(R.string.diagnostics_title)
@@ -146,6 +150,7 @@ fun DiagnosticsScreen(
                 notificationAccess = isNotificationServiceEnabled(context)
                 postPermission = isPostNotificationsEnabled(context)
                 focusPermission = XiaomiNotificationHelper.hasFocusPermission(context)
+                restrictedSettingsAllowed = isRestrictedSettingsAllowed(context)
                 if (notificationAccess && !NotificationReaderService.isConnected && !state.serviceConnected) {
                     try {
                         NotificationListenerService.requestRebind(
@@ -166,6 +171,7 @@ fun DiagnosticsScreen(
     val data = DiagnosticsData(
         notificationAccess = notificationAccess,
         postPermission = postPermission,
+        restrictedSettingsAllowed = restrictedSettingsAllowed,
         focusSupported = focusSupported,
         focusPermission = focusPermission,
         selectedAppsCount = selectedApps.size,
@@ -466,6 +472,22 @@ fun DiagnosticsContent(
                                 text = yesNo(data.postPermission),
                                 isSuccess = data.postPermission,
                                 isWarning = !data.postPermission
+                            )
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    ExpressiveDiagnosticRow(
+                        icon = Icons.Default.Lock,
+                        title = stringResource(R.string.diagnostic_restricted_settings),
+                        subtitle = stringResource(R.string.diagnostic_restricted_settings_desc),
+                        trailingBadge = {
+                            StatusBadge(
+                                text = stringResource(if (data.restrictedSettingsAllowed) R.string.diagnostic_restricted_allowed else R.string.diagnostic_restricted_blocked),
+                                isSuccess = data.restrictedSettingsAllowed,
+                                isWarning = !data.restrictedSettingsAllowed
                             )
                         }
                     )
@@ -896,6 +918,7 @@ fun DiagnosticsScreenPreview() {
             data = DiagnosticsData(
                 notificationAccess = true,
                 postPermission = true,
+                restrictedSettingsAllowed = true,
                 focusSupported = true,
                 focusPermission = true,
                 selectedAppsCount = 5,

@@ -570,7 +570,7 @@
     <string name="bug_report_preview_desc">Revisa los datos exactos que se compartirán</string>
     <string name="bug_report_submit_github">Reportar en GitHub</string>
     <string name="bug_report_send_email">Enviar por Correo</string>
-    <string name="bug_report_copy_clipboard">Copiar al Portapapeles</string>
+    <string name="bug_report_copy_clipboard">Copiar</string>
     <string name="bug_report_share">Compartir</string>
     <string name="bug_report_copied_github_toast">¡Diagnóstico copiado al portapapeles! Pégalo en la sección de Logs en GitHub.</string>
     <string name="bug_report_copied_toast">Reporte copiado al portapapeles.</string>
@@ -684,6 +684,10 @@
     <string name="diagnostic_last_call_state_desc">Último estado de llamada detectado</string>
     <string name="diagnostic_notification_access_desc">Necesario para interceptar eventos de aplicaciones</string>
     <string name="diagnostic_post_notifications_desc">Necesario para mostrar notificaciones en la Isla</string>
+    <string name="diagnostic_restricted_settings">Permisos restringidos</string>
+    <string name="diagnostic_restricted_settings_desc">Acceso a ajustes restringidos en Android 13+ para apps descargadas</string>
+    <string name="diagnostic_restricted_allowed">Permitido</string>
+    <string name="diagnostic_restricted_blocked">Restringido</string>
     <string name="diagnostic_focus_support_desc">Compatibilidad con la Isla en Xiaomi HyperOS</string>
     <string name="diagnostic_featured_permission_desc">Permiso para mostrar notificaciones destacadas</string>
     <string name="diagnostic_selected_apps_desc">Aplicaciones activadas para mostrarse en la Isla</string>

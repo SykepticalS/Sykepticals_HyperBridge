@@ -714,7 +714,7 @@
     <string name="bug_report_preview_desc">Review the exact data that will be shared</string>
     <string name="bug_report_submit_github">Submit on GitHub</string>
     <string name="bug_report_send_email">Send via Email</string>
-    <string name="bug_report_copy_clipboard">Copy to Clipboard</string>
+    <string name="bug_report_copy_clipboard">Copy</string>
     <string name="bug_report_share">Share</string>
     <string name="bug_report_copied_github_toast">Diagnostics copied to clipboard! Paste it into the Logs section on GitHub.</string>
     <string name="bug_report_copied_toast">Report copied to clipboard.</string>
@@ -826,6 +826,10 @@
     <string name="diagnostic_last_call_state_desc" translatable="false">Latest monitored call state</string>
     <string name="diagnostic_notification_access_desc" translatable="false">Required to intercept app events</string>
     <string name="diagnostic_post_notifications_desc" translatable="false">Required to display Island notifications</string>
+    <string name="diagnostic_restricted_settings" translatable="false">Restricted permissions</string>
+    <string name="diagnostic_restricted_settings_desc" translatable="false">Android 13+ restricted settings access for sideloaded app</string>
+    <string name="diagnostic_restricted_allowed" translatable="false">Allowed</string>
+    <string name="diagnostic_restricted_blocked" translatable="false">Restricted</string>
     <string name="diagnostic_focus_support_desc" translatable="false">Xiaomi HyperOS Island hardware support</string>
     <string name="diagnostic_featured_permission_desc" translatable="false">Focus notification display permission</string>
     <string name="diagnostic_selected_apps_desc" translatable="false">Applications enabled for Island display</string>

@@ -134,19 +134,8 @@ object BugReportCollector {
         )
     }
 
-    private fun isRestrictedSettingsAllowed(context: Context): Boolean {
-        return try {
-            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
-            val mode = appOps?.unsafeCheckOpNoThrow(
-                "android:access_restricted_settings",
-                android.os.Process.myUid(),
-                context.packageName
-            )
-            mode == AppOpsManager.MODE_ALLOWED
-        } catch (_: Throwable) {
-            true
-        }
-    }
+    private fun isRestrictedSettingsAllowed(context: Context): Boolean =
+        com.d4viddf.hyperbridge.util.isRestrictedSettingsAllowed(context)
 
     suspend fun collectThemeInfo(
         themeRepo: ThemeRepository,
