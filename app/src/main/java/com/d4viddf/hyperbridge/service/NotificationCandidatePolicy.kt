@@ -60,7 +60,7 @@ object PendingRemovalPolicy {
 
 object NotificationTypeEnablementPolicy {
     fun isEnabled(effectiveTypes: Set<String>, candidateType: String): Boolean =
-        candidateType in effectiveTypes
+        candidateType in effectiveTypes || candidateType == "SCREEN_RECORDING"
 
     /**
      * A direct MessagingStyle event is also a usable general notification. This lets users keep
@@ -72,6 +72,7 @@ object NotificationTypeEnablementPolicy {
         detectedType: String,
         hasDirectMessagingStyle: Boolean
     ): String? = when {
+        detectedType == "SCREEN_RECORDING" -> "SCREEN_RECORDING"
         isEnabled(effectiveTypes, detectedType) -> detectedType
         detectedType == "MESSAGE" &&
                 hasDirectMessagingStyle &&

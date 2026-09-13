@@ -126,7 +126,7 @@ fun NotificationTypesContent() {
 
     // Read global states, defaulting to everything enabled
     val enabledTypesStr by preferences.globalNotificationTypesFlow.collectAsState(
-        initial = NotificationType.entries.map { it.name }.toSet()
+        initial = NotificationType.configurableEntries.map { it.name }.toSet()
     )
     val enabledCallStages by preferences.globalCallStagesFlow.collectAsState(
         initial = com.d4viddf.hyperbridge.models.CallStage.entries.toSet()
@@ -143,7 +143,8 @@ fun NotificationTypesContent() {
         Spacer(Modifier.height(16.dp))
 
         // We map and render each category
-        NotificationType.entries.forEachIndexed { index, type ->
+        val configurableTypes = NotificationType.configurableEntries
+        configurableTypes.forEachIndexed { index, type ->
             val (icon, subtitle) = when (type) {
                 NotificationType.STANDARD -> Icons.AutoMirrored.Outlined.Message to stringResource(R.string.type_standard_desc)
                 NotificationType.PROGRESS -> Icons.Outlined.HourglassEmpty to stringResource(R.string.type_progress_desc)
@@ -153,14 +154,14 @@ fun NotificationTypesContent() {
                 NotificationType.CALL -> Icons.Outlined.Call to stringResource(R.string.type_call_desc)
                 NotificationType.TIMER -> Icons.Outlined.Timer to stringResource(R.string.type_timer_desc)
                 NotificationType.MESSAGE -> Icons.AutoMirrored.Outlined.Message to stringResource(R.string.type_message_desc)
-                NotificationType.SCREEN_RECORDING -> Icons.Outlined.Videocam to stringResource(R.string.type_screen_recording_desc)
+                else -> Icons.Outlined.Videocam to ""
             }
 
             // Calculate expressive rounded corners to group them beautifully
             val shape = when {
-                NotificationType.entries.size == 1 -> RoundedCornerShape(24.dp)
+                configurableTypes.size == 1 -> RoundedCornerShape(24.dp)
                 index == 0 -> RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
-                index == NotificationType.entries.size - 1 -> RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
+                index == configurableTypes.size - 1 -> RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
                 else -> RoundedCornerShape(4.dp)
             }
 
@@ -230,7 +231,7 @@ fun NotificationTypesContent() {
             }
 
             // Add a small spacer between cards to make the 4dp corners distinct
-            if (index < NotificationType.entries.size - 1) {
+            if (index < configurableTypes.size - 1) {
                 Spacer(modifier = Modifier.height(2.dp))
             }
         }

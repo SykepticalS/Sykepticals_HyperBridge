@@ -194,6 +194,16 @@ class NotificationCandidatePolicyTest {
     }
 
     @Test
+    fun screenRecordingIsEnabledRegardlessOfEffectiveTypes() {
+        val empty = emptySet<String>()
+        assertTrue(NotificationTypeEnablementPolicy.isEnabled(empty, "SCREEN_RECORDING"))
+        assertEquals(
+            "SCREEN_RECORDING",
+            NotificationTypeEnablementPolicy.resolveEnabledType(empty, "SCREEN_RECORDING", false)
+        )
+    }
+
+    @Test
     fun whatsappStandardAcceptanceNeedsNoAggregateCategorySetting() {
         assertFalse(
             NotificationAcceptancePolicy.isJunk(

@@ -253,7 +253,7 @@ class AppPreferences internal constructor(
     fun getAppConfig(packageName: String): Flow<Set<String>> {
         val legacyKey = "config_$packageName"
         return dao.getSettingFlow(legacyKey).map { str ->
-            str?.deserializeSet() ?: NotificationType.entries.map { t -> t.name }.toSet()
+            str?.deserializeSet() ?: NotificationType.configurableEntries.map { t -> t.name }.toSet()
         }
     }
 
@@ -510,12 +510,12 @@ class AppPreferences internal constructor(
     val GLOBAL_NOTIFICATION_TYPES_KEY = "global_notification_types"
 
     val globalNotificationTypesFlow: Flow<Set<String>> = dao.getSettingFlow(GLOBAL_NOTIFICATION_TYPES_KEY).map { str ->
-        str?.deserializeSet() ?: NotificationType.entries.map { it.name }.toSet()
+        str?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
     }
 
     suspend fun updateGlobalNotificationType(type: NotificationType, isEnabled: Boolean) {
         val currentStr = dao.getSetting(GLOBAL_NOTIFICATION_TYPES_KEY)
-        val currentSet = currentStr?.deserializeSet() ?: NotificationType.entries.map { it.name }.toSet()
+        val currentSet = currentStr?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
         val newSet = if (isEnabled) currentSet + type.name else currentSet - type.name
         save(GLOBAL_NOTIFICATION_TYPES_KEY, newSet.serialize())
     }
@@ -532,7 +532,7 @@ class AppPreferences internal constructor(
     suspend fun updateAppConfig(packageName: String, type: NotificationType, isEnabled: Boolean) {
         val key = "config_$packageName"
         val currentStr = dao.getSetting(key)
-        val currentSet = currentStr?.deserializeSet() ?: NotificationType.entries.map { it.name }.toSet()
+        val currentSet = currentStr?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
         val newSet = if (isEnabled) currentSet + type.name else currentSet - type.name
         save(key, newSet.serialize())
     }
@@ -701,7 +701,7 @@ class AppPreferences internal constructor(
 
     fun getGlobalNotificationTypesSync(): Set<String> {
         val str = memoryCache[GLOBAL_NOTIFICATION_TYPES_KEY]
-        return str?.deserializeSet() ?: NotificationType.entries.map { it.name }.toSet()
+        return str?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
     }
 
     fun getAppConfigSync(packageName: String): Set<String>? {

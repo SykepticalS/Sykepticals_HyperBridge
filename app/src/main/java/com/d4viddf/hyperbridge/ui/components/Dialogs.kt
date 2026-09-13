@@ -169,7 +169,7 @@ fun AppConfigBottomSheet(
 
                 // --- CARD 1: NOTIFICATION TYPES (New Dropdown) ---
                 // Count how many are active from the effective config
-                val activeCount = NotificationType.entries.toTypedArray().count { activeTypes.contains(it.name) }
+                val activeCount = NotificationType.configurableEntries.count { activeTypes.contains(it.name) }
                 val activeSubtitle = stringResource(R.string.active_notifications_subtitle, activeCount)
 
                 ExpandableSettingCard(
@@ -254,7 +254,7 @@ fun NotificationTypesContent(
     navEditDesc: String
 ) {
     Column {
-        NotificationType.entries.forEach { type ->
+        NotificationType.configurableEntries.forEach { type ->
             val isChecked = activeTypes.contains(type.name)
             val typeLabel = stringResource(type.labelRes)
             val switchDesc = if (isChecked) stringResource(R.string.cd_disable_type, typeLabel)

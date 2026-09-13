@@ -544,7 +544,7 @@ fun TriggersConfigPage(prefs: AppPreferences) {
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    NotificationType.entries.forEach { type ->
+                    NotificationType.configurableEntries.forEach { type ->
                         val isEnabled = activeTypes.contains(type.name)
                         Card(
                             onClick = {
