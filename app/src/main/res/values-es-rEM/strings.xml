@@ -170,6 +170,18 @@
     <string name="system_version">Versión del Sistema</string>
     <string name="call_incoming">Llamada Entrante</string>
     <string name="call_ongoing">Llamada en Curso</string>
+    <string name="call_calling">Llamando…</string>
+    <string name="call_ringing">Sonando…</string>
+    <string name="call_connecting">Conectando…</string>
+    <string name="call_ended">Llamada finalizada</string>
+    <string name="call_stage_settings">Fases de llamada</string>
+    <string name="call_stage_settings_desc">Elige en qué partes de una llamada de voz se puede mostrar una Isla</string>
+    <string name="call_stage_incoming">Llamadas entrantes</string>
+    <string name="call_stage_incoming_desc">Llamadas que están sonando y esperando a ser respondidas</string>
+    <string name="call_stage_outgoing">Llamadas salientes</string>
+    <string name="call_stage_outgoing_desc">Llamando, sonando y conectando antes de que se responda la llamada</string>
+    <string name="call_stage_active">Llamadas activas</string>
+    <string name="call_stage_active_desc">Llamadas conectadas con visualización de tiempo transcurrido</string>
     <string-array name="call_keywords_hangup">
         <item>colgar</item>
         <item>finalizar</item>
