@@ -96,8 +96,8 @@ object BugReportCollector {
             hyperOSVersion = DeviceUtils.getHyperOSVersion(),
             isCNRom = DeviceUtils.isCNRom,
             isCompatibleOS = DeviceUtils.isCompatibleOS(),
-            appVersionName = pInfo?.versionName ?: "0.6.0-dev1",
-            appVersionCode = pInfo?.longVersionCode?.toInt() ?: 34
+            appVersionName = pInfo?.versionName ?: "0.6.0",
+            appVersionCode = pInfo?.longVersionCode?.toInt() ?: 35
         )
     }
 

@@ -26,8 +26,8 @@ class BugReportCollectorTest {
             hyperOSVersion = "OS2.0.1.0.VNAMIXM",
             isCNRom = false,
             isCompatibleOS = true,
-            appVersionName = "0.6.0-dev1",
-            appVersionCode = 34
+            appVersionName = "0.6.0",
+            appVersionCode = 35
         )
 
         val permissions = PermissionDiagnosticInfo(
@@ -97,8 +97,8 @@ class BugReportCollectorTest {
             hyperOSVersion = "OS1.0.9.0.UNRMIXM",
             isCNRom = false,
             isCompatibleOS = true,
-            appVersionName = "0.6.0-dev1",
-            appVersionCode = 34
+            appVersionName = "0.6.0",
+            appVersionCode = 35
         )
 
         val permissions = PermissionDiagnosticInfo(
@@ -148,7 +148,7 @@ class BugReportCollectorTest {
         )
 
         assertTrue(report.contains("### HyperBridge Bug Report & Diagnostics"))
-        assertTrue(report.contains("**App Version:** 0.6.0-dev1 (34)"))
+        assertTrue(report.contains("**App Version:** 0.6.0 (35)"))
         assertTrue(report.contains("#### User Report"))
         assertTrue(report.contains("Island freezes on screen lock"))
         assertTrue(report.contains("1. Play music"))

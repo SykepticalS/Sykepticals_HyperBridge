@@ -2,24 +2,22 @@
   <img src="app/src/main/ic_launcher-playstore.png" width="150" alt="HyperBridge Logo" style="border-radius: 20%;" />
 </p>
 
-<h1 align="center">Hyper Bridge</h1>
+<h1 align="center">HyperBridge — Sykeptical Edition</h1>
 
 <p align="center">
-  <strong>Bring the native HyperIsland experience to third-party apps on HyperOS.</strong>
+  <strong>The official HyperBridge 0.6.0 codebase, plus app badges for notification avatars.</strong>
 </p>
 
 <p align="center">
-  Hyper Bridge bridges standard Android notifications into the pill-shaped UI around the camera cutout, offering a seamless, iOS-like experience on Xiaomi phones. Now with full theme customization and widget support.
+  This fork tracks the official HyperBridge implementation and retains one additional visual enhancement: when a notification supplies an avatar or content image, its source app icon is shown as a badge beside it in the Island.
 </p>
 
 <p align="center">
-  <a href='https://play.google.com/store/apps/details?id=com.d4viddf.hyperbridge'>
-    <img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height="80"/>
-  </a>
+  <a href="https://github.com/SykepticalS/Sykepticals_HyperBridge/releases"><img src="https://img.shields.io/badge/download-GitHub_Releases-181717?style=for-the-badge&amp;logo=github" alt="Download from GitHub Releases" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.0-blue?style=for-the-badge&logo=github" alt="Version 0.5.0" />
+  <img src="https://img.shields.io/badge/version-0.6.0-blue?style=for-the-badge&logo=github" alt="Version 0.6.0" />
   <img src="https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Material%20Design-757575?style=for-the-badge&logo=material-design&logoColor=white" alt="Material Design" />
@@ -28,9 +26,25 @@
 
 <br>
 
+## About this fork
+
+The Sykeptical Edition is based directly on the official HyperBridge `dev/0_6_0` code. The reliability, messaging, call-handling, screen-recording, VPN, diagnostics, and settings work previously maintained in this fork has now been integrated upstream. This repository therefore follows the official application identity (`com.d4viddf.hyperbridge`) and keeps only the app-avatar badge enhancement on top.
+
+HyperBridge was created and is developed upstream by [D4vidDf](https://github.com/D4vidDf/HyperBridge). This fork is maintained by [Sykeptical](https://github.com/SykepticalS).
+
+## What's new in 0.6.0
+
+* Updated the entire project to the official HyperBridge 0.6.0 development codebase.
+* Added native Xiaomi screen-recording and VPN Islands.
+* Added stronger notification lifecycle handling, message deduplication, and call-session controls.
+* Added app-icon badges to notification avatars, pictures, and large icons while avoiding duplicate badges for fallback icons.
+
+See the [complete 0.6.0 release notes](docs/releases/0.6.0.md).
+
 ## 🚀 Features
 
 * **Native Visuals:** Transforms notifications into HyperOS system-style islands.
+* **App Avatar Badges:** Keeps the sender or content image visible while adding its source app icon as a compact badge.
 * **🎨 Theme Engine:** Customize every pixel.
     * **Theme Creator:** Built-in editor to design your own themes with real-time previews.
     * **Smart Colors:** Automatically extract vibrant brand colors from app icons.
@@ -102,7 +116,7 @@ The easiest way to install and keep the app updated.
 <a href='https://play.google.com/store/apps/details?id=com.d4viddf.hyperbridge'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height="60"/></a>
 
 ### Option 2: Manual APK
-1.  Download the latest APK from the [Releases](https://github.com/D4vidDf/HyperBridge/releases) page.
+1.  Download the latest APK from this fork's [Releases](https://github.com/SykepticalS/Sykepticals_HyperBridge/releases) page.
 2.  Install the APK on your Xiaomi/POCO/Redmi device.
 
 ### ⚙️ Setup (Required for both methods)
@@ -133,6 +147,5 @@ Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 
 ## 👤 Developer
 
-**D4vidDf**
-* Website: [d4viddf.com](https://d4viddf.com)
-* GitHub: [@D4vidDf](https://github.com/D4vidDf)
+* **Original developer:** [D4vidDf](https://github.com/D4vidDf)
+* **Fork maintainer:** [Sykeptical](https://github.com/SykepticalS)

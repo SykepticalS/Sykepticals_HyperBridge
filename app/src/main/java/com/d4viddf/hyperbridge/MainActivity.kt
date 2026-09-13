@@ -84,7 +84,7 @@ fun MainRootNavigation(onExit: () -> Unit) {
     }
     @Suppress("DEPRECATION")
     val currentVersionCode = packageInfo?.longVersionCode?.toInt() ?: 0
-    val currentVersionName = packageInfo?.versionName ?: "0.5.0"
+    val currentVersionName = packageInfo?.versionName ?: "0.6.0"
 
     val isSetupComplete by produceState<Boolean?>(initialValue = null) {
         preferences.isSetupComplete.collect { value = it }
