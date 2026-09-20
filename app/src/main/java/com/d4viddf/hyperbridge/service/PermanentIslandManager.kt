@@ -1,14 +1,13 @@
 package com.d4viddf.hyperbridge.service
 
-import android.Manifest
 import android.content.Context
 import android.util.Log
-import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.models.HyperIslandData
-import com.d4viddf.hyperbridge.util.ShizukuManager
+import com.d4viddf.hyperbridge.island.backend.IslandMetadata
+import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
 import io.github.d4viddf.hyperisland_kit.models.TextInfo
@@ -26,6 +25,7 @@ class PermanentIslandManager(
     private val preferences: AppPreferences
 ) {
     private val TAG = "HyperBridgeDebug"
+    private val backend = SystemUiIslandBackend.get(context)
 
     companion object {
         const val PERMANENT_BRIDGE_ID = 9999
@@ -159,7 +159,6 @@ class PermanentIslandManager(
             }
         }
     }
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun dispatchPermanentIsland() {
         try {
             Log.d(TAG, "Dispatching permanent island")
@@ -196,7 +195,7 @@ class PermanentIslandManager(
             val notification = notifBuilder.build()
             notification.extras.putString("miui.focus.param", data.jsonParam)
 
-            ShizukuManager.notify(context, PERMANENT_BRIDGE_ID, notification)
+            backend.post(PERMANENT_BRIDGE_ID, notification, IslandMetadata("permanent", semanticType = "PERMANENT"))
         } catch (e: Exception) {
             Log.e(TAG, "Error dispatching permanent island", e)
         }
@@ -205,7 +204,7 @@ class PermanentIslandManager(
     private fun removePermanentIsland() {
         try {
             Log.d(TAG, "Removing permanent island")
-            ShizukuManager.cancel(context, PERMANENT_BRIDGE_ID)
+            backend.cancel(PERMANENT_BRIDGE_ID, "permanent")
         } catch (e: Exception) {
             Log.e(TAG, "Error removing permanent island", e)
         }

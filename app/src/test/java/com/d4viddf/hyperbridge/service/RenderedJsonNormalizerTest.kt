@@ -6,8 +6,8 @@ import org.junit.Test
 class RenderedJsonNormalizerTest {
     @Test
     fun newAndUpdatePresentationFlagsDoNotChangeSemanticPayload() {
-        val newJson = """{"title":"Alice","text":"hello","islandFirstFloat":true,"reopen":true}"""
-        val updateJson = """{"title":"Alice","text":"hello","islandFirstFloat":false}"""
+        val newJson = """{"title":"Alice","text":"hello","enableFloat":true,"islandFirstFloat":true,"reopen":true}"""
+        val updateJson = """{"title":"Alice","text":"hello","enableFloat":false,"islandFirstFloat":false}"""
         val newHash = RenderedJsonNormalizer.normalize(newJson).hashCode()
         val updateHash = RenderedJsonNormalizer.normalize(updateJson).hashCode()
 

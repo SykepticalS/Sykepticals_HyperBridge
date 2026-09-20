@@ -17,7 +17,6 @@ import com.d4viddf.hyperbridge.ui.screens.settings.BugReportScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ChangelogHistoryScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.DiagnosticsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.EngineSettingsScreen
-import com.d4viddf.hyperbridge.ui.screens.settings.AutomaticPopupControlScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalBlocklistScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ImportPreviewScreen
@@ -69,7 +68,6 @@ fun mainNavGraph(
             onBlocklistClick = { navigator.navigate(Screen.GlobalBlocklist) },
             onBackupClick = { navigator.navigate(Screen.Backup) },
             onBugReportClick = { navigator.navigate(Screen.BugReport) },
-            onPopupControlClick = { navigator.navigate(Screen.PopupControl) },
             onDiagnosticsClick = { navigator.navigate(Screen.Diagnostics) }
         )
     }
@@ -105,12 +103,8 @@ fun mainNavGraph(
     entry<Screen.Setup> {
         SetupHealthScreen(
             onBack = { navigator.goBack() },
-            onNavigateToBugReport = { navigator.navigate(Screen.BugReport) },
-            onNavigateToPopupControl = { navigator.navigate(Screen.PopupControl) }
+            onNavigateToBugReport = { navigator.navigate(Screen.BugReport) }
         )
-    }
-    entry<Screen.PopupControl> {
-        AutomaticPopupControlScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.Diagnostics> {
         DiagnosticsScreen(

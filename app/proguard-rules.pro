@@ -34,11 +34,5 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
-# --- Shizuku & AIDL IPC ---
-# Keep all generated classes from AIDL files
--keep interface com.d4viddf.hyperbridge.** { *; }
--keep class com.d4viddf.hyperbridge.**$Stub { *; }
--keep class com.d4viddf.hyperbridge.**$Proxy { *; }
-
-# Ensure our privileged service implementation is not stripped or renamed
--keep class com.d4viddf.hyperbridge.integration.shizuku.PrivilegedServiceImpl { *; }
+-keep class com.d4viddf.hyperbridge.xposed.HyperBridgeModule { *; }
+-keep class com.d4viddf.hyperbridge.xposed.** { *; }

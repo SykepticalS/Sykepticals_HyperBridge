@@ -59,7 +59,7 @@ See the [complete 0.6.0 release notes](docs/releases/0.6.0.md).
     * **⬇️ Downloads:** Dedicated circular progress layout with a satisfying "Green Tick" animation upon completion.
     * **📞 Calls:** Dedicated layout for incoming and active calls with timers.
 * **🛡️ Spoiler Protection:** Define blocked terms globally or per-app to prevent specific notifications (e.g., message spoilers) from popping up on the Island.
-* **Sui & Shizuku Support:** Fully supports Sui and Shizuku for enhanced network operations and seamless integration on rooted devices.
+* **Privileged SystemUI backend:** Islands are posted, updated, and cancelled inside SystemUI through a modern libxposed module; there is no Shizuku or app-side island fallback.
 * **Total Control:** Choose exactly which apps trigger the island, customize timeouts, and toggle floating behavior per app.
 
 ## 👩‍💻 For Developers: Create Themes
@@ -107,6 +107,7 @@ HyperBridge is fully localized thanks to our amazing community. **Want to add yo
 Special thanks to the following people and projects for their invaluable contributions:
 
 *   **[Stardawn](https://www.coolapk1s.com/feed/70418983)**: For the extensive research on the XMSF notification workaround that enables HyperIslands on Chinese ROMs.
+*   **[HyperIsland](https://github.com/1812z/HyperIsland)** by 1812z: modern libxposed service, scope, classloader, Xiaomi Focus, and SystemUI-hook patterns adapted under the MIT License. See [donor attribution](docs/HYPERISLAND_ATTRIBUTION.md).
 
 ## 📥 Installation
 
@@ -120,8 +121,15 @@ The easiest way to install and keep the app updated.
 2.  Install the APK on your Xiaomi/POCO/Redmi device.
 
 ### ⚙️ Setup (Required for both methods)
-1.  Grant **"Notification Access"** when prompted.
-2.  **Critical:** Follow the in-app guide to enable **Autostart** and **No Restrictions** (Battery) to prevent the system from killing the background service.
+HyperBridge now requires a rooted Xiaomi/POCO/Redmi device and a modern LSPosed implementation supporting libxposed API 102. Enable the module for both `com.android.systemui` and `com.xiaomi.xmsf`, then use **Restart scopes** in setup/diagnostics. The app provisions Notification Listener access through its centralized root service; core islands do not require a manual Notification Access or notification-posting permission step.
+
+`POST_NOTIFICATIONS` is used only by the optional watch-relay helper. It is not an island backend requirement.
+
+### Architecture
+
+HyperBridge's existing parsers, translators, themes, actions, and lifecycle logic still build each notification. A versioned IPC contract sends that notification to the injected SystemUI dispatcher, which validates ownership metadata and performs tagged post/update/cancel operations. SystemUI applies fail-open heads-up suppression; XMSF/SystemUI Focus hooks and heartbeat handshakes ensure a proxy is attempted only while the complete backend is healthy. Compact hook state is synchronized with libxposed `RemotePreferences`.
+
+Most policy/theme changes hot-reload. Hook-installation changes require restarting the affected SystemUI/XMSF scope from the privileged-environment screen.
 
 ## 🤝 Contributing
 

@@ -2,15 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <permission
+        android:name="com.sykeptical.hyperbridge.permission.SEND_ISLAND"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.sykeptical.hyperbridge.permission.SEND_ISLAND" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="PackageVisibilityPolicy,QueryAllPackagesPermission" />
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- Required only by the optional watch-relay helper notification, not island posting. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <uses-feature
@@ -37,6 +39,7 @@
     </queries>
 
     <application
+        android:name=".HyperBridgeApplication"
         android:directBootAware="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -133,10 +136,11 @@
             android:name=".receiver.VpnActionReceiver"
             android:exported="false" />
 
-        <service
-            android:name=".service.InlineReplyService"
-            android:enabled="true"
-            android:exported="false" />
+        <activity
+            android:name=".ui.InlineReplyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.HyperBridge.Transparent" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -148,18 +152,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Required by Shizuku API -->
-        <meta-data
-            android:name="moe.shizuku.privileged.api_version"
-            android:value="13" />
-
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:multiprocess="false"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 
 </manifest>

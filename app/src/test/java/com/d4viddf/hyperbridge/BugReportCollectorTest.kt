@@ -34,11 +34,11 @@ class BugReportCollectorTest {
             restrictedSettingsAllowed = true,
             notificationListenerGranted = true,
             postNotificationsGranted = true,
-            overlayPermissionGranted = true,
             batteryOptimizationIgnored = true,
-            xiaomiFocusGranted = true,
-            shizukuRunning = false,
-            shizukuPermissionGranted = false
+            focusBackendReady = true,
+            rootAvailable = true,
+            lsposedAvailable = true,
+            systemUiHookAlive = true
         )
 
         val url = BugReportCollector.buildGitHubIssueUrl(
@@ -105,11 +105,11 @@ class BugReportCollectorTest {
             restrictedSettingsAllowed = true,
             notificationListenerGranted = true,
             postNotificationsGranted = true,
-            overlayPermissionGranted = true,
             batteryOptimizationIgnored = true,
-            xiaomiFocusGranted = true,
-            shizukuRunning = false,
-            shizukuPermissionGranted = false
+            focusBackendReady = true,
+            rootAvailable = true,
+            lsposedAvailable = true,
+            systemUiHookAlive = true
         )
 
         val themeInfo = ThemeDiagnosticInfo(
@@ -196,11 +196,11 @@ class BugReportCollectorTest {
             restrictedSettingsAllowed = false,
             notificationListenerGranted = false,
             postNotificationsGranted = true,
-            overlayPermissionGranted = false,
             batteryOptimizationIgnored = false,
-            xiaomiFocusGranted = false,
-            shizukuRunning = true,
-            shizukuPermissionGranted = true
+            focusBackendReady = false,
+            rootAvailable = true,
+            lsposedAvailable = true,
+            systemUiHookAlive = true
         )
 
         val report = BugReportCollector.buildMarkdownReport(
@@ -218,7 +218,8 @@ class BugReportCollectorTest {
 
         assertTrue(report.contains("**Restricted Settings (Android 13+):** RESTRICTED (Blocked by Android)"))
         assertTrue(report.contains("**Notification Listener:** Denied"))
-        assertTrue(report.contains("**Shizuku Service:** Running (Permission Granted)"))
+        assertTrue(report.contains("**Root:** Available"))
+        assertTrue(report.contains("**LSPosed Service:** Available"))
         assertFalse(report.contains("#### Device & System Information"))
         assertFalse(report.contains("#### Theme Information"))
         assertFalse(report.contains("#### Widget Configuration"))

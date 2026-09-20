@@ -2,10 +2,8 @@ package com.d4viddf.hyperbridge.util
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Bundle
 import android.provider.Settings
 import java.lang.reflect.Method
-import androidx.core.net.toUri
 
 object XiaomiNotificationHelper {
 
@@ -32,30 +30,6 @@ object XiaomiNotificationHelper {
         } catch (e: Exception) {
             0
         }
-    }
-
-    /**
-     * Checks if the app has the "Focus Notification" permission enabled.
-     * Note: This is an expensive operation and calls a ContentProvider.
-     * 
-     * Returns false on OS versions prior to OS1.
-     * On OS1, OS2, OS3 returns true if permission is granted, false if not.
-     */
-    fun hasFocusPermission(context: Context): Boolean {
-        var canShowFocus = false
-        try {
-            val uri = "content://miui.statusbar.notification.public".toUri()
-            val extras = Bundle()
-            extras.putString("package", context.packageName)
-            val bundle = context.contentResolver.call(uri, "canShowFocus", null, extras)
-            if (bundle != null) {
-                canShowFocus = bundle.getBoolean("canShowFocus", false)
-            }
-        } catch (_: Exception) {
-            // Permission provider not found or failed
-            canShowFocus = false
-        }
-        return canShowFocus
     }
 
     @SuppressLint("PrivateApi")

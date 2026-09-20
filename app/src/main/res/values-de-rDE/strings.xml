@@ -175,14 +175,6 @@
     <string name="req_xiaomi">Xiaomi/Redmi/Poco-GerÃ¤t erforderlich</string>
     <string name="warning_cn_rom_title">Chinesische ROM erkannt</string>
     <string name="warning_cn_rom_desc">Dein GerÃ¤t scheint eine chinesische Firmware zu verwenden. Xiaomi verÃ¤ndert dort die Benachrichtigungslogik stark. Funktionen kÃ¶nnen instabil sein oder nicht funktionieren.</string>
-    <string name="shizuku_workaround_title">Enable Shizuku Workaround</string>
-    <string name="shizuku_enable_workaround">Enable Workaround</string>
-    <string name="shizuku_workaround_desc">If you are on a CN ROM, you must enable the Shizuku Workaround for notifications to trigger correctly.</string>
-    <string name="shizuku_status_running">Shizuku is running</string>
-    <string name="shizuku_permission_granted">Permission Granted</string>
-    <string name="shizuku_permission_denied">Permission Denied</string>
-    <string name="shizuku_request_permission">Grant Shizuku Permission</string>
-    <string name="shizuku_not_installed">Shizuku app is not installed or running. Please install and start Shizuku first.</string>
     <string name="system_version">Systemversion</string>
     <string name="call_incoming">Eingehender Anruf</string>
     <string name="call_ongoing">Aktives GesprÃ¤ch</string>
@@ -537,8 +529,6 @@
     <string name="featured_notifications_open_settings">Open System Settings</string>
     <string name="featured_notifications_troubleshoot_title">Why is this not an island?</string>
     <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap \"Open System Settings\"\n2. Scroll down to \"Featured Notifications\" (or similar)\n3. Enable it for Hyper Bridge.</string>
-    <string name="featured_notifications_shizuku_alternative">Alternative: Shizuku Override</string>
-    <string name="featured_notifications_shizuku_desc">If your system doesn\'t show the setting or it\'s restricted, you can bypass the Xiaomi whitelist entirely by setting up Shizuku. Hyper Bridge will use Shizuku to post islands directly.</string>
     <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>

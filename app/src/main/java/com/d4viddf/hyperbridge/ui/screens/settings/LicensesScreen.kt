@@ -45,7 +45,7 @@ fun LicensesScreen(onBack: () -> Unit) {
         Library("Gson", "Google", "Apache 2.0", "https://github.com/google/gson"),
         Library("Kotlin Coroutines", "JetBrains", "Apache 2.0", "https://github.com/Kotlin/kotlinx.coroutines"),
         Library("Kotlin Serialization", "JetBrains", "Apache 2.0", "https://github.com/Kotlin/kotlinx.serialization"),
-        Library("Shizuku API", "RikkaApps", "Apache 2.0", "https://github.com/RikkaApps/Shizuku-API")
+        Library("libxposed", "libxposed", "LGPL-3.0", "https://github.com/libxposed/api")
     ).sortedBy { it.name }
 
     Scaffold(

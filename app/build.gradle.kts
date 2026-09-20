@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.d4viddf.hyperbridge"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
@@ -40,7 +40,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        aidl = true
+    }
+    packaging {
+        resources {
+            merges += "META-INF/xposed/*"
+        }
     }
 }
 
@@ -81,9 +85,8 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 
-    // Shizuku
-    implementation(libs.api)
-    implementation(libs.provider)
+    compileOnly(libs.libxposed.api)
+    implementation(libs.libxposed.service)
 }
 
 configurations.all {

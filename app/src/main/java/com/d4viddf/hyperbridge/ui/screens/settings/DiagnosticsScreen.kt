@@ -86,10 +86,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.service.NotificationReaderService
-import com.d4viddf.hyperbridge.service.popup.ChannelSemanticState
-import com.d4viddf.hyperbridge.service.popup.CompanionAssociationManager
-import com.d4viddf.hyperbridge.service.popup.PopupControlRuntime
-import com.d4viddf.hyperbridge.service.popup.PopupChannelDiagnostic
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticEvent
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsStore
 import com.d4viddf.hyperbridge.ui.components.ExpressiveGroupCard
@@ -99,6 +95,7 @@ import com.d4viddf.hyperbridge.util.XiaomiNotificationHelper
 import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
 import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
 import com.d4viddf.hyperbridge.util.isRestrictedSettingsAllowed
+import com.d4viddf.hyperbridge.xposed.runtime.EnvironmentRuntime
 import java.text.DateFormat
 import java.util.Date
 
@@ -107,12 +104,12 @@ data class DiagnosticsData(
     val postPermission: Boolean,
     val restrictedSettingsAllowed: Boolean,
     val focusSupported: Boolean,
-    val focusPermission: Boolean,
+    val focusBackendReady: Boolean,
     val selectedAppsCount: Int,
-    val popupControlStatus: String,
-    val managedChannelCount: Int,
-    val mixedChannelCount: Int,
-    val popupChannels: List<PopupChannelDiagnostic>,
+    val rootAvailable: Boolean,
+    val lsposedAvailable: Boolean,
+    val scopesReady: Boolean,
+    val backendReady: Boolean,
     val activeIslands: Int,
     val lastClassification: String?,
     val lastCallState: String?,
@@ -129,14 +126,11 @@ fun DiagnosticsScreen(
     val preferences = remember { AppPreferences(context.applicationContext) }
     val state by DiagnosticsStore.state.collectAsState()
     val selectedApps by preferences.allowedPackagesFlow.collectAsState(initial = emptySet())
-    val popupDiagnostics by PopupControlRuntime.channelDiagnostics.collectAsState()
-    val popupVerification by PopupControlRuntime.apiVerification.collectAsState()
     var notificationAccess by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var postPermission by remember { mutableStateOf(isPostNotificationsEnabled(context)) }
     var restrictedSettingsAllowed by remember { mutableStateOf(isRestrictedSettingsAllowed(context)) }
-    var focusPermission by remember { mutableStateOf(XiaomiNotificationHelper.hasFocusPermission(context)) }
     val focusSupported = remember { XiaomiNotificationHelper.isSupportIsland() }
-    val popupAssociation = remember { CompanionAssociationManager(context.applicationContext) }
+    val environment = EnvironmentRuntime.snapshot(context)
     val diagnosticsTitle = stringResource(R.string.diagnostics_title)
     val exportHeader = stringResource(R.string.diagnostic_export_header)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -158,7 +152,6 @@ fun DiagnosticsScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 notificationAccess = isNotificationServiceEnabled(context)
                 postPermission = isPostNotificationsEnabled(context)
-                focusPermission = XiaomiNotificationHelper.hasFocusPermission(context)
                 restrictedSettingsAllowed = isRestrictedSettingsAllowed(context)
                 if (notificationAccess && !NotificationReaderService.isConnected && !state.serviceConnected) {
                     try {
@@ -182,12 +175,12 @@ fun DiagnosticsScreen(
         postPermission = postPermission,
         restrictedSettingsAllowed = restrictedSettingsAllowed,
         focusSupported = focusSupported,
-        focusPermission = focusPermission,
+        focusBackendReady = environment.focusCompatible,
         selectedAppsCount = selectedApps.size,
-        popupControlStatus = popupAssociation.currentState(notificationAccess).name.also { popupVerification },
-        managedChannelCount = popupDiagnostics.count { it.managed },
-        mixedChannelCount = popupDiagnostics.count { it.state == ChannelSemanticState.MIXED },
-        popupChannels = popupDiagnostics,
+        rootAvailable = environment.rootAvailable,
+        lsposedAvailable = environment.moduleApiCompatible,
+        scopesReady = environment.systemUiScope && environment.xmsfScope,
+        backendReady = environment.systemUiHookAlive,
         activeIslands = state.activeIslands,
         lastClassification = state.lastClassification,
         lastCallState = state.lastCallState,
@@ -346,10 +339,10 @@ fun DiagnosticsContent(
                             )
                             DiagnosticMetricPill(
                                 modifier = Modifier.weight(1f),
-                                label = stringResource(R.string.diagnostic_popup_mixed),
-                                value = data.mixedChannelCount.toString(),
-                                icon = Icons.Default.Warning,
-                                isWarning = data.mixedChannelCount > 0
+                                label = "Backend",
+                                value = if (data.backendReady) "Ready" else "Down",
+                                icon = Icons.Default.Security,
+                                isWarning = !data.backendReady
                             )
                         }
                     }
@@ -452,25 +445,6 @@ fun DiagnosticsContent(
                             ValueBadge(text = data.lastCallState ?: "—")
                         }
                     )
-                    data.popupChannels.take(20).forEach { channel ->
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                        )
-                        ExpressiveDiagnosticRow(
-                            icon = if (channel.state == ChannelSemanticState.MIXED) Icons.Default.Warning else Icons.Default.Notifications,
-                            title = "${channel.packageName} / ${channel.channelId}",
-                            subtitle = channel.state.name,
-                            trailingBadge = {
-                                StatusBadge(
-                                    text = if (channel.managed) stringResource(R.string.popup_control_channel_managed)
-                                    else stringResource(R.string.popup_control_channel_normal),
-                                    isSuccess = channel.managed,
-                                    isWarning = channel.state == ChannelSemanticState.MIXED
-                                )
-                            }
-                        )
-                    }
                 }
             }
 
@@ -544,20 +518,20 @@ fun DiagnosticsContent(
                     )
                     ExpressiveDiagnosticRow(
                         icon = Icons.Default.Security,
-                        title = stringResource(R.string.diagnostic_featured_permission),
-                        subtitle = stringResource(R.string.diagnostic_featured_permission_desc),
+                        title = "Focus hook backend",
+                        subtitle = "Injected SystemUI whitelist and XMSF authorization hooks",
                         trailingBadge = {
                             StatusBadge(
-                                text = yesNo(data.focusPermission),
-                                isSuccess = data.focusPermission,
-                                isWarning = !data.focusPermission
+                                text = yesNo(data.focusBackendReady),
+                                isSuccess = data.focusBackendReady,
+                                isWarning = !data.focusBackendReady
                             )
                         }
                     )
                 }
             }
 
-            // --- 5. APPS & AUTOMATIC POPUP CONTROL ---
+            // --- 5. APPS & PRIVILEGED BACKEND ---
             item {
                 ExpressiveSectionTitle(stringResource(R.string.diagnostic_section_apps))
                 ExpressiveGroupCard {
@@ -574,22 +548,12 @@ fun DiagnosticsContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     ExpressiveDiagnosticRow(
-                        icon = Icons.Default.Warning,
-                        title = stringResource(R.string.popup_control_title),
-                        subtitle = stringResource(R.string.diagnostic_popup_status, data.popupControlStatus),
+                        icon = Icons.Default.Security,
+                        title = "Root / LSPosed backend",
+                        subtitle = "Scopes and live SystemUI handshake",
                         trailingBadge = {
-                            if (data.mixedChannelCount > 0) {
-                                StatusBadge(
-                                    text = stringResource(R.string.diagnostic_popup_mixed_count, data.mixedChannelCount),
-                                    isSuccess = false,
-                                    isWarning = true
-                                )
-                            } else {
-                                StatusBadge(
-                                    text = stringResource(R.string.diagnostic_popup_managed_count, data.managedChannelCount),
-                                    isSuccess = data.popupControlStatus == "READY"
-                                )
-                            }
+                            val ready = data.rootAvailable && data.lsposedAvailable && data.scopesReady && data.backendReady
+                            StatusBadge(text = if (ready) "Ready" else "Unavailable", isSuccess = ready, isWarning = !ready)
                         }
                     )
                 }
@@ -951,12 +915,12 @@ fun DiagnosticsScreenPreview() {
                 postPermission = true,
                 restrictedSettingsAllowed = true,
                 focusSupported = true,
-                focusPermission = true,
+                focusBackendReady = true,
                 selectedAppsCount = 5,
-                popupControlStatus = "READY",
-                managedChannelCount = 3,
-                mixedChannelCount = 1,
-                popupChannels = emptyList(),
+                rootAvailable = true,
+                lsposedAvailable = true,
+                scopesReady = true,
+                backendReady = true,
                 activeIslands = 1,
                 lastClassification = "MESSAGE",
                 lastCallState = "RINGING",

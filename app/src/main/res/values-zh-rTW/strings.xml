@@ -175,14 +175,6 @@
     <string name="req_xiaomi">僅支援 小米/紅米/Poco 裝置</string>
     <string name="warning_cn_rom_title">偵測到中國版 ROM / 韌體</string>
     <string name="warning_cn_rom_desc">您的裝置似乎正在執行中國版韌體。小米在中國版 ROM 上大幅修改了通知系統底層，功能可能不穩定或無法運作。</string>
-    <string name="shizuku_workaround_title">啟用 Shizuku 用法</string>
-    <string name="shizuku_enable_workaround">啟用解決方法</string>
-    <string name="shizuku_workaround_desc">如果您使用的是中國版 ROM，則必須啟用 Shizuku 方法才能正確觸發通知。</string>
-    <string name="shizuku_status_running">Shizuku 正在運作</string>
-    <string name="shizuku_permission_granted">✅ 已授予權限</string>
-    <string name="shizuku_permission_denied">權限被拒絕</string>
-    <string name="shizuku_request_permission">授予Shizuku權限</string>
-    <string name="shizuku_not_installed">Shizuku 應用未安裝或運作。請先安裝並啟動 Shizuku。</string>
     <string name="system_version">系統版本</string>
     <string name="call_incoming">來電</string>
     <string name="call_ongoing">通話中</string>
@@ -533,8 +525,6 @@
     <string name="featured_notifications_open_settings">é–‹å•Ÿç³»çµ±è¨­å®š</string>
     <string name="featured_notifications_troubleshoot_title">ç‚ºä»€éº¼æ²’æœ‰è¶…ç´šå³¶ï¼Ÿ</string>
     <string name="featured_notifications_troubleshoot_desc">您的小米設備攔截了通知，但由於系統設定中權限已停用，因此無法將其顯示為精選通知。 \n\n要解決此問題：\n1. 點選「開啟系統設定」\n2. 向下捲動至「精選通知」（或類似選項）\n3. 為 Hyper Bridge 啟用此權限。</string>
-    <string name="featured_notifications_shizuku_alternative">æ›¿ä»£æ–¹æ¡ˆï¼šShizuku æ–¹æ³•</string>
-    <string name="featured_notifications_shizuku_desc">如果您的系統未顯示此設定或該設定受到限制，您可以透過設定 Shizuku 來完全繞過小米白名單。 Hyper Bridge 將使用 Shizuku 直接發布超級島通知。</string>
     <string name="migration_title">HyperBridge 更新</string>
     <string name="migration_message">將資料庫遷移到設備保護儲存…</string>
     <string name="migration_complete">更新完成</string>

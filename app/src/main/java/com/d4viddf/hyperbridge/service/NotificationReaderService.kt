@@ -55,7 +55,9 @@ import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSessionTracker
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSignals
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingTimeoutPolicy
 import com.d4viddf.hyperbridge.service.recording.XiaomiScreenRecordingControlBackend
-import com.d4viddf.hyperbridge.util.ShizukuManager
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
+import com.d4viddf.hyperbridge.island.backend.IslandMetadata
+import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import com.d4viddf.hyperbridge.models.CallStage
 import com.d4viddf.hyperbridge.models.MessageEventFingerprint
 import com.d4viddf.hyperbridge.models.MessageEventFingerprintSource
@@ -79,10 +81,8 @@ import com.d4viddf.hyperbridge.service.message.MessagePresentationSource
 import com.d4viddf.hyperbridge.service.message.MessageSourceQuality
 import com.d4viddf.hyperbridge.service.message.MessagingEventSignals
 import com.d4viddf.hyperbridge.service.message.isMessagingEvent
-import com.d4viddf.hyperbridge.service.popup.ChannelSemanticRegistry
+import com.d4viddf.hyperbridge.service.popup.LegacyPopupChannelMigration
 import com.d4viddf.hyperbridge.service.popup.PopupChannelAccess
-import com.d4viddf.hyperbridge.service.popup.PopupControlRuntime
-import com.d4viddf.hyperbridge.service.popup.PopupSuppressionController
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -103,9 +103,6 @@ class NotificationReaderService : NotificationListenerService() {
     companion object {
         const val ACTION_RELOAD_THEME = "com.d4viddf.hyperbridge.ACTION_RELOAD_THEME"
         const val ACTION_PERFORM_MIGRATION = "com.d4viddf.hyperbridge.ACTION_PERFORM_MIGRATION"
-        const val ACTION_VERIFY_POPUP_CONTROL = "com.d4viddf.hyperbridge.ACTION_VERIFY_POPUP_CONTROL"
-        const val ACTION_RECONCILE_POPUP_CONTROL = "com.d4viddf.hyperbridge.ACTION_RECONCILE_POPUP_CONTROL"
-        const val ACTION_RESTORE_POPUP_CONTROL = "com.d4viddf.hyperbridge.ACTION_RESTORE_POPUP_CONTROL"
         private val GMAIL_PACKAGES = setOf("com.google.android.gm")
 
         @Volatile
@@ -163,6 +160,7 @@ class NotificationReaderService : NotificationListenerService() {
     private val activeWidgets = ConcurrentHashMap.newKeySet<Int>()
     private val appLabelCache = ConcurrentHashMap<String, String>()
     private val notificationLifecycleMutex = Mutex()
+    private val islandBackend by lazy { SystemUiIslandBackend.get(this) }
 
     private val MAX_ISLANDS = 9
     private val WIDGET_ID_BASE = 9000
@@ -172,7 +170,7 @@ class NotificationReaderService : NotificationListenerService() {
 
     private lateinit var preferences: AppPreferences
     private lateinit var effectiveTypeResolver: EffectiveNotificationTypeResolver
-    private lateinit var popupController: PopupSuppressionController
+    private lateinit var legacyPopupMigration: LegacyPopupChannelMigration
 
     // --- THEME ENGINE ---
     private lateinit var themeRepository: ThemeRepository
@@ -217,16 +215,9 @@ class NotificationReaderService : NotificationListenerService() {
         override fun onReceive(context: Context, intent: Intent) {
             val packageName = intent.data?.schemeSpecificPart ?: return
             when (intent.action) {
-                Intent.ACTION_PACKAGE_REMOVED -> if (!intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
-                    serviceScope.launch { popupController.deletePackageState(packageName) }
-                }
+                Intent.ACTION_PACKAGE_REMOVED,
                 Intent.ACTION_PACKAGE_ADDED,
-                Intent.ACTION_PACKAGE_REPLACED -> if (isAppAllowed(packageName)) {
-                    serviceScope.launch {
-                        bootstrapPopupSemantics(setOf(packageName))
-                        popupController.reconcilePackage(packageName)
-                    }
-                }
+                Intent.ACTION_PACKAGE_REPLACED -> Unit
             }
         }
     }
@@ -252,13 +243,13 @@ class NotificationReaderService : NotificationListenerService() {
                 }
 
                 if (bridgeId != -1) {
-                    ShizukuManager.cancel(context, bridgeId)
+                    islandBackend.cancel(bridgeId)
                 }
             }
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.ACCESS_NETWORK_STATE])
+    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
     override fun onCreate() {
         super.onCreate()
         
@@ -289,6 +280,12 @@ class NotificationReaderService : NotificationListenerService() {
         )
         
         preferences = AppPreferences(applicationContext)
+        heartbeatJob = serviceScope.launch {
+            while (true) {
+                HookConfigSync.heartbeat(this@NotificationReaderService, isConnected)
+                delay(15_000)
+            }
+        }
         createChannels()
 
         // [INIT] Theme Engine
@@ -323,13 +320,10 @@ class NotificationReaderService : NotificationListenerService() {
             themeRepository.activeTheme.value
         }
         val popupDao = AppDatabase.getDatabase(applicationContext).popupControlDao()
-        val semanticRegistry = ChannelSemanticRegistry(applicationContext, popupDao)
-        popupController = PopupSuppressionController(
+        legacyPopupMigration = LegacyPopupChannelMigration(
             context = applicationContext,
             preferences = preferences,
             dao = popupDao,
-            registry = semanticRegistry,
-            typeResolver = effectiveTypeResolver,
             access = object : PopupChannelAccess {
                 override val isConnected: Boolean
                     get() = NotificationReaderService.isConnected
@@ -366,17 +360,7 @@ class NotificationReaderService : NotificationListenerService() {
 
         serviceScope.launch {
             preferences.allowedPackagesFlow.collect { updated ->
-                val previous = allowedPackageSet
                 allowedPackageSet = updated
-                (previous - updated).forEach { popupController.restorePackage(it) }
-                val added = updated - previous
-                if (added.isNotEmpty()) bootstrapPopupSemantics(added)
-                popupController.reconcilePackages(updated)
-            }
-        }
-        serviceScope.launch {
-            preferences.notificationTypePolicyFlow.collect {
-                popupController.reconcilePackages(allowedPackageSet)
             }
         }
         serviceScope.launch { preferences.limitModeFlow.collectLatest { currentMode = it } }
@@ -395,7 +379,6 @@ class NotificationReaderService : NotificationListenerService() {
                     themeRepository.activateTheme("")
                 }
                 handleSemanticThemeChange()
-                popupController.reconcilePackages(allowedPackageSet)
             }
         }
 
@@ -416,7 +399,6 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "ACTION_TEST_WIDGET") {
             val widgetId = intent.getIntExtra("WIDGET_ID", -1)
@@ -435,7 +417,6 @@ class NotificationReaderService : NotificationListenerService() {
                     themeRepository.activateTheme(themeId)
                 }
                 handleSemanticThemeChange()
-                popupController.reconcilePackages(allowedPackageSet)
             }
         } else if (intent?.action == ACTION_PERFORM_MIGRATION) {
             serviceScope.launch(Dispatchers.IO) {
@@ -445,23 +426,10 @@ class NotificationReaderService : NotificationListenerService() {
                     }
                 }
             }
-        } else if (intent?.action == ACTION_VERIFY_POPUP_CONTROL) {
-            serviceScope.launch {
-                popupController.verifyPrivilegedAccess()
-                if (preferences.popupControlEnabledSync()) {
-                    bootstrapPopupSemantics(allowedPackageSet)
-                    popupController.reconcilePackages(allowedPackageSet)
-                }
-            }
-        } else if (intent?.action == ACTION_RECONCILE_POPUP_CONTROL) {
-            serviceScope.launch { popupController.reconcilePackages(allowedPackageSet) }
-        } else if (intent?.action == ACTION_RESTORE_POPUP_CONTROL) {
-            serviceScope.launch { popupController.restoreAllAndDisable(allowedPackageSet) }
         }
         return START_STICKY
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun showMigrationProgress(progress: Int) {
         val title = getString(R.string.migration_title)
         val message = if (progress >= 100) getString(R.string.migration_complete) else getString(R.string.migration_message)
@@ -485,7 +453,7 @@ class NotificationReaderService : NotificationListenerService() {
                 notificationBuilder.setSmallIcon(R.drawable.ic_launcher_foreground)
 
                 val notification = notificationBuilder.build()
-                ShizukuManager.notify(this@NotificationReaderService, bridgeId, notification)
+                postIsland(bridgeId, notification, "migration_update", semanticType = NotificationType.PROGRESS)
             } else {
                 val builder = HyperIslandNotification.Builder(this@NotificationReaderService, "migration", title)
                 builder.setProgressBar(progress, "#007AFF")
@@ -507,12 +475,12 @@ class NotificationReaderService : NotificationListenerService() {
                 val notification = notificationBuilder.build()
                 notification.extras.putString("miui.focus.param", data.jsonParam)
 
-                ShizukuManager.notify(this@NotificationReaderService, bridgeId, notification)
+                postIsland(bridgeId, notification, "migration_update", semanticType = NotificationType.PROGRESS)
             }
 
             if (progress >= 100) {
                 delay(3000)
-                NotificationManagerCompat.from(this@NotificationReaderService).cancel(bridgeId)
+                islandBackend.cancel(bridgeId, "migration_update")
             }
         }
     }
@@ -603,7 +571,7 @@ class NotificationReaderService : NotificationListenerService() {
 
             if (isOurApp) {
                 // A content click removes auto-cancel bridge notifications just like a shade
-                // dismissal. Programmatic cancels (updates and Shizuku workarounds) are ignored.
+                // dismissal. Programmatic replacement cancels are ignored.
                 val wasContentClick = reason == REASON_CLICK
                 if (!wasContentClick && reason != REASON_CANCEL && reason != REASON_CANCEL_ALL) {
                     return
@@ -696,7 +664,7 @@ class NotificationReaderService : NotificationListenerService() {
                             }
                             timeoutJobs.remove(logicalKey)?.cancel()
                             try {
-                                NotificationManagerCompat.from(this@NotificationReaderService).cancel(hyperId)
+                                islandBackend.cancel(hyperId)
                             } catch (_: Exception) {}
                             Log.d(
                                 TAG,
@@ -833,7 +801,7 @@ class NotificationReaderService : NotificationListenerService() {
                     current ?: return@withLock
                     Log.d(TAG, "${type.name} TIMEOUT bridgeId=$bridgeId logicalId=${originalKey.hashCode()}")
                     recordExpiredIsland(current)
-                    NotificationManagerCompat.from(this@NotificationReaderService).cancel(bridgeId)
+                    islandBackend.cancel(bridgeId)
                     cleanupCache(originalKey)
                 }
             }
@@ -932,7 +900,6 @@ class NotificationReaderService : NotificationListenerService() {
     //  STANDARD NOTIFICATION LOGIC
     // =========================================================================
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (!isConnected) {
             isConnected = true
@@ -971,11 +938,6 @@ class NotificationReaderService : NotificationListenerService() {
         modificationType: Int
     ) {
         super.onNotificationChannelModified(pkg, user, channel, modificationType)
-        if (::popupController.isInitialized) {
-            serviceScope.launch {
-                popupController.onChannelModified(pkg, user, channel, modificationType)
-            }
-        }
     }
 
     private fun enqueueSourceNotification(sbn: StatusBarNotification, recovery: Boolean = false) {
@@ -1015,45 +977,9 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
-    private suspend fun bootstrapPopupSemantics(packageNames: Set<String>) {
-        if (!::popupController.isInitialized || packageNames.isEmpty()) return
-        val current = try {
-            activeNotifications?.filter { it.packageName in packageNames }.orEmpty()
-        } catch (_: Exception) {
-            emptyList()
-        }
-        current.forEach { sbn ->
-            val content = resolveNotificationContent(sbn)
-            val title = content.title.ifEmpty { getCachedAppLabel(sbn.packageName) }
-            val rawType = detectNotificationType(sbn)
-            val rule = rulesEngine.match(sbn, title, content.text, themeRepository.activeTheme.value)
-            val directMessagingStyle = sbn.notification.extras
-                .getString(Notification.EXTRA_TEMPLATE)
-                ?.contains("MessagingStyle") == true
-            val semantic = SemanticNotificationResolver.resolve(
-                rawType,
-                rule?.targetLayout,
-                directMessagingStyle,
-                getEffectiveTypes(sbn.packageName)
-            )
-            popupController.observe(
-                sbn.user,
-                sbn.packageName,
-                sbn.notification.channelId,
-                semantic.signature,
-                reconcileImmediately = false
-            )
-        }
-    }
-
     private suspend fun handleSemanticThemeChange() {
         val fingerprint = themeRepository.activeTheme.value?.rules?.hashCode()?.toString() ?: "none"
-        val previous = preferences.popupSemanticRulesFingerprintSync()
-        if (previous != fingerprint) {
-            if (previous != null) {
-                popupController.invalidateSemantics(allowedPackageSet)
-                bootstrapPopupSemantics(allowedPackageSet)
-            }
+        if (preferences.popupSemanticRulesFingerprintSync() != fingerprint) {
             preferences.setPopupSemanticRulesFingerprint(fingerprint)
         }
     }
@@ -1296,7 +1222,6 @@ class NotificationReaderService : NotificationListenerService() {
         )
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private suspend fun processStandardNotification(
         rawSbn: StatusBarNotification,
         sbn: StatusBarNotification,
@@ -1332,18 +1257,6 @@ class NotificationReaderService : NotificationListenerService() {
                 hasDirectMessagingStyle = hasDirectMessagingStyle,
                 effectiveTypes = effectiveTypes
             )
-
-            popupController.observe(
-                user = sbn.user,
-                packageName = sbn.packageName,
-                channelId = sbn.notification.channelId,
-                signature = semanticResult.signature
-            )
-
-            if (!com.d4viddf.hyperbridge.util.isPostNotificationsEnabled(this)) {
-                DiagnosticsStore.record("PERMISSION", "ignored", sbn.packageName, "post-notifications-missing")
-                return
-            }
 
             if (dndActive) {
                 Log.d(TAG, "DND active. Skipping notification ${rawSbn.packageName}")
@@ -1599,37 +1512,21 @@ class NotificationReaderService : NotificationListenerService() {
 
                 builder.setOnlyAlertOnce(decision.onlyAlertOnce)
 
-                val hasPermission = com.d4viddf.hyperbridge.util.XiaomiNotificationHelper.hasFocusPermission(this)
-                if (!hasPermission && com.d4viddf.hyperbridge.util.XiaomiNotificationHelper.isSupportIsland()) {
-                    serviceScope.launch {
-                        preferences.setFeaturedPermissionWarning(true)
-                    }
-                    val intent = Intent(this, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        putExtra("open_troubleshoot", true)
-                    }
-                    val pendingIntent = PendingIntent.getActivity(
-                        this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    builder.addAction(
-                        android.R.drawable.ic_dialog_info,
-                        getString(R.string.troubleshoot_featured_notification),
-                        pendingIntent
-                    )
-                }
-
                 val notification = builder.build()
 
                 if (decision.cancelBeforeNotify) {
                     internalBridgeReplacements.mark(decision.bridgeId, effectiveKey, processingGeneration, System.currentTimeMillis())
-                    NotificationManagerCompat.from(this).cancel(decision.bridgeId)
+                    islandBackend.cancel(decision.bridgeId)
                 }
 
-                if (!decision.onlyAlertOnce) {
-                    ShizukuManager.notify(this, decision.bridgeId, notification)
-                } else {
-                    NotificationManagerCompat.from(this).notify(decision.bridgeId, notification)
-                }
+                if (!postIsland(
+                        decision.bridgeId,
+                        notification,
+                        decision.bridgeId.toString(),
+                        sbn,
+                        type,
+                        processingGeneration,
+                    )) return
 
                 expiredIslands.acceptNewGeneration(
                     sbn.key,
@@ -1739,17 +1636,18 @@ class NotificationReaderService : NotificationListenerService() {
 
             if (decision.cancelBeforeNotify) {
                 internalBridgeReplacements.mark(decision.bridgeId, effectiveKey, processingGeneration, System.currentTimeMillis())
-                NotificationManagerCompat.from(this).cancel(decision.bridgeId)
+                islandBackend.cancel(decision.bridgeId)
             }
 
             Log.i(TAG, " POSTING Island -> ID: ${decision.bridgeId}, Type: $type, FinalTitle: '$effectiveTitle', FinalText: '$effectiveText'")
-            postStandardNotification(
+            val posted = postStandardNotification(
                 sbn = sbn,
                 bridgeId = decision.bridgeId,
                 data = data,
                 shouldAlertOnce = decision.onlyAlertOnce,
                 suppressContentIntent = isSavedScreenRecording
             )
+            if (!posted) return
 
             expiredIslands.acceptNewGeneration(
                 sbn.key,
@@ -1950,7 +1848,7 @@ class NotificationReaderService : NotificationListenerService() {
         if (previous?.type == NotificationType.CALL) {
             activeTranslations[logicalKey]?.let { bridgeId ->
                 try {
-                    NotificationManagerCompat.from(this).cancel(bridgeId)
+                    islandBackend.cancel(bridgeId)
                 } catch (_: Exception) {}
             }
             cleanupCache(logicalKey, preserveCallSession = true)
@@ -2045,14 +1943,13 @@ class NotificationReaderService : NotificationListenerService() {
         )
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun postStandardNotification(
         sbn: StatusBarNotification,
         bridgeId: Int,
         data: HyperIslandData,
         shouldAlertOnce: Boolean,
         suppressContentIntent: Boolean = false
-    ) {
+    ): Boolean {
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))
@@ -2067,22 +1964,7 @@ class NotificationReaderService : NotificationListenerService() {
         builder.addExtras(extras)
         builder.addExtras(data.resources)
 
-        val hasPermission = com.d4viddf.hyperbridge.util.XiaomiNotificationHelper.hasFocusPermission(this)
-        if (!hasPermission) {
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                putExtra("open_troubleshoot", true)
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.setContentIntent(pendingIntent)
-            builder.addAction(
-                android.R.drawable.ic_dialog_info,
-                getString(R.string.troubleshoot_featured_notification),
-                pendingIntent
-            )
-        } else if (!suppressContentIntent) {
+        if (!suppressContentIntent) {
             sbn.notification.contentIntent?.let { originalIntent ->
                 if (detectNotificationType(sbn) == NotificationType.MESSAGE) {
                     val clickIntent = Intent("com.d4viddf.hyperbridge.ISLAND_CLICKED").apply {
@@ -2107,14 +1989,19 @@ class NotificationReaderService : NotificationListenerService() {
         val notification = builder.build()
         notification.extras.putString("miui.focus.param", data.jsonParam)
 
-        if (!shouldAlertOnce) {
-            ShizukuManager.notifyWithCancel(this, bridgeId, notification)
-        } else {
-            NotificationManagerCompat.from(this).notify(bridgeId, notification)
-        }
+        val posted = postIsland(
+            bridgeId,
+            notification,
+            bridgeId.toString(),
+            sbn,
+            detectNotificationType(sbn),
+            sbn.postTime,
+        )
+        if (!posted) return false
 
         activeTranslations[sbn.key] = bridgeId
         reverseTranslations[bridgeId] = sbn.key
+        return true
     }
 
     // =========================================================================
@@ -2153,7 +2040,6 @@ class NotificationReaderService : NotificationListenerService() {
         return true
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private suspend fun processSingleWidget(widgetId: Int, config: WidgetConfig) {
         try {
             val data = widgetTranslator.translate(widgetId)
@@ -2163,7 +2049,6 @@ class NotificationReaderService : NotificationListenerService() {
         } catch (e: Exception) { Log.e(TAG, "Failed widget $widgetId", e) }
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun postWidgetNotification(notificationId: Int, data: HyperIslandData) {
         val builder = NotificationCompat.Builder(this, WIDGET_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -2177,7 +2062,7 @@ class NotificationReaderService : NotificationListenerService() {
 
         val notification = builder.build()
         notification.extras.putString("miui.focus.param", data.jsonParam)
-        ShizukuManager.notify(this, notificationId, notification)
+        postIsland(notificationId, notification, "widget:$notificationId", semanticType = null)
     }
 
     private fun handleLimitReached(newType: NotificationType, newPkg: String) {
@@ -2190,7 +2075,7 @@ class NotificationReaderService : NotificationListenerService() {
                 return
             }
             IslandLimitMode.MOST_RECENT -> {
-                NotificationManagerCompat.from(this).cancel(oldest.value.id)
+                islandBackend.cancel(oldest.value.id)
                 cleanupCache(oldest.key)
             }
             IslandLimitMode.PRIORITY -> {
@@ -2223,7 +2108,7 @@ class NotificationReaderService : NotificationListenerService() {
                     if (newPriority <= lowestPriority) {
                         // The new notification has equal or higher priority than the lowest existing one.
                         // Remove the lowest priority existing notification.
-                        NotificationManagerCompat.from(this).cancel(lowestPriorityIsland.value.id)
+                        islandBackend.cancel(lowestPriorityIsland.value.id)
                         cleanupCache(lowestPriorityIsland.key)
                     } else {
                         // The new notification has lower priority than all existing ones. Do nothing, which will ignore it.
@@ -2285,16 +2170,19 @@ class NotificationReaderService : NotificationListenerService() {
         preferences.isAppAllowedSync(packageName) || allowedPackageSet.contains(packageName)
 
     private var syncJob: Job? = null
+    private var heartbeatJob: Job? = null
 
     override fun onListenerConnected() { 
         Log.i(TAG, "HyperBridge Service Connected")
         isConnected = true
         DiagnosticsStore.setServiceConnected(true)
-        if (::popupController.isInitialized) {
+        HookConfigSync.heartbeat(this, true)
+        islandBackend.cancelAllOwned()
+        if (::legacyPopupMigration.isInitialized) {
             serviceScope.launch {
-                popupController.verifyPrivilegedAccess()
-                bootstrapPopupSemantics(allowedPackageSet)
-                popupController.reconcilePackages(allowedPackageSet)
+                // One bounded, idempotent upgrade migration: restore every channel
+                // whose importance was previously changed by HyperBridge.
+                legacyPopupMigration.restoreAll()
             }
         }
         syncNotifications(refresh = true)
@@ -2316,7 +2204,7 @@ class NotificationReaderService : NotificationListenerService() {
         Log.i(TAG, "HyperBridge Service Disconnected")
         isConnected = false
         DiagnosticsStore.setServiceConnected(false)
-        PopupControlRuntime.disconnected()
+        HookConfigSync.markStopped(this)
     }
 
     private fun syncNotifications(refresh: Boolean = false) {
@@ -2388,7 +2276,7 @@ class NotificationReaderService : NotificationListenerService() {
                     val hyperId = activeTranslations[key]
                     if (hyperId != null) {
                         try {
-                            NotificationManagerCompat.from(this@NotificationReaderService).cancel(hyperId)
+                            islandBackend.cancel(hyperId)
                         } catch (_: Exception) {}
                     }
                     cleanupCache(key)
@@ -2411,7 +2299,7 @@ class NotificationReaderService : NotificationListenerService() {
                     if (System.currentTimeMillis() - sbn.postTime < 5000) continue
                     Log.d(TAG, "Sync: Reaping orphan bridge notification $id")
                     try {
-                        NotificationManagerCompat.from(this@NotificationReaderService).cancel(id)
+                        islandBackend.cancel(id)
                     } catch (_: Exception) {}
                 }
 
@@ -2438,15 +2326,39 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
+    private fun postIsland(
+        id: Int,
+        notification: Notification,
+        logicalToken: String = id.toString(),
+        source: StatusBarNotification? = null,
+        semanticType: NotificationType? = null,
+        generation: Long = source?.postTime ?: 0L,
+    ): Boolean {
+        return islandBackend.post(
+            id = id,
+            notification = notification,
+            metadata = IslandMetadata(
+                logicalToken = logicalToken,
+                sourceKey = source?.key ?: notification.extras.getString(EXTRA_ORIGINAL_KEY),
+                sourcePackage = source?.packageName,
+                sourceChannel = source?.notification?.channelId,
+                semanticType = semanticType?.name,
+                generation = generation,
+            ),
+        ).isSuccess
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         isConnected = false
         DiagnosticsStore.setServiceConnected(false)
+        HookConfigSync.markStopped(this)
         if (::vpnIslandController.isInitialized) vpnIslandController.stop()
         unregisterReceiver(systemReceiver)
         unregisterReceiver(islandClickReceiver)
         unregisterReceiver(packageLifecycleReceiver)
         syncJob?.cancel()
+        heartbeatJob?.cancel()
         callSessionTracker.clear()
         screenRecordingSessionTracker.clear()
         messageFamilyTracker.clear()

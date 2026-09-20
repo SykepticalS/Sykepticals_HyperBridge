@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
-import android.provider.Settings
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.data.db.AppDatabase
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
@@ -15,7 +14,7 @@ import com.d4viddf.hyperbridge.service.NotificationReaderService
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsState
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsStore
 import kotlinx.coroutines.flow.first
-import rikka.shizuku.Shizuku
+import com.d4viddf.hyperbridge.xposed.runtime.EnvironmentRuntime
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.text.SimpleDateFormat
@@ -40,11 +39,11 @@ data class PermissionDiagnosticInfo(
     val restrictedSettingsAllowed: Boolean,
     val notificationListenerGranted: Boolean,
     val postNotificationsGranted: Boolean,
-    val overlayPermissionGranted: Boolean,
     val batteryOptimizationIgnored: Boolean,
-    val xiaomiFocusGranted: Boolean,
-    val shizukuRunning: Boolean,
-    val shizukuPermissionGranted: Boolean
+    val focusBackendReady: Boolean,
+    val rootAvailable: Boolean,
+    val lsposedAvailable: Boolean,
+    val systemUiHookAlive: Boolean
 )
 
 data class ThemeDiagnosticInfo(
@@ -105,32 +104,20 @@ object BugReportCollector {
         val restrictedAllowed = isRestrictedSettingsAllowed(context)
         val listenerGranted = isNotificationServiceEnabled(context)
         val postGranted = isPostNotificationsEnabled(context)
-        val overlayGranted = Settings.canDrawOverlays(context)
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val batteryIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) == true
-        val focusGranted = XiaomiNotificationHelper.hasFocusPermission(context)
 
-        var shizukuRunning = false
-        var shizukuGranted = false
-        try {
-            shizukuRunning = Shizuku.pingBinder()
-            if (shizukuRunning) {
-                shizukuGranted = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-            }
-        } catch (_: Throwable) {
-            shizukuRunning = false
-            shizukuGranted = false
-        }
+        val environment = EnvironmentRuntime.snapshot(context)
 
         return PermissionDiagnosticInfo(
             restrictedSettingsAllowed = restrictedAllowed,
             notificationListenerGranted = listenerGranted,
             postNotificationsGranted = postGranted,
-            overlayPermissionGranted = overlayGranted,
             batteryOptimizationIgnored = batteryIgnored,
-            xiaomiFocusGranted = focusGranted,
-            shizukuRunning = shizukuRunning,
-            shizukuPermissionGranted = shizukuGranted
+            focusBackendReady = environment.focusCompatible,
+            rootAvailable = environment.rootAvailable,
+            lsposedAvailable = environment.libxposedServiceAvailable,
+            systemUiHookAlive = environment.systemUiHookAlive
         )
     }
 
@@ -302,15 +289,11 @@ object BugReportCollector {
             sb.append("- **Restricted Settings (Android 13+):** ${if (permissions.restrictedSettingsAllowed) "Allowed" else "RESTRICTED (Blocked by Android)"}\n")
             sb.append("- **Notification Listener:** ${if (permissions.notificationListenerGranted) "Granted" else "Denied"}\n")
             sb.append("- **Post Notifications:** ${if (permissions.postNotificationsGranted) "Granted" else "Denied"}\n")
-            sb.append("- **Draw Over Other Apps (Overlay):** ${if (permissions.overlayPermissionGranted) "Granted" else "Denied"}\n")
             sb.append("- **Battery Optimization:** ${if (permissions.batteryOptimizationIgnored) "Unrestricted" else "Optimized (Restricted)"}\n")
-            sb.append("- **Xiaomi Focus Notifications:** ${if (permissions.xiaomiFocusGranted) "Granted" else "Denied / Unsupported"}\n")
-            val shizukuStatus = when {
-                !permissions.shizukuRunning -> "Not Running"
-                permissions.shizukuPermissionGranted -> "Running (Permission Granted)"
-                else -> "Running (Permission Denied)"
-            }
-            sb.append("- **Shizuku Service:** $shizukuStatus\n\n")
+            sb.append("- **Xiaomi Focus hook backend:** ${if (permissions.focusBackendReady) "Ready" else "Unavailable"}\n")
+            sb.append("- **Root:** ${if (permissions.rootAvailable) "Available" else "Unavailable"}\n")
+            sb.append("- **LSPosed Service:** ${if (permissions.lsposedAvailable) "Available" else "Unavailable"}\n")
+            sb.append("- **SystemUI Hook:** ${if (permissions.systemUiHookAlive) "Active" else "Inactive"}\n\n")
         }
 
         // Theme
@@ -435,12 +418,11 @@ object BugReportCollector {
             diagSummary.append("\n\n**Permissions & System Health:**\n")
             diagSummary.append("- Restricted Settings (Android 13+): ${if (permissionsInfo.restrictedSettingsAllowed) "Allowed" else "RESTRICTED (Blocked)"}\n")
             diagSummary.append("- Notification Listener: ${if (permissionsInfo.notificationListenerGranted) "Granted" else "Denied"}\n")
-            diagSummary.append("- Overlay: ${if (permissionsInfo.overlayPermissionGranted) "Granted" else "Denied"}\n")
             diagSummary.append("- Battery Unrestricted: ${if (permissionsInfo.batteryOptimizationIgnored) "Yes" else "No"}\n")
-            diagSummary.append("- Notification Focus: ${if (permissionsInfo.xiaomiFocusGranted) "Granted" else "Denied"}\n")
-            if (permissionsInfo.shizukuRunning) {
-                diagSummary.append("- Shizuku: Running (${if (permissionsInfo.shizukuPermissionGranted) "Granted" else "Denied"})\n")
-            }
+            diagSummary.append("- Focus hook backend: ${if (permissionsInfo.focusBackendReady) "Ready" else "Unavailable"}\n")
+            diagSummary.append("- Root: ${if (permissionsInfo.rootAvailable) "Available" else "Unavailable"}\n")
+            diagSummary.append("- LSPosed: ${if (permissionsInfo.lsposedAvailable) "Available" else "Unavailable"}\n")
+            diagSummary.append("- SystemUI Hook: ${if (permissionsInfo.systemUiHookAlive) "Active" else "Inactive"}\n")
         }
 
         if (themeInfo != null) {

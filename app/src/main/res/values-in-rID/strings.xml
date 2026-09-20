@@ -175,14 +175,6 @@
     <string name="req_xiaomi">Perangkat Xiaomi/Redmi/Poco diperlukan</string>
     <string name="warning_cn_rom_title">ROM China Terdeteksi</string>
     <string name="warning_cn_rom_desc">Perangkat Anda tampaknya menjalankan firmware China. Xiaomi memodifikasi internal notifikasi secara signifikan pada ROM CN. Fitur mungkin tidak stabil atau tidak berfungsi sama sekali.</string>
-    <string name="shizuku_workaround_title">Aktifkan Solusi Shizuku</string>
-    <string name="shizuku_enable_workaround">Aktifkan Solusi</string>
-    <string name="shizuku_workaround_desc">Jika Anda menggunakan ROM CN, Anda harus mengaktifkan Solusi Shizuku agar pemberitahuan dapat berfungsi dengan benar.</string>
-    <string name="shizuku_status_running">Shizuku berjalan</string>
-    <string name="shizuku_permission_granted">Izin Diberikan</string>
-    <string name="shizuku_permission_denied">Izin Ditolak</string>
-    <string name="shizuku_request_permission">Berikan Izin Shizuku</string>
-    <string name="shizuku_not_installed">Aplikasi Shizuku belum terpasang atau tidak berjalan. Silakan pasang dan jalankan Shizuku terlebih dahulu.</string>
     <string name="system_version">Versi Sistem</string>
     <string name="call_incoming">Panggilan Masuk</string>
     <string name="call_ongoing">Panggilan Aktif</string>
@@ -533,8 +525,6 @@
     <string name="featured_notifications_open_settings">Buka Pengatran Sistem</string>
     <string name="featured_notifications_troubleshoot_title">Mengapa ini bukan island?</string>
     <string name="featured_notifications_troubleshoot_desc">Perangkat Xiaomi Anda telah mencegat pemberitahuan tersebut, tetapi gagal menampilkannya sebagai island unggulan karena izinnya dinonaktifkan di pengaturan sistem Anda.\n\nUntuk memperbaikinya:\n1. Ketuk \"Buka Pengaturan Sistem\"\n2. Gulir ke bawah ke \"Pemberitahuan Unggulan\" (atau yang serupa)\n3. Aktifkan untuk Hyper Bridge.</string>
-    <string name="featured_notifications_shizuku_alternative">Alternatif: Penggantian Shizuku</string>
-    <string name="featured_notifications_shizuku_desc">Jika sistem Anda tidak menampilkan pengaturan tersebut atau pengaturan tersebut dibatasi, Anda dapat melewati daftar putih Xiaomi sepenuhnya dengan mengatur Shizuku. Hyper Bridge akan menggunakan Shizuku untuk mengirimkan islands secara langsung.</string>
     <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Memindahkan basis data ke penyimpanan yang Dilindungi Perangkat…</string>
     <string name="migration_complete">Pembaruan Sukses</string>

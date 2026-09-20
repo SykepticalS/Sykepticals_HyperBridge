@@ -175,14 +175,6 @@
     <string name="req_xiaomi">Appareil Xiaomi/Redmi/Poco requis</string>
     <string name="warning_cn_rom_title">Rom chinoise dÃ©tectÃ©e</string>
     <string name="warning_cn_rom_desc">Votre appareil semble exÃ©cuter un firmware chinois. Xiaomi modifie considÃ©rablement le systÃ¨me de notification interne sur les ROMs CN. Les fonctionnalitÃ©s peuvent Ãªtre instables ou ne pas fonctionner du tout.</string>
-    <string name="shizuku_workaround_title">Activer la solution Shizuku</string>
-    <string name="shizuku_enable_workaround">Activer le contournement</string>
-    <string name="shizuku_workaround_desc">Si vous Ãªtes sur une ROM CN, vous devez activer la fonction Shizuku pour que les notifications soient activÃ©es correctement.</string>
-    <string name="shizuku_status_running">Shizuku en cours d\'exÃ©cution</string>
-    <string name="shizuku_permission_granted">Permission accordÃ©e</string>
-    <string name="shizuku_permission_denied">Permission refusÃ©e</string>
-    <string name="shizuku_request_permission">Accorder la permission Ã  Shizuku</string>
-    <string name="shizuku_not_installed">L\'application Shizuku n\'est pas installÃ©e ou en cours d\'exÃ©cution. Veuillez installer et dÃ©marrer Shizuku en premier.</string>
     <string name="system_version">Version systÃ¨me</string>
     <string name="call_incoming">Appel entrant</string>
     <string name="call_ongoing">Appel en cours</string>
@@ -537,8 +529,6 @@
     <string name="featured_notifications_open_settings">Ouvrir les paramÃ¨tres systÃ¨me</string>
     <string name="featured_notifications_troubleshoot_title">Pourquoi ce n\'est pas une bulle de notification ?</string>
     <string name="featured_notifications_troubleshoot_desc">Votre appareil Xiaomi a intercepté la notification, mais n\'a pas réussi à l\'afficher en tant que notification recommandée car la permission est désactivée dans vos paramètres système.\n\nPour résoudre ceci:\n1. Appuyez sur \"Ouvrir les paramètres du système\"\n2. Faites défiler vers le bas jusqu\'à \"Notifications recommandées\" (ou similaires)\n3. Activez-le pour Hyper Bridge.</string>
-    <string name="featured_notifications_shizuku_alternative">Alternative : remplacement par Shizuku</string>
-    <string name="featured_notifications_shizuku_desc">Si votre système n\'affiche pas le paramètre ou s\'il est restreint, vous pouvez contourner entièrement la liste blanche de Xiaomi en configurant Shizuku. Hyper Bridge utilisera Shizuku pour afficher directement les bulles de notifications.</string>
     <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migration de la base de données dans l\'espace protégé de l\'appareil…</string>
     <string name="migration_complete">Mise à jour terminée</string>

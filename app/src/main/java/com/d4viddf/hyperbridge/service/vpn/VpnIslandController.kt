@@ -1,18 +1,13 @@
 package com.d4viddf.hyperbridge.service.vpn
 
-import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.service.notification.StatusBarNotification
-import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
@@ -20,7 +15,8 @@ import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.receiver.VpnActionReceiver
 import com.d4viddf.hyperbridge.service.BridgeNotificationChannels
 import com.d4viddf.hyperbridge.service.translators.VpnTranslator
-import com.d4viddf.hyperbridge.util.ShizukuManager
+import com.d4viddf.hyperbridge.island.backend.IslandMetadata
+import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,6 +50,7 @@ class VpnIslandController(
     private val translator = VpnTranslator(context, themeRepository)
     private val timerOriginTracker = VpnTimerOriginTracker()
     private val mutex = Mutex()
+    private val islandBackend = SystemUiIslandBackend.get(context)
     private val sourceEvidence = ConcurrentHashMap<String, SourceEvidence>()
     private val controlHandler: (String) -> Unit = { logicalId -> scope.launch { disconnect(logicalId) } }
 
@@ -67,7 +64,6 @@ class VpnIslandController(
     private var minorRenderJob: Job? = null
     private var lastRenderAtMillis = 0L
 
-    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
     fun start() {
         VpnControlRegistry.register(controlHandler)
         scope.launch {
@@ -257,11 +253,6 @@ class VpnIslandController(
     }
 
     private suspend fun renderNow() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPosted = false
-            setReportedActive(false)
-            return
-        }
         val snapshot = mutex.withLock { session }
         if (snapshot == null) {
             postedGeneration = null
@@ -336,8 +327,21 @@ class VpnIslandController(
             }
             .build()
         notification.extras.putString("miui.focus.param", data.jsonParam)
-        if (notificationPosted) NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
-        else ShizukuManager.notifyInPlace(context, NOTIFICATION_ID, notification)
+        val posted = islandBackend.post(
+            NOTIFICATION_ID,
+            notification,
+            IslandMetadata(
+                logicalToken = "vpn",
+                sourcePackage = snapshot.provider?.packageName,
+                semanticType = "VPN",
+                generation = snapshot.generation,
+            ),
+        ).isSuccess
+        if (!posted) {
+            notificationPosted = false
+            setReportedActive(false)
+            return
+        }
         postedGeneration = snapshot.generation
         notificationPosted = true
         setReportedActive(true)
@@ -394,7 +398,7 @@ class VpnIslandController(
     }
 
     private fun cancelIsland() {
-        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+        islandBackend.cancel(NOTIFICATION_ID, "vpn")
         setReportedActive(false)
     }
 

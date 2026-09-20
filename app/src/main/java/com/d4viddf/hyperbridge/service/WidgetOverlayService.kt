@@ -1,14 +1,10 @@
 package com.d4viddf.hyperbridge.service
 
-import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
-import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import com.d4viddf.hyperbridge.MainActivity
 import com.d4viddf.hyperbridge.R
@@ -42,26 +38,21 @@ class WidgetOverlayService : Service() {
 
     private lateinit var preferences: AppPreferences
     private lateinit var widgetTranslator: WidgetTranslator
-    private lateinit var notificationManager: NotificationManager
+    private val islandBackend by lazy { com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend.get(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Widget Overlay Service Created")
 
         preferences = AppPreferences(applicationContext)
         widgetTranslator = WidgetTranslator(applicationContext)
-        notificationManager = getSystemService(NotificationManager::class.java)
-
-        createWidgetChannel()
         WidgetManager.init(applicationContext)
 
         startMonitoringWidgets()
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TEST_WIDGET -> {
@@ -79,7 +70,7 @@ class WidgetOverlayService : Service() {
                 serviceScope.launch(Dispatchers.IO) {
                     val savedIds = preferences.savedWidgetIdsFlow.first()
                     savedIds.forEach { id ->
-                        notificationManager.cancel(9000 + id)
+                        islandBackend.cancel(9000 + id, "widget:${9000 + id}")
                         widgetUpdateDebouncer.remove(id)
                     }
                 }
@@ -88,7 +79,7 @@ class WidgetOverlayService : Service() {
                 // NEW: Instantly kill a specific widget
                 val widgetId = intent.getIntExtra("WIDGET_ID", -1)
                 if (widgetId != -1) {
-                    notificationManager.cancel(9000 + widgetId)
+                    islandBackend.cancel(9000 + widgetId, "widget:${9000 + widgetId}")
                     widgetUpdateDebouncer.remove(widgetId) // Clean up memory
                 }
             }
@@ -99,7 +90,6 @@ class WidgetOverlayService : Service() {
         return START_STICKY
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun startMonitoringWidgets() {
         serviceScope.launch {
             WidgetManager.widgetUpdates.collect { updatedId ->
@@ -138,7 +128,6 @@ class WidgetOverlayService : Service() {
         return true
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private suspend fun processSingleWidget(widgetId: Int, config: WidgetConfig, forceUpdate: Boolean) {
         try {
             // Translate view to Island Data
@@ -151,7 +140,6 @@ class WidgetOverlayService : Service() {
         }
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun postWidgetNotification(notificationId: Int, data: HyperIslandData) {
         val builder = NotificationCompat.Builder(this, WIDGET_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -172,21 +160,14 @@ class WidgetOverlayService : Service() {
         // Pass JSON param for the Island UI
         notification.extras.putString("miui.focus.param", data.jsonParam)
 
-        com.d4viddf.hyperbridge.util.ShizukuManager.notify(this, notificationId, notification)
-    }
-
-    private fun createWidgetChannel() {
-        val channel = NotificationChannel(
-            WIDGET_CHANNEL_ID,
-            "Hyper Bridge Widgets", // Separate Name in System Settings
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Overlay notifications for Widgets"
-            setSound(null, null)
-            enableVibration(false)
-            setShowBadge(false)
-        }
-        notificationManager.createNotificationChannel(channel)
+        islandBackend.post(
+            notificationId,
+            notification,
+            com.d4viddf.hyperbridge.island.backend.IslandMetadata(
+                logicalToken = "widget:$notificationId",
+                semanticType = "WIDGET",
+            ),
+        )
     }
 
     override fun onDestroy() {

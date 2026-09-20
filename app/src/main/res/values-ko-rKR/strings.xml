@@ -175,14 +175,6 @@
     <string name="req_xiaomi">Xiaomi/Redmi/Poco ê¸°ê¸° í•„ìš”</string>
     <string name="warning_cn_rom_title">ì¤‘êµ­(CN) ë¡¬ ê°ì§€ë¨</string>
     <string name="warning_cn_rom_desc">ê¸°ê¸°ê°€ ì¤‘êµ­ ë¡¬ì„ ì‚¬ìš© ì¤‘ìž…ë‹ˆë‹¤. XiaomiëŠ” ì´ ë²„ì „ì—ì„œ ì•Œë¦¼ êµ¬ì¡°ë¥¼ í¬ê²Œ ìˆ˜ì •í•˜ë¯€ë¡œ ê¸°ëŠ¥ì´ ë¶ˆì•ˆì •í•˜ê±°ë‚˜ ìž‘ë™í•˜ì§€ ì•Šì„ ìˆ˜ ìžˆìŠµë‹ˆë‹¤.</string>
-    <string name="shizuku_workaround_title">Shizuku를 통한 우회책 활성화</string>
-    <string name="shizuku_enable_workaround">우회책 활성화</string>
-    <string name="shizuku_workaround_desc">중국(CN) 롬을 사용하는 경우 알림이 올바르게 실행되려면 Shizuku 우회 기능을 활성화해야 합니다.</string>
-    <string name="shizuku_status_running">Shizuku 실행 중</string>
-    <string name="shizuku_permission_granted">권한 허용됨</string>
-    <string name="shizuku_permission_denied">권한 거부됨</string>
-    <string name="shizuku_request_permission">Shizuku 권한 부여</string>
-    <string name="shizuku_not_installed">Shizuku 앱이 설치되지 않았거나 실행 중이지 않습니다. 먼저 Shizuku를 설치하고 실행해 주세요.</string>
     <string name="system_version">ì‹œìŠ¤í…œ ë²„ì „</string>
     <string name="call_incoming">ìˆ˜ì‹  ì „í™”</string>
     <string name="call_ongoing">í†µí™” ì¤‘</string>
@@ -533,8 +525,6 @@
     <string name="featured_notifications_open_settings">시스템 설정 열기</string>
     <string name="featured_notifications_troubleshoot_title">왜 Island로 표시되지 않나요?</string>
     <string name="featured_notifications_troubleshoot_desc">Xiaomi 기기가 알림을 수신했으나 시스템 설정에서 권한이 비활성화되어 있어 Island로 표시하지 못했습니다.\n\n해결 방법:\n1. \"시스템 설정 열기\"를 누릅니다.\n2. 아래로 스크롤하여 \"주요 알림(Featured Notifications)\" (또는 유사 항목)을 찾습니다.\n3. Hyper Bridge에 대한 권한을 활성화합니다.</string>
-    <string name="featured_notifications_shizuku_alternative">대안: Shizuku 우회</string>
-    <string name="featured_notifications_shizuku_desc">시스템에 해당 설정이 없거나 제한된 경우, Shizuku를 설정하여 Xiaomi 화이트리스트를 완전히 우회할 수 있습니다. Hyper Bridge는 Shizuku를 사용하여 Island를 직접 게시합니다.</string>
     <string name="migration_title">Hyper Bridge 업데이트</string>
     <string name="migration_message">기기 보호 저장소로 데이터베이스를 마이그레이션하는 중…</string>
     <string name="migration_complete">업데이트 완료</string>

@@ -220,14 +220,6 @@ Hyper Bridge</string>
     <string name="warning_cn_rom_title">تم اكتشاف روم صيني</string>
     <string name="warning_cn_rom_desc">يبدو أن جهازك يعمل بإصدار صيني (CN ROM). تعدل شاومي نظام الإشعارات الداخلي بشكل كبير في النسخ الصينية، لذا قد تكون الميزات غير مستقرة أو لا تعمل.</string>
 
-    <string name="shizuku_workaround_title">تفعيل حل Shizuku البديل</string>
-    <string name="shizuku_enable_workaround">تفعيل الحل البديل</string>
-    <string name="shizuku_workaround_desc">إذا كنت تستخدم روماً صينياً، يجب تفعيل حل Shizuku لتعمل الإشعارات بشكل سليم.</string>
-    <string name="shizuku_status_running">Shizuku قيد التشغيل</string>
-    <string name="shizuku_permission_granted">تم منح الإذن</string>
-    <string name="shizuku_permission_denied">تم رفض الإذن</string>
-    <string name="shizuku_request_permission">منح إذن Shizuku</string>
-    <string name="shizuku_not_installed">تطبيق Shizuku غير مثبت أو متوقف. يرجى تثبيت وتشغيل Shizuku أولاً.</string>
 
     <string name="system_version">إصدار النظام</string>
 
@@ -643,8 +635,6 @@ Hyper Bridge</string>
 1. انقر على "فتح إعدادات النظام"
 2. مرر لأسفل إلى "الإشعارات المميزة" (أو ما يماثلها)
 3. قم بتفعيل الإذن لتطبيق Hyper Bridge.</string>
-    <string name="featured_notifications_shizuku_alternative">بديل: التجاوز عبر Shizuku</string>
-    <string name="featured_notifications_shizuku_desc">إذا كان هاتفك لا يعرض الإعداد أو كان مقيداً، يمكنك تجاوز قائمة شاومي البيضاء تماماً عبر إعداد Shizuku. سيستخدم Hyper Bridge تطبيق Shizuku لإظهار الجزر مباشرة.</string>
 
     <string name="migration_title">تحديث Hyper Bridge</string>
     <string name="migration_message">جاري ترحيل قاعدة البيانات إلى وحدة التخزين المحمية للجهاز…</string>
