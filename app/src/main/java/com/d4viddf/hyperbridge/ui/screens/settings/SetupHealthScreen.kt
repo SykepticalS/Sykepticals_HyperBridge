@@ -78,11 +78,10 @@ fun SetupHealthScreen(
             HealthRow("LSPosed service / API", health.moduleApiCompatible)
             HealthRow("SystemUI scope", health.systemUiScope)
             HealthRow("XMSF scope", health.xmsfScope)
-            HealthRow("SystemUI hook", health.systemUiHookAlive)
+            HealthRow("SystemUI notification hook", health.notificationIngressReady)
+            HealthRow("Island backend", health.islandDispatcherReady)
             HealthRow("XMSF Focus hook configured", health.xmsfHookConfigured)
             HealthRow("Focus backend", health.focusCompatible)
-            HealthRow("Notification listener provisioned", health.notificationListenerProvisioned)
-            HealthRow("Notification engine connected", health.notificationEngineReady)
             HealthRow("Backend protocol", health.backendProtocolCompatible)
 
             message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

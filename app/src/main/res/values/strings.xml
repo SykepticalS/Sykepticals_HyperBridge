@@ -72,7 +72,7 @@
 
     <string name="app_health_desc">Ensure all checks are green for the app to work correctly in the background.</string>
     <string name="req_permissions">Required Permissions</string>
-    <string name="notif_access">Notification Access</string>
+    <string name="notif_access">SystemUI notification hook</string>
     <string name="notif_access_desc">Required to read app events</string>
     <string name="device_optimization">Device Optimization</string>
     <string name="xiaomi_autostart">Xiaomi Autostart</string>
@@ -132,6 +132,8 @@
     <string name="configure_order">Configure apps order</string>
 
     <string name="global_settings">Global Settings</string>
+    <string name="suppress_source_floating">Suppress source floating notification</string>
+    <string name="suppress_source_floating_desc">Hide the original heads-up only after HyperBridge successfully posts its Island.</string>
     <string name="island_appearance">Island Appearance</string>
     <string name="setting_float">Heads-up Popup</string>
     <string name="setting_float_desc">Show the full notification banner briefly before minimizing to the Island.</string>
@@ -685,7 +687,7 @@
     <string name="bug_report_include_device">Device &amp; OS Info</string>
     <string name="bug_report_include_device_desc">Model, HyperOS/MIUI version, Android version, ROM region</string>
     <string name="bug_report_include_permissions">System Permissions &amp; Restricted Settings</string>
-    <string name="bug_report_include_permissions_desc">Notification listener, overlay, battery, and Android 13+ restricted settings</string>
+    <string name="bug_report_include_permissions_desc">Root, LSPosed scopes, SystemUI ingress, island backend, and Focus hooks</string>
     <string name="bug_report_include_theme">Theme Configuration</string>
     <string name="bug_report_include_theme_desc">Active theme, engine mode, custom theme metadata</string>
     <string name="bug_report_include_widgets">Widget Configuration</string>
@@ -862,7 +864,7 @@
     <string name="popup_control_status_ready">Ready</string>
     <string name="popup_control_status_notification_access">Notification access is required</string>
     <string name="popup_control_status_association">Connect a device once to continue</string>
-    <string name="popup_control_status_listener">Waiting for the notification listener</string>
+    <string name="popup_control_status_listener">Waiting for the SystemUI notification hook</string>
     <string name="popup_control_status_verifying">Verifying channel access</string>
     <string name="popup_control_status_unsupported">Unavailable on this device; HyperBridge will continue without automatic popup control</string>
     <string name="popup_control_status_error">Setup needs repair</string>

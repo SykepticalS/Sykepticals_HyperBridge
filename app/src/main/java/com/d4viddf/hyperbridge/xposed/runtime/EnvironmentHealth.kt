@@ -3,9 +3,7 @@ package com.d4viddf.hyperbridge.xposed.runtime
 import android.content.Context
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
-import com.d4viddf.hyperbridge.service.NotificationReaderService
 import com.d4viddf.hyperbridge.util.DeviceUtils
-import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -19,13 +17,13 @@ data class EnvironmentHealth(
     val systemUiHookAlive: Boolean,
     val xmsfHookConfigured: Boolean,
     val focusCompatible: Boolean,
-    val notificationListenerProvisioned: Boolean,
-    val notificationEngineReady: Boolean,
+    val notificationIngressReady: Boolean,
+    val islandDispatcherReady: Boolean,
     val backendProtocolCompatible: Boolean,
 ) {
     val privilegedReady: Boolean get() = supportedDevice && rootAvailable && moduleApiCompatible &&
         systemUiScope && xmsfScope && systemUiHookAlive && xmsfHookConfigured && focusCompatible &&
-        notificationListenerProvisioned && notificationEngineReady && backendProtocolCompatible
+        notificationIngressReady && islandDispatcherReady && backendProtocolCompatible
 }
 
 object EnvironmentRuntime {
@@ -46,8 +44,8 @@ object EnvironmentRuntime {
             systemUiHookAlive = backend.systemUiHookAlive,
             xmsfHookConfigured = backend.xmsfHookAlive,
             focusCompatible = backend.capabilities and IslandProtocol.CAP_FOCUS_BYPASS != 0,
-            notificationListenerProvisioned = isNotificationServiceEnabled(context),
-            notificationEngineReady = NotificationReaderService.isConnected,
+            notificationIngressReady = backend.capabilities and IslandProtocol.CAP_NOTIFICATION_INGRESS != 0,
+            islandDispatcherReady = backend.capabilities and IslandProtocol.CAP_POST != 0,
             backendProtocolCompatible = IslandProtocol.compatible(backend.protocolVersion ?: -1),
         )
     }

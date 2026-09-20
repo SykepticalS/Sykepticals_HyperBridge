@@ -14,6 +14,8 @@ object IslandProtocol {
     const val ACTION_PING = "$APP_PACKAGE.action.PING_BACKEND"
     const val ACTION_PONG = "$APP_PACKAGE.action.BACKEND_PONG"
     const val ACTION_PING_XMSF = "$APP_PACKAGE.action.PING_XMSF"
+    const val ACTION_RELOAD_ENGINE = "$APP_PACKAGE.action.RELOAD_ENGINE"
+    const val ACTION_CANCEL_SOURCE = "$APP_PACKAGE.action.CANCEL_SOURCE"
 
     const val EXTRA_PROTOCOL = "hyperbridge.protocol"
     const val EXTRA_NOTIFICATION = "hyperbridge.notification"
@@ -28,12 +30,19 @@ object IslandProtocol {
     const val EXTRA_NONCE = "hyperbridge.nonce"
     const val EXTRA_CAPABILITIES = "hyperbridge.capabilities"
     const val EXTRA_HOOK_PACKAGE = "hyperbridge.hook_package"
+    const val EXTRA_SUPPRESS_SOURCE_HEADS_UP = "hyperbridge.suppress_source_heads_up"
+    const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"
+
+    const val RESULT_POSTED = 1
+    const val RESULT_REJECTED = 2
 
     const val CAP_POST = 1
     const val CAP_TAGGED_CANCEL = 1 shl 1
     const val CAP_FOCUS_BYPASS = 1 shl 2
     const val CAP_HEADS_UP = 1 shl 3
-    const val REQUIRED_CAPABILITIES = CAP_POST or CAP_TAGGED_CANCEL or CAP_FOCUS_BYPASS or CAP_HEADS_UP
+    const val CAP_NOTIFICATION_INGRESS = 1 shl 4
+    const val REQUIRED_CAPABILITIES = CAP_POST or CAP_TAGGED_CANCEL or CAP_FOCUS_BYPASS or
+        CAP_HEADS_UP or CAP_NOTIFICATION_INGRESS
 
     const val MAX_PARCEL_BYTES = 700 * 1024
     const val HEARTBEAT_LEASE_MS = 45_000L

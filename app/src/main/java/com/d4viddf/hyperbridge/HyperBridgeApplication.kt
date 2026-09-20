@@ -43,10 +43,6 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
         scope.launch {
             val rootAvailable = RootShellService.isAvailable()
             EnvironmentRuntime.setRootAvailable(rootAvailable)
-            if (rootAvailable) {
-                val result = RootShellService.provisionNotificationListener(this@HyperBridgeApplication)
-                if (!result.success) Log.e(TAG, "Notification listener provisioning failed: ${result.stderr}")
-            }
         }
     }
 

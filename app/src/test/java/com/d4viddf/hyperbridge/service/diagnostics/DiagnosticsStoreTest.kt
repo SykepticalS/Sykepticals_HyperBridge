@@ -19,18 +19,11 @@ class DiagnosticsStoreTest {
     }
 
     @Test
-    fun serviceConnectedAndActiveIslandsUpdateState() {
+    fun activeIslandsUpdateState() {
         DiagnosticsStore.resetForTest()
-        assertFalse(DiagnosticsStore.state.value.serviceConnected)
         assertEquals(0, DiagnosticsStore.state.value.activeIslands)
-
-        DiagnosticsStore.setServiceConnected(true)
-        org.junit.Assert.assertTrue(DiagnosticsStore.state.value.serviceConnected)
 
         DiagnosticsStore.setActiveIslands(3)
         assertEquals(3, DiagnosticsStore.state.value.activeIslands)
-
-        DiagnosticsStore.setServiceConnected(false)
-        assertFalse(DiagnosticsStore.state.value.serviceConnected)
     }
 }

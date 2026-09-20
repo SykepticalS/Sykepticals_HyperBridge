@@ -5,6 +5,7 @@ import com.d4viddf.hyperbridge.xposed.hooks.FocusWhitelistHook
 import com.d4viddf.hyperbridge.xposed.hooks.HeadsUpSuppressionHook
 import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
 import com.d4viddf.hyperbridge.xposed.hooks.SystemUiBootstrapHook
+import com.d4viddf.hyperbridge.xposed.hooks.SystemUiNotificationIngressHook
 import com.d4viddf.hyperbridge.xposed.hooks.XmsfFocusAuthHook
 import com.d4viddf.hyperbridge.xposed.hooks.XmsfHandshakeHook
 import io.github.libxposed.api.XposedModule
@@ -16,6 +17,7 @@ class HyperBridgeModule : XposedModule() {
         when (param.packageName) {
             IslandProtocol.SYSTEM_UI_PACKAGE -> {
                 SystemUiBootstrapHook.install(this, param)
+                SystemUiNotificationIngressHook.install(this, param)
                 FocusWhitelistHook.install(this, param)
                 HeadsUpSuppressionHook.install(this, param)
                 OuterGlowHook.install(this, param)

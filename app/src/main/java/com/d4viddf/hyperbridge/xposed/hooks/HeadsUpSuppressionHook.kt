@@ -3,6 +3,7 @@ package com.d4viddf.hyperbridge.xposed.hooks
 import android.content.Context
 import android.os.PowerManager
 import android.service.notification.StatusBarNotification
+import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.log
 import io.github.libxposed.api.XposedModule
@@ -56,7 +57,9 @@ object HeadsUpSuppressionHook {
     private fun source(entry: Any?): StatusBarNotification? {
         val sbn = runCatching { sbnField?.get(entry) as? StatusBarNotification }.getOrNull() ?: return null
         if (sbn.packageName == "com.android.systemui" || sbn.notification?.fullScreenIntent != null) return null
-        return sbn.takeIf(HookConfig::expectsReplacement)
+        if (!HookConfig.suppressSourceHeadsUp()) return null
+        if (!sbn.notification.extras.getBoolean(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP, false)) return null
+        return sbn
     }
 
     private fun interactive(injector: Any?): Boolean? = runCatching {

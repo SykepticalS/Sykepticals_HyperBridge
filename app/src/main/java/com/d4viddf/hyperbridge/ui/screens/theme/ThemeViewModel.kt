@@ -28,7 +28,7 @@ import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.models.theme.ResourceType
 import com.d4viddf.hyperbridge.models.theme.ThemeMetadata
 import com.d4viddf.hyperbridge.models.theme.ThemeResource
-import com.d4viddf.hyperbridge.service.NotificationReaderService
+import com.d4viddf.hyperbridge.island.backend.SystemUiEngineCommands
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -564,10 +564,7 @@ class ThemeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun reloadNotificationService() {
-        val intent = Intent(context, NotificationReaderService::class.java).apply {
-            action = NotificationReaderService.ACTION_RELOAD_THEME
-        }
-        context.startService(intent)
+        SystemUiEngineCommands.reload(context)
     }
 
     val useNativeLiveUpdates = prefs.useNativeLiveUpdates

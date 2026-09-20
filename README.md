@@ -93,7 +93,7 @@ HyperBridge is fully localized thanks to our amazing community. **Want to add yo
 * **UI:** Jetpack Compose (Material 3 Expressive)
 * **Architecture:** MVVM
 * **Storage:** Room Database (SQLite)
-* **Services:** NotificationListenerService, WidgetOverlayService
+* **Runtime:** LSPosed hooks in SystemUI/XMSF plus the optional widget overlay service
 * **Concurrency:** Kotlin Coroutines & Flow
 
 ## 📸 Screenshots
@@ -121,9 +121,7 @@ The easiest way to install and keep the app updated.
 2.  Install the APK on your Xiaomi/POCO/Redmi device.
 
 ### ⚙️ Setup (Required for both methods)
-HyperBridge now requires a rooted Xiaomi/POCO/Redmi device and a modern LSPosed implementation supporting libxposed API 102. Enable the module for both `com.android.systemui` and `com.xiaomi.xmsf`, then use **Restart scopes** in setup/diagnostics. The app provisions Notification Listener access through its centralized root service; core islands do not require a manual Notification Access or notification-posting permission step.
-
-`POST_NOTIFICATIONS` is used only by the optional watch-relay helper. It is not an island backend requirement.
+HyperBridge requires a rooted Xiaomi/POCO/Redmi device and a modern LSPosed implementation supporting libxposed API 102. Enable the module for both `com.android.systemui` and `com.xiaomi.xmsf`, then use **Restart scopes** in setup/diagnostics. Source notifications are intercepted inside SystemUI and no Android notification, overlay, or auxiliary service permission is required.
 
 ### Architecture
 

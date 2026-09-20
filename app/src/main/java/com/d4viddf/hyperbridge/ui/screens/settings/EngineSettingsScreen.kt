@@ -1,6 +1,5 @@
 package com.d4viddf.hyperbridge.ui.screens.settings
 
-import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +36,7 @@ import androidx.compose.material.icons.filled.Warning
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
-import com.d4viddf.hyperbridge.service.NotificationReaderService
+import com.d4viddf.hyperbridge.island.backend.SystemUiEngineCommands
 import com.d4viddf.hyperbridge.ui.components.EngineOptionCard
 import com.d4viddf.hyperbridge.ui.components.ListOptionCard
 import com.d4viddf.hyperbridge.ui.components.EnginePreview
@@ -80,10 +79,7 @@ fun EngineSettingsScreen(onBack: () -> Unit) {
             }
 
             // Immediately tell the background service to reload the engine config
-            val intent = Intent(context, NotificationReaderService::class.java).apply {
-                action = NotificationReaderService.ACTION_RELOAD_THEME
-            }
-            context.startService(intent)
+            SystemUiEngineCommands.reload(context)
         }
     }
 

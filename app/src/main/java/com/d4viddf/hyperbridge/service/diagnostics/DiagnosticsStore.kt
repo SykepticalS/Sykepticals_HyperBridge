@@ -14,7 +14,6 @@ data class DiagnosticEvent(
 )
 
 data class DiagnosticsState(
-    val serviceConnected: Boolean = false,
     val activeIslands: Int = 0,
     val lastClassification: String? = null,
     val lastCallState: String? = null,
@@ -28,10 +27,6 @@ object DiagnosticsStore {
     private val mutableState by lazy { MutableStateFlow(DiagnosticsState()) }
     val state: StateFlow<DiagnosticsState>
         get() = mutableState.asStateFlow()
-
-    fun setServiceConnected(connected: Boolean) {
-        mutableState.update { it.copy(serviceConnected = connected) }
-    }
 
     fun setActiveIslands(count: Int) {
         mutableState.update { it.copy(activeIslands = count.coerceAtLeast(0)) }

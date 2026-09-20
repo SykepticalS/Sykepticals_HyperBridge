@@ -54,25 +54,6 @@ fun openBatterySettings(context: Context) {
 }
 
 /**
- * Checks if Notification Listener permission is granted.
- */
-fun isNotificationServiceEnabled(context: Context): Boolean {
-    val pkgName = context.packageName
-    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-    return flat != null && flat.contains(pkgName)
-}
-
-/**
- * Checks if Post Notification permission (Android 13+) is granted.
- */
-fun isPostNotificationsEnabled(context: Context): Boolean {
-    return androidx.core.content.ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.POST_NOTIFICATIONS
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-}
-
-/**
  * Checks if restricted settings / restricted permissions are allowed (Android 13+).
  * When an app is sideloaded, Android may restrict sensitive permissions until the user
  * explicitly enables "Allow restricted settings" in App Info.

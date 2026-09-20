@@ -112,7 +112,7 @@ body:
       options:
         - label: I have checked that this issue has not already been reported.
           required: true
-        - label: I have granted all required permissions (Notification Access, Autostart).
+        - label: I have enabled the required LSPosed scopes and restarted them.
           required: false
 
 ---

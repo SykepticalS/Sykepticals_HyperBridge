@@ -40,7 +40,6 @@ import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import com.d4viddf.hyperbridge.root.RootShellService
 import com.d4viddf.hyperbridge.util.DeviceUtils
-import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
 import com.d4viddf.hyperbridge.xposed.runtime.ModuleServiceState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -52,22 +51,15 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     val module by ModuleServiceState.state.collectAsState()
     val backend = remember { SystemUiIslandBackend.get(context) }
     var rootReady by remember { mutableStateOf<Boolean?>(null) }
-    var listenerReady by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var backendHealth by remember { mutableStateOf(backend.health()) }
     var detail by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         rootReady = RootShellService.isAvailable()
-        if (rootReady == true) {
-            val result = RootShellService.provisionNotificationListener(context)
-            listenerReady = result.success && isNotificationServiceEnabled(context)
-            if (!result.success) detail = result.stderr
-        }
         while (true) {
             backend.ping()
             delay(1_000)
             backendHealth = backend.health()
-            listenerReady = isNotificationServiceEnabled(context)
             delay(2_000)
         }
     }
@@ -75,7 +67,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     val scopesReady = IslandProtocol.SYSTEM_UI_PACKAGE in module.scopes && IslandProtocol.XMSF_PACKAGE in module.scopes
     val environmentReady = DeviceUtils.isXiaomi && DeviceUtils.isCompatibleOS()
     val allReady = environmentReady && rootReady == true && module.available && module.apiVersion >= 101 &&
-        scopesReady && listenerReady && backendHealth.available
+        scopesReady && backendHealth.available
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -85,7 +77,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text("HyperBridge privileged setup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Root and modern LSPosed are required. Notification listener access is provisioned automatically and islands never fall back to app-owned posting.",
+            "Root and modern LSPosed are required. Enable the SystemUI and XMSF scopes; no Android notification or overlay permission is used.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -96,8 +88,8 @@ fun OnboardingScreen(onFinish: () -> Unit) {
         StatusRow("LSPosed service (API ${module.apiVersion.takeIf { it > 0 } ?: "—"})", module.available && module.apiVersion >= 101)
         StatusRow("SystemUI scope", IslandProtocol.SYSTEM_UI_PACKAGE in module.scopes)
         StatusRow("XMSF scope", IslandProtocol.XMSF_PACKAGE in module.scopes)
-        StatusRow("Notification engine", listenerReady)
-        StatusRow("SystemUI hook handshake", backendHealth.systemUiHookAlive)
+        StatusRow("SystemUI notification hook", backendHealth.capabilities and IslandProtocol.CAP_NOTIFICATION_INGRESS != 0)
+        StatusRow("Island backend", backendHealth.systemUiHookAlive)
         StatusRow("XMSF Focus authorization hook", backendHealth.xmsfHookAlive)
         StatusRow("Xiaomi Focus whitelist hook", backendHealth.capabilities and IslandProtocol.CAP_FOCUS_BYPASS != 0)
         StatusRow("Backend protocol", IslandProtocol.compatible(backendHealth.protocolVersion ?: -1))

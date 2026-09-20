@@ -10,7 +10,6 @@ import com.d4viddf.hyperbridge.data.db.AppDatabase
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.data.widget.WidgetManager
 import com.d4viddf.hyperbridge.models.WidgetConfig
-import com.d4viddf.hyperbridge.service.NotificationReaderService
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsState
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsStore
 import kotlinx.coroutines.flow.first
@@ -36,14 +35,13 @@ data class DeviceDiagnosticInfo(
 )
 
 data class PermissionDiagnosticInfo(
-    val restrictedSettingsAllowed: Boolean,
-    val notificationListenerGranted: Boolean,
-    val postNotificationsGranted: Boolean,
-    val batteryOptimizationIgnored: Boolean,
     val focusBackendReady: Boolean,
     val rootAvailable: Boolean,
     val lsposedAvailable: Boolean,
-    val systemUiHookAlive: Boolean
+    val systemUiHookAlive: Boolean,
+    val notificationIngressReady: Boolean,
+    val islandDispatcherReady: Boolean,
+    val protocolCompatible: Boolean,
 )
 
 data class ThemeDiagnosticInfo(
@@ -101,28 +99,18 @@ object BugReportCollector {
     }
 
     fun collectPermissions(context: Context): PermissionDiagnosticInfo {
-        val restrictedAllowed = isRestrictedSettingsAllowed(context)
-        val listenerGranted = isNotificationServiceEnabled(context)
-        val postGranted = isPostNotificationsEnabled(context)
-        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val batteryIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) == true
-
         val environment = EnvironmentRuntime.snapshot(context)
 
         return PermissionDiagnosticInfo(
-            restrictedSettingsAllowed = restrictedAllowed,
-            notificationListenerGranted = listenerGranted,
-            postNotificationsGranted = postGranted,
-            batteryOptimizationIgnored = batteryIgnored,
             focusBackendReady = environment.focusCompatible,
             rootAvailable = environment.rootAvailable,
             lsposedAvailable = environment.libxposedServiceAvailable,
-            systemUiHookAlive = environment.systemUiHookAlive
+            systemUiHookAlive = environment.systemUiHookAlive,
+            notificationIngressReady = environment.notificationIngressReady,
+            islandDispatcherReady = environment.islandDispatcherReady,
+            protocolCompatible = environment.backendProtocolCompatible,
         )
     }
-
-    private fun isRestrictedSettingsAllowed(context: Context): Boolean =
-        com.d4viddf.hyperbridge.util.isRestrictedSettingsAllowed(context)
 
     suspend fun collectThemeInfo(
         themeRepo: ThemeRepository,
@@ -235,13 +223,7 @@ object BugReportCollector {
     }
 
     fun collectDiagnosticsInfo(): DiagnosticsState {
-        val baseState = DiagnosticsStore.state.value
-        val isConnected = NotificationReaderService.isConnected || baseState.serviceConnected
-        return if (baseState.serviceConnected != isConnected) {
-            baseState.copy(serviceConnected = isConnected)
-        } else {
-            baseState
-        }
+        return DiagnosticsStore.state.value
     }
 
     fun buildMarkdownReport(
@@ -286,14 +268,13 @@ object BugReportCollector {
         // Permissions
         if (permissions != null) {
             sb.append("#### Permissions & System Health\n")
-            sb.append("- **Restricted Settings (Android 13+):** ${if (permissions.restrictedSettingsAllowed) "Allowed" else "RESTRICTED (Blocked by Android)"}\n")
-            sb.append("- **Notification Listener:** ${if (permissions.notificationListenerGranted) "Granted" else "Denied"}\n")
-            sb.append("- **Post Notifications:** ${if (permissions.postNotificationsGranted) "Granted" else "Denied"}\n")
-            sb.append("- **Battery Optimization:** ${if (permissions.batteryOptimizationIgnored) "Unrestricted" else "Optimized (Restricted)"}\n")
             sb.append("- **Xiaomi Focus hook backend:** ${if (permissions.focusBackendReady) "Ready" else "Unavailable"}\n")
             sb.append("- **Root:** ${if (permissions.rootAvailable) "Available" else "Unavailable"}\n")
             sb.append("- **LSPosed Service:** ${if (permissions.lsposedAvailable) "Available" else "Unavailable"}\n")
             sb.append("- **SystemUI Hook:** ${if (permissions.systemUiHookAlive) "Active" else "Inactive"}\n\n")
+            sb.append("- **Notification ingress:** ${if (permissions.notificationIngressReady) "Ready" else "Unavailable"}\n")
+            sb.append("- **Island dispatcher:** ${if (permissions.islandDispatcherReady) "Ready" else "Unavailable"}\n")
+            sb.append("- **Protocol:** ${if (permissions.protocolCompatible) "Compatible" else "Incompatible"}\n\n")
         }
 
         // Theme
@@ -334,7 +315,6 @@ object BugReportCollector {
         // Diagnostics & Sanitized Events
         if (diagnosticsState != null) {
             sb.append("#### Diagnostics & Sanitized Events\n")
-            sb.append("- **Service Status:** ${if (diagnosticsState.serviceConnected) "Connected" else "Disconnected"}\n")
             sb.append("- **Active Islands:** ${diagnosticsState.activeIslands}\n")
             if (diagnosticsState.lastClassification != null) {
                 sb.append("- **Last Classification:** ${diagnosticsState.lastClassification}\n")
@@ -416,13 +396,13 @@ object BugReportCollector {
         val diagSummary = StringBuilder()
         if (permissionsInfo != null) {
             diagSummary.append("\n\n**Permissions & System Health:**\n")
-            diagSummary.append("- Restricted Settings (Android 13+): ${if (permissionsInfo.restrictedSettingsAllowed) "Allowed" else "RESTRICTED (Blocked)"}\n")
-            diagSummary.append("- Notification Listener: ${if (permissionsInfo.notificationListenerGranted) "Granted" else "Denied"}\n")
-            diagSummary.append("- Battery Unrestricted: ${if (permissionsInfo.batteryOptimizationIgnored) "Yes" else "No"}\n")
             diagSummary.append("- Focus hook backend: ${if (permissionsInfo.focusBackendReady) "Ready" else "Unavailable"}\n")
             diagSummary.append("- Root: ${if (permissionsInfo.rootAvailable) "Available" else "Unavailable"}\n")
             diagSummary.append("- LSPosed: ${if (permissionsInfo.lsposedAvailable) "Available" else "Unavailable"}\n")
             diagSummary.append("- SystemUI Hook: ${if (permissionsInfo.systemUiHookAlive) "Active" else "Inactive"}\n")
+            diagSummary.append("- Notification ingress: ${if (permissionsInfo.notificationIngressReady) "Ready" else "Unavailable"}\n")
+            diagSummary.append("- Island dispatcher: ${if (permissionsInfo.islandDispatcherReady) "Ready" else "Unavailable"}\n")
+            diagSummary.append("- Protocol: ${if (permissionsInfo.protocolCompatible) "Compatible" else "Incompatible"}\n")
         }
 
         if (themeInfo != null) {
@@ -445,7 +425,7 @@ object BugReportCollector {
 
         if (diagnosticsState != null) {
             diagSummary.append("\n**Diagnostics & Island State:**\n")
-            diagSummary.append("- Service: ${if (diagnosticsState.serviceConnected) "Connected" else "Disconnected"} | Active Islands: ${diagnosticsState.activeIslands}\n")
+            diagSummary.append("- Active Islands: ${diagnosticsState.activeIslands}\n")
             if (diagnosticsState.lastClassification != null) {
                 diagSummary.append("- Last Classification: ${diagnosticsState.lastClassification}\n")
             }

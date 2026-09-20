@@ -28,13 +28,4 @@ class PrivilegedRuntimePolicyTest {
         assertEquals(ApplyRequirement.HotReload, ApplyRequirement.forSetting("theme_color"))
     }
 
-    @Test fun suppressionFailsOpenForEveryUncertainOrUnhealthyState() {
-        val ready = SuppressionSignals(true, false, true, "MESSAGE", setOf("MESSAGE"))
-        assertTrue(SuppressionEligibility.shouldSuppress(ready))
-        assertFalse(SuppressionEligibility.shouldSuppress(ready.copy(engineHealthy = false)))
-        assertFalse(SuppressionEligibility.shouldSuppress(ready.copy(fullScreenIntent = true)))
-        assertFalse(SuppressionEligibility.shouldSuppress(ready.copy(packageEnabled = false)))
-        assertFalse(SuppressionEligibility.shouldSuppress(ready.copy(semanticType = null)))
-        assertFalse(SuppressionEligibility.shouldSuppress(ready.copy(enabledTypes = emptySet())))
-    }
 }

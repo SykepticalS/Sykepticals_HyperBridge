@@ -50,7 +50,7 @@
     <string name="footer_made_with_love">Made with ❤️ in Spain</string>
     <string name="app_health_desc">Ensure all checks are green for the app to work correctly in the background.</string>
     <string name="req_permissions">Required Permissions</string>
-    <string name="notif_access">Notification Access</string>
+    <string name="notif_access">SystemUI notification hook</string>
     <string name="notif_access_desc">Required to read app events</string>
     <string name="device_optimization">Device Optimization</string>
     <string name="xiaomi_autostart">Xiaomi Autostart</string>

@@ -19,13 +19,13 @@ object SystemUiBootstrapHook {
             val attach = application.getDeclaredMethod("attach", Context::class.java).apply { isAccessible = true }
             module.hook(attach).intercept { chain ->
                 val result = chain.proceed()
-                (chain.thisObject as? Application)?.let { SystemUiDispatcher.register(it, module) }
+                (chain.thisObject as? Application)?.let { register(it, module) }
                 result
             }
             val onCreate = application.getDeclaredMethod("onCreate")
             module.hook(onCreate).intercept { chain ->
                 val result = chain.proceed()
-                (chain.thisObject as? Application)?.let { SystemUiDispatcher.register(it, module) }
+                (chain.thisObject as? Application)?.let { register(it, module) }
                 result
             }
         }.onFailure {
@@ -38,9 +38,14 @@ object SystemUiBootstrapHook {
         runCatching {
             val activityThread = Class.forName("android.app.ActivityThread")
             val method = activityThread.getDeclaredMethod("currentApplication").apply { isAccessible = true }
-            (method.invoke(null) as? Application)?.let { SystemUiDispatcher.register(it, module) }
+            (method.invoke(null) as? Application)?.let { register(it, module) }
         }.onFailure {
             module.log("HyperBridge: current SystemUI application unavailable: ${it.message}")
         }
+    }
+
+    private fun register(application: Application, module: XposedModule) {
+        SystemUiDispatcher.register(application, module)
+        SystemUiNotificationIngressHook.connect(application, module)
     }
 }

@@ -1,8 +1,5 @@
 package com.d4viddf.hyperbridge.root
 
-import android.content.ComponentName
-import android.content.Context
-import com.d4viddf.hyperbridge.service.NotificationReaderService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.thread
@@ -26,20 +23,6 @@ object RootShellService {
 
     suspend fun isAvailable(): Boolean = execute("id").let {
         it.success && it.stdout.contains("uid=0")
-    }
-
-    suspend fun provisionNotificationListener(context: Context): RootCommandResult {
-        val component = ComponentName(context, NotificationReaderService::class.java).flattenToString()
-        val quoted = shellQuote(component)
-        val userResult = execute("cmd notification allow_listener $quoted \$(am get-current-user)")
-        val result = if (userResult.success) userResult else execute("cmd notification allow_listener $quoted")
-        if (!result.success) return result
-        val verify = execute("settings get secure enabled_notification_listeners")
-        return if (verify.success && verify.stdout.split(':').any { it == component }) {
-            RootCommandResult(0, verify.stdout, "")
-        } else {
-            RootCommandResult(1, verify.stdout, "Notification listener was not present after provisioning")
-        }
     }
 
     suspend fun restartPackages(packages: Set<String>): RootCommandResult {

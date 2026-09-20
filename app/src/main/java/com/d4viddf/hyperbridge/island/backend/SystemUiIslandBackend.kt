@@ -8,10 +8,14 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Parcel
+import android.os.ResultReceiver
 import android.os.SystemClock
 import android.util.Log
 import java.security.SecureRandom
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 class SystemUiIslandBackend private constructor(private val context: Context) : IslandBackend {
     private val nonce = SecureRandom().nextLong()
@@ -48,7 +52,6 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
     }
 
     override fun post(id: Int, notification: Notification, metadata: IslandMetadata): Result<Unit> = runCatching {
-        check(health().available) { "Compatible SystemUI hook is not alive" }
         notification.extras.apply {
             putString(IslandProtocol.EXTRA_OWNER, IslandProtocol.OWNER)
             putString(IslandProtocol.EXTRA_SOURCE_KEY, metadata.sourceKey ?: metadata.logicalToken)
@@ -61,13 +64,24 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
         check(parcelSize(notification) <= IslandProtocol.MAX_PARCEL_BYTES) {
             "Island payload exceeds ${IslandProtocol.MAX_PARCEL_BYTES} byte IPC limit"
         }
+        val latch = CountDownLatch(1)
+        val resultCode = AtomicReference<Int>()
+        val receiver = object : ResultReceiver(null) {
+            override fun onReceiveResult(code: Int, resultData: android.os.Bundle?) {
+                resultCode.set(code)
+                latch.countDown()
+            }
+        }
         send(Intent(IslandProtocol.ACTION_POST).apply {
             putExtra(IslandProtocol.EXTRA_PROTOCOL, IslandProtocol.VERSION)
             putExtra(IslandProtocol.EXTRA_NOTIFICATION, notification)
             putExtra(IslandProtocol.EXTRA_TAG, IslandOwnership.tag(metadata.logicalToken))
             putExtra(IslandProtocol.EXTRA_ID, id)
             putExtra(IslandProtocol.EXTRA_GENERATION, metadata.generation)
+            putExtra(IslandProtocol.EXTRA_RESULT_RECEIVER, receiver)
         })
+        check(latch.await(3, TimeUnit.SECONDS)) { "SystemUI island post acknowledgement timed out" }
+        check(resultCode.get() == IslandProtocol.RESULT_POSTED) { "SystemUI rejected island post" }
     }.onFailure { Log.e(TAG, "post rejected id=$id", it) }
 
     override fun cancel(id: Int, logicalToken: String, generation: Long): Result<Unit> = runCatching {

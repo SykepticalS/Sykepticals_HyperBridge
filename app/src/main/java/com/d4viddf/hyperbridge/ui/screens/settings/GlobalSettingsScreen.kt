@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.DoNotDisturbOn
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
@@ -31,13 +32,19 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.ui.components.ListOptionCard
 import com.d4viddf.hyperbridge.ui.screens.theme.ShapeStyle
 import com.d4viddf.hyperbridge.ui.screens.theme.getExpressiveShape
@@ -53,6 +60,10 @@ fun GlobalSettingsScreen(
     onDndSettingsClick: () -> Unit,
     onPermanentIslandClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    var suppressSourceFloating by remember {
+        mutableStateOf(HookConfigSync.suppressSourceHeadsUp(context))
+    }
 
     Scaffold(
         topBar = {
@@ -120,7 +131,16 @@ fun GlobalSettingsScreen(
                 onClick = onPermanentIslandClick
             )
             Spacer(Modifier.height(16.dp))
-            
+            SettingsSwitchItem(
+                icon = Icons.Outlined.NotificationsOff,
+                title = stringResource(R.string.suppress_source_floating),
+                subtitle = stringResource(R.string.suppress_source_floating_desc),
+                checked = suppressSourceFloating,
+                onCheckedChange = { enabled ->
+                    suppressSourceFloating = enabled
+                    HookConfigSync.setSuppressSourceHeadsUp(context, enabled)
+                },
+            )
 
         }
     }

@@ -562,7 +562,7 @@
     <string name="bug_report_include_device">Device &amp; OS Info</string>
     <string name="bug_report_include_device_desc">Model, HyperOS/MIUI version, Android version, ROM region</string>
     <string name="bug_report_include_permissions">System Permissions &amp; Restricted Settings</string>
-    <string name="bug_report_include_permissions_desc">Notification listener, overlay, battery, and Android 13+ restricted settings</string>
+    <string name="bug_report_include_permissions_desc">Root, LSPosed scopes, SystemUI ingress, island backend, and Focus hooks</string>
     <string name="bug_report_include_theme">Theme Configuration</string>
     <string name="bug_report_include_theme_desc">Active theme, engine mode, custom theme metadata</string>
     <string name="bug_report_include_widgets">Widget Configuration</string>

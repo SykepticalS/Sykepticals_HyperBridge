@@ -31,14 +31,13 @@ class BugReportCollectorTest {
         )
 
         val permissions = PermissionDiagnosticInfo(
-            restrictedSettingsAllowed = true,
-            notificationListenerGranted = true,
-            postNotificationsGranted = true,
-            batteryOptimizationIgnored = true,
             focusBackendReady = true,
             rootAvailable = true,
             lsposedAvailable = true,
-            systemUiHookAlive = true
+            systemUiHookAlive = true,
+            notificationIngressReady = true,
+            islandDispatcherReady = true,
+            protocolCompatible = true,
         )
 
         val url = BugReportCollector.buildGitHubIssueUrl(
@@ -61,7 +60,7 @@ class BugReportCollectorTest {
         assertTrue(decoded.contains("OS2.0.1.0.VNAMIXM"))
         assertTrue(decoded.contains("Notification island does not show when receiving a message."))
         assertTrue(decoded.contains("1. Receive message"))
-        assertTrue(decoded.contains("Restricted Settings (Android 13+): Allowed"))
+        assertTrue(decoded.contains("Notification ingress: Ready"))
         assertTrue(decoded.contains("E/HyperBridge: crash log line"))
     }
 
@@ -102,14 +101,13 @@ class BugReportCollectorTest {
         )
 
         val permissions = PermissionDiagnosticInfo(
-            restrictedSettingsAllowed = true,
-            notificationListenerGranted = true,
-            postNotificationsGranted = true,
-            batteryOptimizationIgnored = true,
             focusBackendReady = true,
             rootAvailable = true,
             lsposedAvailable = true,
-            systemUiHookAlive = true
+            systemUiHookAlive = true,
+            notificationIngressReady = true,
+            islandDispatcherReady = true,
+            protocolCompatible = true,
         )
 
         val themeInfo = ThemeDiagnosticInfo(
@@ -156,8 +154,8 @@ class BugReportCollectorTest {
         assertTrue(report.contains("Redmi Note 13 Pro (2312DRA50G)"))
         assertTrue(report.contains("OS1.0.9.0.UNRMIXM"))
         assertTrue(report.contains("#### Permissions & System Health"))
-        assertTrue(report.contains("**Restricted Settings (Android 13+):** Allowed"))
-        assertTrue(report.contains("**Notification Listener:** Granted"))
+        assertTrue(report.contains("**Notification ingress:** Ready"))
+        assertTrue(report.contains("**Island dispatcher:** Ready"))
         assertTrue(report.contains("#### Theme Information"))
         assertTrue(report.contains("Neon Island"))
         assertTrue(report.contains("CommunityArtist"))
@@ -191,16 +189,15 @@ class BugReportCollectorTest {
     }
 
     @Test
-    fun testBuildMarkdownReportRestrictedSettingsBlocked() {
+    fun testBuildMarkdownReportPrivilegedHooksUnavailable() {
         val permissions = PermissionDiagnosticInfo(
-            restrictedSettingsAllowed = false,
-            notificationListenerGranted = false,
-            postNotificationsGranted = true,
-            batteryOptimizationIgnored = false,
             focusBackendReady = false,
             rootAvailable = true,
             lsposedAvailable = true,
-            systemUiHookAlive = true
+            systemUiHookAlive = true,
+            notificationIngressReady = false,
+            islandDispatcherReady = false,
+            protocolCompatible = false,
         )
 
         val report = BugReportCollector.buildMarkdownReport(
@@ -216,8 +213,8 @@ class BugReportCollectorTest {
             logcatText = null
         )
 
-        assertTrue(report.contains("**Restricted Settings (Android 13+):** RESTRICTED (Blocked by Android)"))
-        assertTrue(report.contains("**Notification Listener:** Denied"))
+        assertTrue(report.contains("**Notification ingress:** Unavailable"))
+        assertTrue(report.contains("**Protocol:** Incompatible"))
         assertTrue(report.contains("**Root:** Available"))
         assertTrue(report.contains("**LSPosed Service:** Available"))
         assertFalse(report.contains("#### Device & System Information"))
@@ -229,7 +226,6 @@ class BugReportCollectorTest {
     @Test
     fun testBuildMarkdownReportAndGitHubUrlWithDiagnosticsState() {
         val diagnostics = com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsState(
-            serviceConnected = true,
             activeIslands = 2,
             lastClassification = "MESSAGE",
             lastCallState = "RINGING",
@@ -259,7 +255,7 @@ class BugReportCollectorTest {
         )
 
         assertTrue(report.contains("#### Diagnostics & Sanitized Events"))
-        assertTrue(report.contains("**Service Status:** Connected"))
+        assertTrue(report.contains("**Active Islands:** 2"))
         assertTrue(report.contains("**Active Islands:** 2"))
         assertTrue(report.contains("**Last Classification:** MESSAGE"))
         assertTrue(report.contains("**Last Call State:** RINGING"))
@@ -271,7 +267,7 @@ class BugReportCollectorTest {
         )
 
         val decoded = java.net.URLDecoder.decode(url, "UTF-8")
-        assertTrue(decoded.contains("Service: Connected"))
+        assertTrue(decoded.contains("Active Islands: 2"))
         assertTrue(decoded.contains("Active Islands: 2"))
         assertTrue(decoded.contains("Last Classification: MESSAGE"))
         assertTrue(decoded.contains("com.whatsapp"))

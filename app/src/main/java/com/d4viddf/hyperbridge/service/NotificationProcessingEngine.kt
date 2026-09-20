@@ -1,22 +1,18 @@
 package com.d4viddf.hyperbridge.service
 
-import android.Manifest
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Person
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
-import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import com.d4viddf.hyperbridge.MainActivity
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
@@ -55,9 +51,9 @@ import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSessionTracker
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSignals
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingTimeoutPolicy
 import com.d4viddf.hyperbridge.service.recording.XiaomiScreenRecordingControlBackend
-import com.d4viddf.hyperbridge.island.backend.HookConfigSync
+import com.d4viddf.hyperbridge.island.backend.IslandBackend
 import com.d4viddf.hyperbridge.island.backend.IslandMetadata
-import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
+import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.models.CallStage
 import com.d4viddf.hyperbridge.models.MessageEventFingerprint
 import com.d4viddf.hyperbridge.models.MessageEventFingerprintSource
@@ -81,8 +77,6 @@ import com.d4viddf.hyperbridge.service.message.MessagePresentationSource
 import com.d4viddf.hyperbridge.service.message.MessageSourceQuality
 import com.d4viddf.hyperbridge.service.message.MessagingEventSignals
 import com.d4viddf.hyperbridge.service.message.isMessagingEvent
-import com.d4viddf.hyperbridge.service.popup.LegacyPopupChannelMigration
-import com.d4viddf.hyperbridge.service.popup.PopupChannelAccess
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -93,21 +87,45 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.milliseconds
 
-class NotificationReaderService : NotificationListenerService() {
+/**
+ * HyperBridge's notification semantics and lifecycle engine.
+ *
+ * This is deliberately a normal object, not a notification-listener service. Source notifications
+ * and removals are supplied by the injected SystemUI hook through a narrow processing bridge.
+ */
+class NotificationProcessingEngine private constructor(
+    appContext: Context,
+    private val activeNotificationsProvider: () -> Array<StatusBarNotification>,
+    private val cancelSourceNotificationByKey: (String) -> Unit,
+    private val islandBackend: IslandBackend,
+) : ContextWrapper(appContext) {
 
     companion object {
         const val ACTION_RELOAD_THEME = "com.d4viddf.hyperbridge.ACTION_RELOAD_THEME"
         const val ACTION_PERFORM_MIGRATION = "com.d4viddf.hyperbridge.ACTION_PERFORM_MIGRATION"
         private val GMAIL_PACKAGES = setOf("com.google.android.gm")
+        private const val REASON_CLICK = 1
+        private const val REASON_CANCEL = 2
+        private const val REASON_CANCEL_ALL = 3
+        private const val REASON_APP_CANCEL = 8
 
-        @Volatile
-        var isConnected: Boolean = false
-            internal set
+        fun create(
+            appContext: Context,
+            activeNotificationsProvider: () -> Array<StatusBarNotification>,
+            cancelSourceNotificationByKey: (String) -> Unit,
+            islandBackend: IslandBackend,
+        ): NotificationProcessingEngine = NotificationProcessingEngine(
+            appContext.applicationContext,
+            activeNotificationsProvider,
+            cancelSourceNotificationByKey,
+            islandBackend,
+        ).apply { start() }
     }
 
     private val TAG = "HyperBridgeDebug"
@@ -160,8 +178,6 @@ class NotificationReaderService : NotificationListenerService() {
     private val activeWidgets = ConcurrentHashMap.newKeySet<Int>()
     private val appLabelCache = ConcurrentHashMap<String, String>()
     private val notificationLifecycleMutex = Mutex()
-    private val islandBackend by lazy { SystemUiIslandBackend.get(this) }
-
     private val MAX_ISLANDS = 9
     private val WIDGET_ID_BASE = 9000
     // Negative so these ids can never hit the >= WIDGET_ID_BASE branch in onNotificationRemoved
@@ -170,7 +186,6 @@ class NotificationReaderService : NotificationListenerService() {
 
     private lateinit var preferences: AppPreferences
     private lateinit var effectiveTypeResolver: EffectiveNotificationTypeResolver
-    private lateinit var legacyPopupMigration: LegacyPopupChannelMigration
 
     // --- THEME ENGINE ---
     private lateinit var themeRepository: ThemeRepository
@@ -200,7 +215,7 @@ class NotificationReaderService : NotificationListenerService() {
     private val systemReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_USER_UNLOCKED) {
-                WidgetManager.init(this@NotificationReaderService)
+                WidgetManager.init(this@NotificationProcessingEngine)
                 syncNotifications(refresh = true)
             } else if (intent.action == Intent.ACTION_SCREEN_ON) {
                 isScreenOn = true
@@ -222,36 +237,7 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
-    private val islandClickReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "com.d4viddf.hyperbridge.ISLAND_CLICKED") {
-                val sbnKey = intent.getStringExtra("sbn_key")
-                val bridgeId = intent.getIntExtra("bridge_id", -1)
-                @Suppress("DEPRECATION")
-                val originalIntent = intent.getParcelableExtra<PendingIntent>("original_intent")
-
-                if (originalIntent != null) {
-                    try {
-                        originalIntent.send()
-                    } catch (e: PendingIntent.CanceledException) {
-                        Log.e("HyperBridge", "PendingIntent canceled", e)
-                    }
-                }
-
-                if (sbnKey != null) {
-                    cancelNotification(sbnKey)
-                }
-
-                if (bridgeId != -1) {
-                    islandBackend.cancel(bridgeId)
-                }
-            }
-        }
-    }
-
-    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
-    override fun onCreate() {
-        super.onCreate()
+    private fun start() {
         
         val filter = IntentFilter(Intent.ACTION_USER_UNLOCKED)
         filter.addAction(Intent.ACTION_SCREEN_ON)
@@ -271,23 +257,7 @@ class NotificationReaderService : NotificationListenerService() {
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
         )
         
-        val clickFilter = IntentFilter("com.d4viddf.hyperbridge.ISLAND_CLICKED")
-        androidx.core.content.ContextCompat.registerReceiver(
-            this,
-            islandClickReceiver,
-            clickFilter,
-            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        
         preferences = AppPreferences(applicationContext)
-        heartbeatJob = serviceScope.launch {
-            while (true) {
-                HookConfigSync.heartbeat(this@NotificationReaderService, isConnected)
-                delay(15_000)
-            }
-        }
-        createChannels()
-
         // [INIT] Theme Engine
         themeRepository = ThemeRepository(this)
         rulesEngine = RulesEngine()
@@ -319,26 +289,6 @@ class NotificationReaderService : NotificationListenerService() {
         effectiveTypeResolver = EffectiveNotificationTypeResolver(preferences) {
             themeRepository.activeTheme.value
         }
-        val popupDao = AppDatabase.getDatabase(applicationContext).popupControlDao()
-        legacyPopupMigration = LegacyPopupChannelMigration(
-            context = applicationContext,
-            preferences = preferences,
-            dao = popupDao,
-            access = object : PopupChannelAccess {
-                override val isConnected: Boolean
-                    get() = NotificationReaderService.isConnected
-
-                override fun getChannels(packageName: String, user: android.os.UserHandle): List<NotificationChannel> =
-                    this@NotificationReaderService.getNotificationChannels(packageName, user).orEmpty()
-
-                override fun updateChannel(
-                    packageName: String,
-                    user: android.os.UserHandle,
-                    channel: NotificationChannel
-                ) = this@NotificationReaderService.updateNotificationChannel(packageName, user, channel)
-            }
-        )
-
         val userManager = getSystemService(USER_SERVICE) as android.os.UserManager
         if (userManager.isUserUnlocked) {
             WidgetManager.init(this)
@@ -350,7 +300,7 @@ class NotificationReaderService : NotificationListenerService() {
             serviceScope,
             preferences,
             themeRepository,
-            initialNotifications = { activeNotifications ?: emptyArray() },
+            initialNotifications = activeNotificationsProvider,
             onIslandActiveChanged = { active ->
                 vpnIslandActive = active
                 updatePermanentIsland()
@@ -399,7 +349,7 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    fun handleCommand(intent: Intent?) {
         if (intent?.action == "ACTION_TEST_WIDGET") {
             val widgetId = intent.getIntExtra("WIDGET_ID", -1)
             if (widgetId != -1) {
@@ -427,7 +377,6 @@ class NotificationReaderService : NotificationListenerService() {
                 }
             }
         }
-        return START_STICKY
     }
 
     private fun showMigrationProgress(progress: Int) {
@@ -455,7 +404,7 @@ class NotificationReaderService : NotificationListenerService() {
                 val notification = notificationBuilder.build()
                 postIsland(bridgeId, notification, "migration_update", semanticType = NotificationType.PROGRESS)
             } else {
-                val builder = HyperIslandNotification.Builder(this@NotificationReaderService, "migration", title)
+                val builder = HyperIslandNotification.Builder(this@NotificationProcessingEngine, "migration", title)
                 builder.setProgressBar(progress, "#007AFF")
                 builder.setChatInfo(title, message, "migration_icon", packageName)
                 builder.setShowNotification(true)
@@ -463,7 +412,7 @@ class NotificationReaderService : NotificationListenerService() {
 
                 val data = HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
 
-                val notificationBuilder = NotificationCompat.Builder(this@NotificationReaderService, NOTIFICATION_CHANNEL_ID)
+                val notificationBuilder = NotificationCompat.Builder(this@NotificationProcessingEngine, NOTIFICATION_CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_launcher_foreground)
                     .setContentTitle(title)
                     .setContentText(message)
@@ -522,11 +471,7 @@ class NotificationReaderService : NotificationListenerService() {
     //  NOTIFICATION REMOVAL LOGIC
     // =========================================================================
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?, rankingMap: RankingMap?, reason: Int) {
-        if (!isConnected) {
-            isConnected = true
-            DiagnosticsStore.setServiceConnected(true)
-        }
+    fun onNotificationRemoved(sbn: StatusBarNotification?, reason: Int) {
         sbn?.let {
             if (::vpnIslandController.isInitialized) vpnIslandController.onSourceNotificationRemoved(it)
             if (nativeIslands.remove(it.key)) {
@@ -708,14 +653,14 @@ class NotificationReaderService : NotificationListenerService() {
     private fun cancelSourceNotification(targetKey: String) {
         try {
             val currentNotifications = try {
-                activeNotifications
+                activeNotificationsProvider()
             } catch (_: Exception) {
-                cancelNotification(targetKey)
+                cancelSourceNotificationByKey(targetKey)
                 return
             }
 
             val targetSbn = currentNotifications.find { it.key == targetKey }
-            cancelNotification(targetKey)
+            cancelSourceNotificationByKey(targetKey)
 
             if (targetSbn != null) {
                 val groupKey = targetSbn.groupKey
@@ -732,7 +677,7 @@ class NotificationReaderService : NotificationListenerService() {
                     val survivor = remainingGroupMembers[0]
                     val isSummary = (survivor.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
                     if (isSummary) {
-                        cancelNotification(survivor.key)
+                        cancelSourceNotificationByKey(survivor.key)
                     }
                 }
             }
@@ -779,7 +724,7 @@ class NotificationReaderService : NotificationListenerService() {
                 postWatchRelayNotification(sbn, title, text)
             }
             intentionallyRemovedKeys[originalKey] = System.currentTimeMillis()
-            cancelNotification(originalKey)
+            cancelSourceNotificationByKey(originalKey)
         }
 
         // 2. Lifecycle timeout using user-configured timeout
@@ -868,7 +813,14 @@ class NotificationReaderService : NotificationListenerService() {
                 .setAutoCancel(true)
                 .setTimeoutAfter(10_000L)
                 .build()
-            NotificationManagerCompat.from(this).notify(relayId, notification)
+            postIsland(
+                relayId,
+                notification,
+                logicalToken = "watch-relay:$relayId",
+                source = sbn,
+                semanticType = NotificationType.STANDARD,
+                generation = sbn.postTime,
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Error posting watch relay notification", e)
         }
@@ -890,8 +842,7 @@ class NotificationReaderService : NotificationListenerService() {
 
     private fun activeIslandCount(): Int = activeIslands.size + activeWidgets.size + if (vpnIslandActive) 1 else 0
 
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
+    fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         permanentIslandManager.onOrientationChanged()
         logStateChange(newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
     }
@@ -900,11 +851,7 @@ class NotificationReaderService : NotificationListenerService() {
     //  STANDARD NOTIFICATION LOGIC
     // =========================================================================
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (!isConnected) {
-            isConnected = true
-            DiagnosticsStore.setServiceConnected(true)
-        }
+    fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn?.let {
             if (::vpnIslandController.isInitialized) vpnIslandController.onSourceNotificationPosted(it)
             if (it.packageName != packageName) {
@@ -931,15 +878,6 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
-    override fun onNotificationChannelModified(
-        pkg: String,
-        user: android.os.UserHandle,
-        channel: NotificationChannel,
-        modificationType: Int
-    ) {
-        super.onNotificationChannelModified(pkg, user, channel, modificationType)
-    }
-
     private fun enqueueSourceNotification(sbn: StatusBarNotification, recovery: Boolean = false) {
         if (shouldIgnore(sbn.packageName) || !isAppAllowed(sbn.packageName)) return
         if (!recovery) {
@@ -949,12 +887,12 @@ class NotificationReaderService : NotificationListenerService() {
         val callbackObservedAt = System.currentTimeMillis()
         val rawQuality = sourceCandidateQuality(sbn)
         val processingGeneration = sourceProcessingGeneration.next(sourceSlot, rawQuality)
-        val job = serviceScope.launch {
+        runBlocking {
             val selectedSbn = ensureValidSbn(sbn, processingGeneration)
             val selectedQuality = sourceCandidateQuality(selectedSbn)
             sourceProcessingGeneration.consider(sourceSlot, processingGeneration, selectedQuality)
             if (!sourceProcessingGeneration.isCurrent(sourceSlot, processingGeneration)) {
-                return@launch
+                return@runBlocking
             }
             notificationLifecycleMutex.withLock {
                 if (!sourceProcessingGeneration.isCurrent(sourceSlot, processingGeneration)) {
@@ -970,9 +908,7 @@ class NotificationReaderService : NotificationListenerService() {
                 )
             }
         }
-        processingJobs[processingGeneration] = job
-        job.invokeOnCompletion { cause ->
-            processingJobs.remove(processingGeneration, job)
+        run {
             sourceProcessingGeneration.finish(sourceSlot, processingGeneration)
         }
     }
@@ -1040,7 +976,7 @@ class NotificationReaderService : NotificationListenerService() {
 
             delay(NotificationRefreshPolicy.REFRESH_DELAY_MS.milliseconds)
             val active = try {
-                activeNotifications?.toList().orEmpty()
+                activeNotificationsProvider().toList()
             } catch (_: Exception) {
                 emptyList()
             }
@@ -1417,6 +1353,7 @@ class NotificationReaderService : NotificationListenerService() {
                 val existingIsland = activeIslands[effectiveKey]
                 if (existingIsland != null && !family.shouldPresent) {
                     sourceToLogicalKeys[sbn.key] = effectiveKey
+                    markSourceHeadsUpSuppressed(sbn)
                     return
                 }
             }
@@ -1507,6 +1444,7 @@ class NotificationReaderService : NotificationListenerService() {
                 )
 
                 if (decision.kind == IslandPresentationKind.UNCHANGED) {
+                    markSourceHeadsUpSuppressed(sbn)
                     return
                 }
 
@@ -1612,6 +1550,7 @@ class NotificationReaderService : NotificationListenerService() {
             )
 
             if (decision.kind == IslandPresentationKind.UNCHANGED) {
+                markSourceHeadsUpSuppressed(sbn)
                 return
             }
 
@@ -1882,8 +1821,8 @@ class NotificationReaderService : NotificationListenerService() {
         if (isSuspicious) {
             delay(150.milliseconds)
             try {
-                val activeList = activeNotifications
-                val updatedSbn = activeList?.firstOrNull { it.key == sbn.key }
+                val activeList = activeNotificationsProvider()
+                val updatedSbn = activeList.firstOrNull { it.key == sbn.key }
                 if (updatedSbn != null) return updatedSbn
             } catch (_: Exception) { }
         }
@@ -1965,25 +1904,10 @@ class NotificationReaderService : NotificationListenerService() {
         builder.addExtras(data.resources)
 
         if (!suppressContentIntent) {
-            sbn.notification.contentIntent?.let { originalIntent ->
-                if (detectNotificationType(sbn) == NotificationType.MESSAGE) {
-                    val clickIntent = Intent("com.d4viddf.hyperbridge.ISLAND_CLICKED").apply {
-                        setPackage(packageName)
-                        putExtra("sbn_key", sbn.key)
-                        putExtra("bridge_id", bridgeId)
-                        putExtra("original_intent", originalIntent)
-                    }
-                    val clickPendingIntent = PendingIntent.getBroadcast(
-                        this,
-                        bridgeId,
-                        clickIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    builder.setContentIntent(clickPendingIntent)
-                } else {
-                    builder.setContentIntent(originalIntent)
-                }
-            }
+            // Keep the source app as the PendingIntent creator. Routing an activity PendingIntent
+            // through a HyperBridge broadcast is a notification trampoline and modern Android
+            // rejects that indirect launch when the big island is tapped.
+            sbn.notification.contentIntent?.let(builder::setContentIntent)
         }
 
         val notification = builder.build()
@@ -2007,29 +1931,6 @@ class NotificationReaderService : NotificationListenerService() {
     // =========================================================================
     //  HELPERS & SETUP
     // =========================================================================
-
-    private fun createChannels() {
-        val manager = getSystemService(NotificationManager::class.java)
-        val notifChannel = NotificationChannel(NOTIFICATION_CHANNEL_ID, getString(R.string.channel_active_islands), NotificationManager.IMPORTANCE_HIGH).apply {
-            setSound(null, null); enableVibration(false); setShowBadge(false)
-        }
-        manager.createNotificationChannel(notifChannel)
-
-        val widgetChannel = NotificationChannel(WIDGET_CHANNEL_ID, "Widgets Overlay", NotificationManager.IMPORTANCE_LOW).apply {
-            setSound(null, null); enableVibration(false); setShowBadge(false)
-        }
-        manager.createNotificationChannel(widgetChannel)
-
-        val liveUpdateChannel = NotificationChannel(LIVE_UPDATE_CHANNEL_ID, getString(R.string.channel_live_updates), NotificationManager.IMPORTANCE_DEFAULT).apply {
-            setSound(null, null); enableVibration(false); setShowBadge(false)
-        }
-        manager.createNotificationChannel(liveUpdateChannel)
-
-        val watchRelayChannel = NotificationChannel(WATCH_RELAY_CHANNEL_ID, "Watch Relay", NotificationManager.IMPORTANCE_LOW).apply {
-            setSound(null, null); enableVibration(false); setShowBadge(false)
-        }
-        manager.createNotificationChannel(watchRelayChannel)
-    }
 
     private fun shouldProcessWidgetUpdate(widgetId: Int, config: WidgetConfig): Boolean {
         val now = System.currentTimeMillis()
@@ -2148,7 +2049,7 @@ class NotificationReaderService : NotificationListenerService() {
             val group = notification.group
             if (group != null) {
                 val hasLiveChild = try {
-                    activeNotifications?.any {
+                    activeNotificationsProvider().any {
                         it.packageName == pkg && it.key != sbn.key &&
                             (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 &&
                             it.notification.group == group
@@ -2170,21 +2071,9 @@ class NotificationReaderService : NotificationListenerService() {
         preferences.isAppAllowedSync(packageName) || allowedPackageSet.contains(packageName)
 
     private var syncJob: Job? = null
-    private var heartbeatJob: Job? = null
-
-    override fun onListenerConnected() { 
-        Log.i(TAG, "HyperBridge Service Connected")
-        isConnected = true
-        DiagnosticsStore.setServiceConnected(true)
-        HookConfigSync.heartbeat(this, true)
+    fun onIngressConnected() {
+        Log.i(TAG, "HyperBridge SystemUI notification ingress connected")
         islandBackend.cancelAllOwned()
-        if (::legacyPopupMigration.isInitialized) {
-            serviceScope.launch {
-                // One bounded, idempotent upgrade migration: restore every channel
-                // whose importance was previously changed by HyperBridge.
-                legacyPopupMigration.restoreAll()
-            }
-        }
         syncNotifications(refresh = true)
         syncJob?.cancel()
         syncJob = serviceScope.launch {
@@ -2199,14 +2088,6 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
-    override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
-        Log.i(TAG, "HyperBridge Service Disconnected")
-        isConnected = false
-        DiagnosticsStore.setServiceConnected(false)
-        HookConfigSync.markStopped(this)
-    }
-
     private fun syncNotifications(refresh: Boolean = false) {
         val now = System.currentTimeMillis()
         recentlyRemovedKeys.entries.removeIf { now - it.value.observedAt > 10000 }
@@ -2214,7 +2095,7 @@ class NotificationReaderService : NotificationListenerService() {
 
         serviceScope.launch(Dispatchers.IO) {
             try {
-                val currentNotifications = activeNotifications ?: return@launch
+                val currentNotifications = activeNotificationsProvider()
                 val systemNotificationKeys = currentNotifications.map { it.key }.toSet()
 
                 var nativeChanged = false
@@ -2320,7 +2201,7 @@ class NotificationReaderService : NotificationListenerService() {
 
     private fun isSourceNotificationActive(sourceKey: String): Boolean {
         return try {
-            activeNotifications?.any { it.key == sourceKey } == true
+            activeNotificationsProvider().any { it.key == sourceKey }
         } catch (_: Exception) {
             false
         }
@@ -2334,7 +2215,7 @@ class NotificationReaderService : NotificationListenerService() {
         semanticType: NotificationType? = null,
         generation: Long = source?.postTime ?: 0L,
     ): Boolean {
-        return islandBackend.post(
+        val result = islandBackend.post(
             id = id,
             notification = notification,
             metadata = IslandMetadata(
@@ -2345,20 +2226,22 @@ class NotificationReaderService : NotificationListenerService() {
                 semanticType = semanticType?.name,
                 generation = generation,
             ),
-        ).isSuccess
+        )
+        if (result.isSuccess && source != null) markSourceHeadsUpSuppressed(source)
+        return result.isSuccess
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        isConnected = false
-        DiagnosticsStore.setServiceConnected(false)
-        HookConfigSync.markStopped(this)
+    private fun markSourceHeadsUpSuppressed(source: StatusBarNotification) {
+        if (source.packageName == IslandProtocol.SYSTEM_UI_PACKAGE) return
+        if (source.notification.fullScreenIntent != null) return
+        source.notification.extras.putBoolean(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP, true)
+    }
+
+    fun shutdown() {
         if (::vpnIslandController.isInitialized) vpnIslandController.stop()
         unregisterReceiver(systemReceiver)
-        unregisterReceiver(islandClickReceiver)
         unregisterReceiver(packageLifecycleReceiver)
         syncJob?.cancel()
-        heartbeatJob?.cancel()
         callSessionTracker.clear()
         screenRecordingSessionTracker.clear()
         messageFamilyTracker.clear()

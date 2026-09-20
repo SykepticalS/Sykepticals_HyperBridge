@@ -8,12 +8,12 @@ import org.json.JSONObject
 object HookConfigSync {
     const val KEY_PROTOCOL = "protocol"
     const val KEY_ENGINE_ENABLED = "engine_enabled"
-    const val KEY_NLS_READY = "nls_ready"
     const val KEY_BACKEND_READY = "backend_ready"
     const val KEY_HEARTBEAT = "heartbeat_elapsed"
     const val KEY_ALLOWED_PACKAGES = "allowed_packages"
     const val KEY_TYPE_POLICY = "type_policy"
     const val KEY_FOCUS_ENABLED = "focus_enabled"
+    const val KEY_SUPPRESS_SOURCE_HEADS_UP = "suppress_source_heads_up"
 
     private fun local(context: Context) = context.getSharedPreferences(
         IslandProtocol.REMOTE_PREFS,
@@ -22,9 +22,12 @@ object HookConfigSync {
 
     fun initialize(context: Context) {
         local(context).edit()
+            .remove("nls_ready")
             .putInt(KEY_PROTOCOL, IslandProtocol.VERSION)
             .putBoolean(KEY_ENGINE_ENABLED, true)
             .putBoolean(KEY_FOCUS_ENABLED, true)
+            .putBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP,
+                local(context).getBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP, true))
             .apply()
         sync(context)
     }
@@ -43,11 +46,10 @@ object HookConfigSync {
         sync(context)
     }
 
-    fun heartbeat(context: Context, nlsReady: Boolean) {
+    fun heartbeat(context: Context) {
         val backend = SystemUiIslandBackend.get(context)
         backend.ping()
         local(context).edit()
-            .putBoolean(KEY_NLS_READY, nlsReady)
             .putBoolean(KEY_BACKEND_READY, backend.health().available)
             .putLong(KEY_HEARTBEAT, SystemClock.elapsedRealtime())
             .apply()
@@ -59,14 +61,13 @@ object HookConfigSync {
         sync(context)
     }
 
-    fun markStopped(context: Context) {
-        local(context).edit()
-            .putBoolean(KEY_NLS_READY, false)
-            .putBoolean(KEY_BACKEND_READY, false)
-            .putLong(KEY_HEARTBEAT, 0L)
-            .apply()
+    fun setSuppressSourceHeadsUp(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP, enabled).apply()
         sync(context)
     }
+
+    fun suppressSourceHeadsUp(context: Context): Boolean =
+        local(context).getBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP, true)
 
     private fun sync(context: Context) {
         (context.applicationContext as? HyperBridgeApplication)?.syncHookConfig()
