@@ -117,7 +117,7 @@ object MarqueeHook {
                             if (islandTokens[island] === token) {
                                 applyMarquee(
                                     island = island,
-                                    enabled = true,
+                                    enabled = userMarquee,
                                     mode = mode,
                                     originalTimeoutSecs = originalTimeout,
                                     generation = generation,
@@ -270,6 +270,15 @@ object MarqueeHook {
             stopMarquee(view)
             return
         }
+        if (full != clean) view.text = clean
+        val visible = visibleWidth(view)
+        if (visible <= 0) return
+        val available = visible - view.paddingLeft - view.paddingRight
+        val overflow = view.paint.measureText(clean) > available
+        if (!overflow) {
+            stopMarquee(view)
+            return
+        }
         if (view.maxLines != 1) {
             originalMaxLines.putIfAbsent(view, view.maxLines)
             view.setSingleLine(true)
@@ -279,18 +288,9 @@ object MarqueeHook {
         view.setHorizontallyScrolling(true)
         view.ellipsize = null
         view.isHorizontalFadingEdgeEnabled = true
-        if (full != clean) view.text = clean
-        val visible = visibleWidth(view)
-        if (visible <= 0) return
-        val available = visible - view.paddingLeft - view.paddingRight
-        val overflow = view.paint.measureText(clean) > available
-        if (overflow) {
-            val controller = controllers.getOrPut(view) { Controller(view, HookConfig.marqueeSpeed()) }
-            controller.speedPxPerSec = HookConfig.marqueeSpeed()
-            controller.start()
-        } else {
-            stopMarquee(view)
-        }
+        val controller = controllers.getOrPut(view) { Controller(view, HookConfig.marqueeSpeed()) }
+        controller.speedPxPerSec = HookConfig.marqueeSpeed()
+        controller.start()
     }
 
     private fun stopMarquee(view: TextView) {

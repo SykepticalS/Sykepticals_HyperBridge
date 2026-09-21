@@ -45,11 +45,11 @@ class ProgressTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
 
         builder.setShowNotification(config.isShowShade ?: true)
         
-        // Always enable float if the user wants it, but only "First Float" (expand) on the initial appearance
         val floatPresentation = IslandFloatingPresentationPolicy.resolve(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
         val isFloatEnabled = floatPresentation.enableFloat
         builder.setEnableFloat(floatPresentation.enableFloat)
         builder.setIslandFirstFloat(floatPresentation.islandFirstFloat)
+        builder.setReopen(floatPresentation.reopen)
 
         val extras = sbn.notification.extras
         val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)

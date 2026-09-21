@@ -6,6 +6,7 @@ import android.service.notification.StatusBarNotification
 import android.view.View
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.IslandVisualExtras
+import com.d4viddf.hyperbridge.models.IslandGlowIsolation
 import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.log
 import io.github.libxposed.api.XposedModule
@@ -39,6 +40,7 @@ object OuterGlowHook {
         val snapshot: OwnedIslandSnapshot,
         val mode: Int,
         val createdAt: Long,
+        val key: String? = snapshot.islandKey,
     )
 
     private val featureLoaders = ConcurrentHashMap.newKeySet<Int>()
@@ -177,29 +179,36 @@ object OuterGlowHook {
                     val mode = strictGlowMode(state)
                     val snapshot = IslandOwnedNotification.fromAnimationState(state)
                     rememberOwnedTarget(snapshot, mode, state)
-                    val glowRequest = glowRequestedFor(snapshot, mode) ||
-                        recentOwnedTarget?.let { glowRequested(it.snapshot, mode) } == true
-                    val foreignIsland = snapshot != null && !snapshot.owned
-                    if (foreignIsland ||
-                        (snapshot?.owned == true && !snapshot.islandGlowEnabled && !snapshot.focusGlowEnabled)
-                    ) {
+                    val glowRequest = IslandGlowIsolation.shouldStartGlow(
+                        currentOwned = snapshot?.owned == true,
+                        currentRequestsGlow = glowRequestedFor(snapshot, mode),
+                    )
+                    val stopGlow = IslandGlowIsolation.shouldStopGlow(
+                        currentKnown = snapshot != null,
+                        currentOwned = snapshot?.owned == true,
+                        currentRequestsGlow = glowRequest,
+                    )
+                    if (stopGlow) {
                         recentOwnedTarget = null
                         resolveGlowViews(state, mode).forEach { glowView ->
                             synchronized(glowTargets) { glowTargets.remove(glowView) }
                             restoreDefaultGlowColor(glowView)
+                            if (mode != MODE_AUTO) invokeGlowEffect(glowView, "stopGlowEffect")
                         }
                     }
                     val result = chain.proceed()
                     val glowViews = resolveGlowViews(state, mode)
-                    recentOwnedTarget?.let { bound ->
-                        val attached = if (mode == MODE_AUTO) bound else bound.copy(mode = mode)
-                        glowViews.forEach { glowView ->
-                            synchronized(glowTargets) { glowTargets[glowView] = attached }
+                    if (glowRequest) {
+                        recentOwnedTarget?.let { bound ->
+                            val attached = if (mode == MODE_AUTO) bound else bound.copy(mode = mode)
+                            glowViews.forEach { glowView ->
+                                synchronized(glowTargets) { glowTargets[glowView] = attached }
+                            }
                         }
                     }
                     when {
                         glowRequest && mode == MODE_STATUS ->
-                            startStatusGlow(state, glowViews)
+                            startStatusGlow(glowViews)
                         glowRequest && mode == MODE_EXPAND ->
                             glowViews.forEach { invokeGlowEffect(it, "startGlowEffect") }
                         isStateTag(state, "Deleted") -> {
@@ -287,28 +296,39 @@ object OuterGlowHook {
         if (snapshot != null && snapshot.owned &&
             (glowRequested(snapshot, MODE_STATUS) || glowRequested(snapshot, MODE_EXPAND))
         ) {
-            recentOwnedTarget = OwnedGlowTarget(snapshot, mode.takeIf { it != MODE_AUTO } ?: MODE_STATUS, now)
+            recentOwnedTarget = OwnedGlowTarget(
+                snapshot,
+                mode.takeIf { it != MODE_AUTO } ?: MODE_STATUS,
+                now,
+                snapshot.islandKey,
+            )
             return
         }
         val previous = recentOwnedTarget ?: return
-        if (isStateTag(state, "Deleted")) return
-        if (isStateTag(state, "SmallIsland") || isStateTag(state, "BigIsland") || isExpandedState(state)) {
+        if (isStateTag(state, "Deleted")) {
+            recentOwnedTarget = null
+            return
+        }
+        val currentKey = snapshot?.islandKey
+        if (IslandGlowIsolation.canReuseRecentTarget(
+                currentKey = currentKey,
+                recentKey = previous.key,
+                currentRequestsGlow = false,
+            )
+        ) {
             recentOwnedTarget = previous.copy(
                 mode = mode.takeIf { it != MODE_AUTO } ?: previous.mode,
                 createdAt = now,
             )
+            return
         }
+        recentOwnedTarget = null
     }
 
-    private fun startStatusGlow(state: Any?, glowViews: List<Any>) {
-        val views = buildList {
-            addAll(glowViews)
-            IslandHookReflection.invokeNoArg(state, "getSmallIslandView")?.let(::add)
-            IslandHookReflection.invokeNoArg(state, "getBigIslandView")?.let(::add)
-        }.distinct()
-        views.forEach { invokeGlowEffect(it, "startGlowEffect") }
+    private fun startStatusGlow(glowViews: List<Any>) {
+        glowViews.forEach { invokeGlowEffect(it, "startGlowEffect") }
         recentOwnedTarget?.let { bound ->
-            views.forEach { view ->
+            glowViews.forEach { view ->
                 synchronized(glowTargets) { glowTargets[view] = bound.copy(mode = MODE_STATUS) }
                 applyOwnedGlowColor(view, MODE_STATUS)
             }
@@ -327,14 +347,21 @@ object OuterGlowHook {
             return
         }
         val bound = synchronized(glowTargets) { glowTargets[glowView] }
-            ?: recentOwnedTarget
-        val resolvedMode = if (mode == MODE_AUTO) bound?.mode ?: recentOwnedTarget?.mode ?: return else mode
-        val recent = recentOwnedTarget?.takeIf { it.mode == resolvedMode || it.mode == MODE_AUTO }
+        val recent = recentOwnedTarget
         val target = when {
-            recent != null && (bound == null || recent.createdAt >= bound.createdAt) -> recent
+            bound != null && recent != null -> {
+                val sameIsland = !bound.key.isNullOrBlank() && bound.key == recent.key
+                when {
+                    !sameIsland -> bound
+                    recent.createdAt >= bound.createdAt -> recent
+                    else -> bound
+                }
+            }
             bound != null -> bound
+            recent != null -> recent
             else -> return
         }
+        val resolvedMode = if (mode == MODE_AUTO) target.mode.takeIf { it != MODE_AUTO } ?: return else mode
         val snapshot = target.snapshot
         val enabled = glowRequested(snapshot, resolvedMode) ||
             (resolvedMode == MODE_STATUS && snapshot.islandGlowEnabled) ||
@@ -463,8 +490,6 @@ object OuterGlowHook {
             else -> MODE_AUTO
         }
     }
-
-    private fun isExpandedState(state: Any?): Boolean = isStateTag(state, "Expand")
 
     private fun glowModeFromGlowView(glowView: Any): Int {
         val name = glowView.javaClass.name

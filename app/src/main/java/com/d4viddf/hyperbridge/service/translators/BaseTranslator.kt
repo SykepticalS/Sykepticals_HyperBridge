@@ -21,6 +21,7 @@ import android.os.Bundle
 import android.os.Parcelable
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
@@ -600,6 +601,21 @@ abstract class BaseTranslator(
     private fun resolveAvatarVisual(sbn: StatusBarNotification): ResolvedNotificationVisual {
         val pkg = sbn.packageName
         try {
+            if (isGroupConversation(sbn)) {
+                loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+                val groupLargeBig = loadLargeIconBigBitmap(sbn)
+                if (groupLargeBig != null &&
+                    NotificationVisualPlanner.isLikelyAvatar(groupLargeBig.width, groupLargeBig.height)
+                ) {
+                    return ResolvedNotificationVisual(groupLargeBig, NotificationVisualSource.LARGE_ICON)
+                }
+                val groupLarge = loadLargeIconBitmap(sbn)
+                if (groupLarge != null &&
+                    NotificationVisualPlanner.isLikelyAvatar(groupLarge.width, groupLarge.height)
+                ) {
+                    return ResolvedNotificationVisual(groupLarge, NotificationVisualSource.LARGE_ICON)
+                }
+            }
             loadPersonBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
             loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
 
@@ -682,6 +698,17 @@ abstract class BaseTranslator(
         }
         return remoteAttachmentBitmap(sbn, avatar)?.let {
             ResolvedNotificationVisual(it, NotificationVisualSource.PICTURE)
+        }
+    }
+
+    private fun isGroupConversation(sbn: StatusBarNotification): Boolean {
+        val extras = sbn.notification.extras
+        if (extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)) return true
+        return try {
+            NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(sbn.notification)
+                ?.isGroupConversation == true
+        } catch (_: Exception) {
+            false
         }
     }
 
