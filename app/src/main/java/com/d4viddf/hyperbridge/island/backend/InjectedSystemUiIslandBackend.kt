@@ -3,6 +3,9 @@ package com.d4viddf.hyperbridge.island.backend
 import android.app.Notification
 import android.content.Context
 import com.d4viddf.hyperbridge.xposed.dispatch.SystemUiDispatcher
+import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
+import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
+import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
 
 /** Direct backend used by the processing engine already running inside SystemUI. */
 class InjectedSystemUiIslandBackend(private val systemUiContext: Context) : IslandBackend {
@@ -39,7 +42,10 @@ class InjectedSystemUiIslandBackend(private val systemUiContext: Context) : Isla
     override fun health() = IslandBackendHealth(
         available = true,
         protocolVersion = IslandProtocol.VERSION,
-        capabilities = IslandProtocol.REQUIRED_CAPABILITIES,
+        capabilities = IslandProtocol.REQUIRED_CAPABILITIES or
+            (if (MarqueeHook.isActive()) IslandProtocol.CAP_MARQUEE else 0) or
+            (if (ActiveIslandDismissHook.isActive()) IslandProtocol.CAP_ISLAND_DISMISS else 0) or
+            (if (OuterGlowHook.isActive()) IslandProtocol.CAP_FULL_GLOW else 0),
         lastHandshakeMillis = android.os.SystemClock.elapsedRealtime(),
         systemUiHookAlive = true,
         xmsfHookAlive = true,

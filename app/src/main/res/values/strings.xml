@@ -882,6 +882,39 @@
     <string name="popup_control_diagnostic_association">Companion association: %1$s</string>
     <string name="popup_control_diagnostic_listener">Listener connected: %1$s</string>
     <string name="popup_control_diagnostic_probe">Channel API probe: %1$s</string>
+    <string name="screen_recording_pause">Pause</string>
+    <string name="screen_recording_resume">Resume</string>
+    <string name="screen_recording_replace_title">Replace floating window</string>
+    <string name="screen_recording_replace_summary">Hide Xiaomi\'s recorder overlay and show the recording on Super Island. Restart Screen Recorder after changing this.</string>
+    <string name="screen_recording_immediate_start_title">Record immediately</string>
+    <string name="screen_recording_immediate_start_summary">Start recording from the Quick Settings tile without a confirmation dialog</string>
+    <string name="screen_recording_icon_style_title">Island icon</string>
+    <string name="screen_recording_icon_voice">Voice recorder</string>
+    <string name="screen_recording_icon_camera">Screen recording</string>
+    <string name="screen_recorder_dialog_title">Screen recording</string>
+    <string name="screen_recorder_resolution">Resolution</string>
+    <string name="screen_recorder_sound_source">Audio source</string>
+    <string name="screen_recorder_motion_photo">Motion photo</string>
+    <string name="screen_recorder_motion_photo_summary">Save as a motion photo when recording finishes</string>
+    <string name="screen_recorder_sound_none">No audio</string>
+    <string name="screen_recorder_sound_microphone">Microphone</string>
+    <string name="screen_recorder_sound_device">Device audio</string>
+    <string name="screen_recorder_sound_device_and_microphone">Device audio + microphone</string>
+    <string name="screen_recorder_more_settings">More settings</string>
+    <string name="screen_recorder_more_settings_summary">Open Xiaomi Screen Recorder settings</string>
+    <string name="screen_recorder_start">Start recording</string>
+    <string name="screen_recorder_current_setting">Current setting</string>
+    <string name="screen_recorder_current_setting_value">Current setting (%1$s)</string>
+    <string name="screen_recorder_preparing_title">Preparing to record</string>
+    <string name="screen_recorder_recording_title">Recording</string>
+    <string name="screen_recorder_paused_title">Paused</string>
+    <string name="screen_recorder_recorded_duration">Recorded %1$s</string>
+    <string name="screen_recorder_preparing">Preparing</string>
+    <string name="screen_recorder_notification_recording_title">Recording screen</string>
+    <string name="screen_recorder_notification_paused_title">Recording paused</string>
+    <string name="screen_recorder_notification_recording_text">Pause or stop and save the recording</string>
+    <string name="screen_recorder_notification_paused_text">Tap to resume recording</string>
+    <string name="screen_recorder_notification_stop">Stop</string>
 </resources>
 
 

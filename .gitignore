@@ -14,8 +14,6 @@
 bin/
 gen/
 out/
-docs/HyperIsland-main
-
 # Gradle files
 .gradle/
 build/

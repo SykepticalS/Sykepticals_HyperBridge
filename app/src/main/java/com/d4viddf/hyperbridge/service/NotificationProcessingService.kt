@@ -14,7 +14,8 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Owns the notification semantics engine in HyperBridge's process, where its Room database,
  * preferences, themes, and application resources are valid. SystemUI remains the sole source
- * intake and calls this service synchronously before Xiaomi snapshots notification extras.
+ * intake and dispatches here from a worker; the time-critical pre-snapshot suppression marker is
+ * handled locally by SystemUiNotificationIngressHook.
  */
 class NotificationProcessingService : Service() {
     private val activeSources = ConcurrentHashMap<String, StatusBarNotification>()

@@ -82,6 +82,31 @@ class ScreenRecordingSessionTrackerTest {
     }
 
     @Test
+    fun appCancellationDoesNotCutMessageAutoHideShort() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.MESSAGE,
+                dismissWithOriginal = true,
+                isAppCancellation = true
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.MESSAGE,
+                dismissWithOriginal = true,
+                isAppCancellation = false
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.SCREEN_RECORDING,
+                dismissWithOriginal = false,
+                isAppCancellation = true
+            )
+        )
+    }
+
+    @Test
     fun savedRecordingSourceIsDismissedOnlyWhenItsBridgeIsOpened() {
         assertTrue(
             NotificationLifecyclePolicy.shouldDismissSourceAfterBridgeRemoval(

@@ -12,6 +12,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <permission
+        android:name="com.sykeptical.hyperbridge.permission.CONTROL_SCREEN_RECORDER"
+        android:protectionLevel="normal" />
+    <uses-permission android:name="com.sykeptical.hyperbridge.permission.CONTROL_SCREEN_RECORDER" />
 
     <uses-feature
         android:name="android.software.companion_device_setup"
@@ -88,6 +92,16 @@
             android:enabled="true"
             android:exported="true" />
 
+        <service
+            android:name=".screenrecorder.ScreenRecorderControlService"
+            android:exported="true"
+            android:process=":screen_recorder_control"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="com.sykeptical.hyperbridge.action.SCREEN_RECORDER_CONTROL" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".ui.screens.theme.ThemeInstallerActivity"
             android:exported="true"
@@ -133,6 +147,13 @@
             android:name=".ui.InlineReplyActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.sykeptical.hyperbridge.inline_reply"
+            android:documentLaunchMode="never"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustResize|stateVisible"
             android:theme="@style/Theme.HyperBridge.Transparent" />
 
         <provider

@@ -29,7 +29,8 @@ class NavTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(co
         config: IslandConfig,
         leftLayout: NavContent,
         rightLayout: NavContent,
-        theme: HyperTheme?
+        theme: HyperTheme?,
+        isUpdate: Boolean = false,
     ): HyperIslandData {
 
         // 1. Resolve Theme Colors
@@ -80,17 +81,14 @@ class NavTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(co
 
         // 4. Build Notification
         val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", instruction)
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
 
-        val hiddenKey = "hidden_pixel"
         val navStartKey = "nav_start_icon"
         val navEndKey = "nav_end_icon"
 
         // Add Images
         builder.addPicture(resolveIcon(sbn, picKey))
-        builder.addPicture(getTransparentPicture(hiddenKey))
 
         if (navStartBitmap != null) {
             builder.addPicture(HyperPicture(navStartKey, navStartBitmap))
@@ -159,7 +157,10 @@ class NavTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(co
 
         builder.setBigIslandInfo(
             left = ImageTextInfoLeft(1, PicInfo(1, picKey), getTextInfo(leftLayout)),
-            right = ImageTextInfoRight(2, PicInfo(1, hiddenKey), getTextInfo(rightLayout))
+            right = ImageTextInfoRight(
+                type = 2,
+                textInfo = getTextInfo(rightLayout),
+            )
         )
 
         builder.setSmallIsland(picKey)

@@ -87,16 +87,12 @@ class LiveUpdateTranslator(
             val finalIntent = if (hasRemoteInput) {
                 if (config?.enableInlineReply != false) {
                     val uniqueKey = "act_${sbn?.key.hashCode()}_$index"
-                    val replyIntent = android.content.Intent(context, com.d4viddf.hyperbridge.receiver.InlineReplyReceiver::class.java).apply {
-                        putExtra("pending_intent", action.actionIntent)
-                        putExtra("result_key", action.remoteInputs!![0].resultKey)
-                        putExtra("package_name", sbn?.packageName)
-                    }
-                    android.app.PendingIntent.getBroadcast(
+                    com.d4viddf.hyperbridge.ui.InlineReplyIntents.pendingIntent(
                         context,
                         uniqueKey.hashCode(),
-                        replyIntent,
-                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+                        action.actionIntent,
+                        action.remoteInputs!![0].resultKey,
+                        sbn?.packageName,
                     )
                 } else {
                     original?.contentIntent ?: action.actionIntent

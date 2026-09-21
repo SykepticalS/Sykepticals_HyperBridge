@@ -37,8 +37,14 @@ object HeadsUpSuppressionHook {
             val method = injector.getDeclaredMethod("shouldPeek", entry)
             module.hook(method).intercept { chain ->
                 val sbn = source(chain.args.firstOrNull())
-                if (sbn != null && interactive(chain.thisObject) == true) false else chain.proceed()
+                if (sbn != null && interactive(chain.thisObject) == true) {
+                    module.log("HyperBridge: suppressed source heads-up platform=OS4 key=${sbn.key}")
+                    false
+                } else {
+                    chain.proceed()
+                }
             }
+            module.log("HyperBridge: hooked OS4 source heads-up suppression")
         }.isSuccess
         if (os4) {
             active = true
@@ -48,8 +54,15 @@ object HeadsUpSuppressionHook {
             val provider = loader.loadClass(OS3)
             val method = provider.getDeclaredMethod("checkHeadsUp", entry, Boolean::class.javaPrimitiveType!!)
             module.hook(method).intercept { chain ->
-                if (source(chain.args.firstOrNull()) != null) false else chain.proceed()
+                val sbn = source(chain.args.firstOrNull())
+                if (sbn != null) {
+                    module.log("HyperBridge: suppressed source heads-up platform=OS3 key=${sbn.key}")
+                    false
+                } else {
+                    chain.proceed()
+                }
             }
+            module.log("HyperBridge: hooked OS3 source heads-up suppression")
             active = true
         }.onFailure { module.log("HyperBridge: no compatible heads-up hook; failing open: ${it.message}") }
     }

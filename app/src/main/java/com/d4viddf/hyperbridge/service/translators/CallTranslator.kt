@@ -15,6 +15,7 @@ import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.service.call.CallActionIconSizingPolicy
+import com.d4viddf.hyperbridge.service.call.CallIslandTimeoutPolicy
 import com.d4viddf.hyperbridge.service.call.CallActionRole
 import com.d4viddf.hyperbridge.service.call.CallActionSelectionPolicy
 import com.d4viddf.hyperbridge.service.call.CallActionSignal
@@ -25,10 +26,6 @@ import com.d4viddf.hyperbridge.service.call.CallState
 import com.d4viddf.hyperbridge.service.call.CallTimerPolicy
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.HyperPicture
-import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
-import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight
-import io.github.d4viddf.hyperisland_kit.models.PicInfo
-import io.github.d4viddf.hyperisland_kit.models.TextInfo
 import io.github.d4viddf.hyperisland_kit.models.TimerInfo
 
 class CallTranslator(
@@ -68,7 +65,7 @@ class CallTranslator(
         val isIncoming = session.state == CallState.INCOMING_RINGING
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
-        builder.applyFloatingPresentation(config.isFloat ?: false, isUpdate)
+        builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
         builder.setShowNotification(config.isShowShade ?: true)
 
         val hiddenKey = "hidden_pixel"
@@ -78,11 +75,7 @@ class CallTranslator(
         val bridgeActions = getFilteredCallActions(sbn, picKey, isIncoming, theme)
         val actionKeys = bridgeActions.map { it.action.key }
 
-        val rightText: String
-        var timerInfo: TimerInfo? = null
-        val connectedAtForTimer = CallTimerPolicy.connectedAtForTimer(session)
-
-        rightText = when (session.state) {
+        val callStateText = when (session.state) {
             CallState.INCOMING_RINGING -> context.getString(R.string.call_incoming)
             CallState.OUTGOING_CALLING -> context.getString(R.string.call_calling)
             CallState.OUTGOING_RINGING -> context.getString(R.string.call_ringing)
@@ -90,6 +83,18 @@ class CallTranslator(
             CallState.ACTIVE -> context.getString(R.string.call_ongoing)
             CallState.ENDED -> context.getString(R.string.call_ended)
         }
+        val presentation = resolveIslandText(
+            sbn = sbn,
+            title = title,
+            content = callStateText,
+            config = config,
+            sender = title,
+            state = callStateText,
+        )
+        val rightText = presentation.right.ifBlank { callStateText }
+        val leftText = presentation.left.ifBlank { title }
+        var timerInfo: TimerInfo? = null
+        val connectedAtForTimer = CallTimerPolicy.connectedAtForTimer(session)
         if (connectedAtForTimer != null) {
             val duration = (now - connectedAtForTimer).coerceAtLeast(0L)
             timerInfo = TimerInfo(1, connectedAtForTimer, duration, now)
@@ -112,36 +117,20 @@ class CallTranslator(
         builder.setSmallIsland(picKey)
 
         val highlight = resolveColor(theme, sbn.packageName, "#FFFFFF")
-        builder.setIslandConfig(highlightColor = highlight, expandedTimeMs = config.floatTimeout)
+        builder.setIslandConfig(
+            timeout = CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS,
+            dismissible = false,
+            highlightColor = highlight,
+            expandedTimeMs = config.floatTimeout
+        )
 
-        if (isIncoming) {
-            builder.setBigIslandInfo(
-                left = ImageTextInfoLeft(
-                    type = 1,
-                    picInfo = PicInfo(type = 1, pic = picKey),
-                    textInfo = TextInfo(title = title, content = "")
-                ),
-                right = ImageTextInfoRight(
-                    type = 2,
-                    textInfo = TextInfo(title = rightText, content = "")
-                )
-            )
+        if (!isIncoming && connectedAtForTimer != null) {
+            builder.setBigIslandCountUp(connectedAtForTimer, picKey)
         } else {
-            if (connectedAtForTimer != null) {
-                builder.setBigIslandCountUp(connectedAtForTimer, picKey)
-            } else {
-                builder.setBigIslandInfo(
-                    left = ImageTextInfoLeft(
-                        type = 1,
-                        picInfo = PicInfo(type = 1, pic = picKey),
-                        textInfo = TextInfo(title = title, content = "")
-                    ),
-                    right = ImageTextInfoRight(
-                        type = 2,
-                        textInfo = TextInfo(title = rightText, content = "")
-                    )
-                )
-            }
+            builder.setBigIslandInfo(
+                left = IslandCompactLayout.left(picKey, leftText),
+                right = IslandCompactLayout.right(rightText),
+            )
         }
 
         return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())

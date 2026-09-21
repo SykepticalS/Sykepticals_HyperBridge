@@ -36,3 +36,10 @@
 
 -keep class com.d4viddf.hyperbridge.xposed.HyperBridgeModule { *; }
 -keep class com.d4viddf.hyperbridge.xposed.** { *; }
+-keep class com.d4viddf.hyperbridge.screenrecorder.** { *; }
+-keep class com.d4viddf.hyperbridge.island.backend.IslandProtocol { *; }
+-keep class com.d4viddf.hyperbridge.island.backend.IslandVisualExtras { *; }
+-keep class com.d4viddf.hyperbridge.models.GlowMode { *; }
+-keep class com.d4viddf.hyperbridge.models.MarqueeDismissMode { *; }
+-keep class com.d4viddf.hyperbridge.models.IslandVisualMetadata { *; }
+-keep class com.d4viddf.hyperbridge.models.IslandGlowResolver { *; }

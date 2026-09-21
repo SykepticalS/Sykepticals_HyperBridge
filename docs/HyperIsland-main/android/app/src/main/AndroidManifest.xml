@@ -1,0 +1,74 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        超级岛广播权限（signature 级）。
+        仅与 HyperIsland 使用相同签名的应用可获得此权限，
+        保证只有本应用能触发 SystemUI 进程内的 IslandDispatcher Receiver。
+    -->
+    <permission
+        android:name="io.github.hyperisland.SEND_ISLAND"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.hyperisland.SEND_ISLAND" />
+
+    <!--
+        跨应用屏幕录制控制权限（normal 级）。
+        第三方应用在清单中声明 <uses-permission> 后即可通过
+        ScreenRecorderControlService 查询状态与控制录制。
+    -->
+    <permission
+        android:name="io.github.hyperisland.permission.CONTROL_SCREEN_RECORDER"
+        android:protectionLevel="normal" />
+
+    <!-- 下载管理权限 -->
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION"/>
+    <uses-permission android:name="android.permission.ACCESS_DOWNLOAD_MANAGER"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 11+ 包可见性：查询所有已安装应用 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <!-- MIUI/HyperOS 运行时权限：获取已安装应用列表 -->
+    <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS"/>
+    <!-- 蓝牙权限（获取已配对设备用于白名单） -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <application
+        android:label="HyperIsland"
+        android:name=".XposedPrefsSyncApp"
+        android:enableOnBackInvokedCallback="true"
+        android:supportsRtl="true"
+        android:description="@string/module_description"
+        android:icon="@drawable/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/ComposeTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS"/>
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name=".MainActivityAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:label="HyperIsland"
+            android:icon="@drawable/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <service
+            android:name=".screenrecorder.ScreenRecorderControlService"
+            android:exported="true"
+            android:process=":screen_recorder_control"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="io.github.hyperisland.action.SCREEN_RECORDER_CONTROL" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

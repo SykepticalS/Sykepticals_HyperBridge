@@ -81,7 +81,7 @@ fun AppConfigBottomSheet(
 
     val appIslandConfig by viewModel.getAppIslandConfig(app.packageName).collectAsState(initial = IslandConfig())
     val globalConfig by viewModel.globalConfigFlow.collectAsState(initial = IslandConfig(
-        isFloat = true,
+        firstFloat = true,
         isShowShade = true,
         timeout = 5
     ))
@@ -408,7 +408,7 @@ fun AppearanceSettingsContent(
     activeDesc: String,
     inactiveDesc: String
 ) {
-    val isUsingGlobal = appConfig.isFloat == null
+    val isUsingGlobal = !appConfig.hasOverrides()
 
     Column {
         Row(
@@ -416,7 +416,7 @@ fun AppearanceSettingsContent(
                 .fillMaxWidth()
                 .clickable {
                     if (isUsingGlobal) onUpdate(globalConfig)
-                    else onUpdate(IslandConfig(null, null, null))
+                    else onUpdate(IslandConfig())
                 }
                 .padding(vertical = 8.dp)
                 .semantics { stateDescription = if (isUsingGlobal) activeDesc else inactiveDesc },
@@ -431,6 +431,7 @@ fun AppearanceSettingsContent(
             Spacer(Modifier.height(8.dp))
             IslandSettingsControl(
                 config = appConfig,
+                defaultConfig = globalConfig,
                 onUpdate = onUpdate
             )
         } else {

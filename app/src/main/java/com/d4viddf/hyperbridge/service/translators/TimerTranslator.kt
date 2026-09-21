@@ -21,7 +21,8 @@ class TimerTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(
         sbn: StatusBarNotification,
         picKey: String,
         config: IslandConfig,
-        theme: HyperTheme?
+        theme: HyperTheme?,
+        isUpdate: Boolean = false,
     ): HyperIslandData {
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
@@ -36,10 +37,9 @@ class TimerTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(
         val timerType = if (isCountdown) -1 else 1
 
         val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
         builder.setIslandConfig(timeout = config.timeout)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
 
         val hiddenKey = "hidden_pixel"
         builder.addPicture(resolveIcon(sbn, picKey))
@@ -71,6 +71,6 @@ class TimerTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(
         }
         builder.setIslandConfig(highlightColor = theme?.global?.highlightColor, expandedTimeMs = config.floatTimeout)
 
-        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
+        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam(), themeHighlight)
     }
 }

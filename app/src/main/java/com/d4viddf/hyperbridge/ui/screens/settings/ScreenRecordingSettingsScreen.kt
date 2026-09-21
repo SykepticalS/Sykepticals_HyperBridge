@@ -64,10 +64,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.d4viddf.hyperbridge.HyperBridgeApplication
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign
 import com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign
+import com.d4viddf.hyperbridge.service.recording.ScreenRecordingClassifier
 import com.d4viddf.hyperbridge.ui.components.formatSeconds
 import com.d4viddf.hyperbridge.ui.components.timeoutSteps
 import com.d4viddf.hyperbridge.ui.theme.HyperBridgeTheme
@@ -90,14 +93,48 @@ fun ScreenRecordingSettingsScreen(
     val savedTimeout by preferences.screenRecordingTimeoutFlow.collectAsState(
         initial = AppPreferences.SYSTEM_ISLAND_DEFAULT_TIMEOUT
     )
+    val replaceFloating by preferences.screenRecordingReplaceFloatingFlow.collectAsState(initial = true)
+    val immediateStart by preferences.screenRecordingImmediateStartFlow.collectAsState(initial = false)
+    val iconStyle by preferences.screenRecordingIconStyleFlow.collectAsState(initial = "screen_recorder")
 
     ScreenRecordingSettingsContent(
         leftDesign = leftDesign,
         rightDesign = rightDesign,
         savedTimeout = savedTimeout,
+        replaceFloating = replaceFloating,
+        immediateStart = immediateStart,
+        iconStyle = iconStyle,
         onLeftDesignChange = { scope.launch { preferences.setScreenRecordingLeftDesign(it) } },
         onRightDesignChange = { scope.launch { preferences.setScreenRecordingRightDesign(it) } },
         onSavedTimeoutChange = { scope.launch { preferences.setScreenRecordingTimeout(it) } },
+        onReplaceFloatingChange = { enabled ->
+            scope.launch {
+                preferences.setScreenRecordingReplaceFloating(enabled)
+                HookConfigSync.setScreenRecorderReplacement(
+                    context,
+                    enabled,
+                    immediateStart,
+                    iconStyle,
+                )
+                if (enabled) {
+                    (context.applicationContext as? HyperBridgeApplication)?.requestScopes(
+                        setOf(ScreenRecordingClassifier.PACKAGE_NAME)
+                    ) {}
+                }
+            }
+        },
+        onImmediateStartChange = { enabled ->
+            scope.launch {
+                preferences.setScreenRecordingImmediateStart(enabled)
+                HookConfigSync.setScreenRecorderReplacement(context, replaceFloating, enabled, iconStyle)
+            }
+        },
+        onIconStyleChange = { style ->
+            scope.launch {
+                preferences.setScreenRecordingIconStyle(style)
+                HookConfigSync.setScreenRecorderReplacement(context, replaceFloating, immediateStart, style)
+            }
+        },
         onBack = onBack
     )
 }
@@ -108,9 +145,15 @@ fun ScreenRecordingSettingsContent(
     leftDesign: ScreenRecordingLeftDesign,
     rightDesign: ScreenRecordingRightDesign,
     savedTimeout: Int,
+    replaceFloating: Boolean = true,
+    immediateStart: Boolean = false,
+    iconStyle: String = "screen_recorder",
     onLeftDesignChange: (ScreenRecordingLeftDesign) -> Unit,
     onRightDesignChange: (ScreenRecordingRightDesign) -> Unit,
     onSavedTimeoutChange: (Int) -> Unit,
+    onReplaceFloatingChange: (Boolean) -> Unit = {},
+    onImmediateStartChange: (Boolean) -> Unit = {},
+    onIconStyleChange: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
     var showLeftSheet by remember { mutableStateOf(false) }
@@ -154,7 +197,99 @@ fun ScreenRecordingSettingsContent(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Configuration Options Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(vertical = 4.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.screen_recording_replace_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(R.string.screen_recording_replace_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(checked = replaceFloating, onCheckedChange = onReplaceFloatingChange)
+                    }
+                    AnimatedVisibility(visible = replaceFloating) {
+                        Column {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onIconStyleChange(
+                                            if (iconStyle == "voice_recorder") "screen_recorder" else "voice_recorder"
+                                        )
+                                    }
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.screen_recording_icon_style_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = if (iconStyle == "voice_recorder") {
+                                            stringResource(R.string.screen_recording_icon_voice)
+                                        } else {
+                                            stringResource(R.string.screen_recording_icon_camera)
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.screen_recording_immediate_start_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = stringResource(R.string.screen_recording_immediate_start_summary),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(checked = immediateStart, onCheckedChange = onImmediateStartChange)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(24.dp),

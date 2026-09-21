@@ -1,19 +1,13 @@
 package com.d4viddf.hyperbridge.service.translators
 
-import android.app.Notification
 import android.content.Context
 import android.service.notification.StatusBarNotification
-import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import io.github.d4viddf.hyperisland_kit.HyperAction
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
-import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
-import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight
-import io.github.d4viddf.hyperisland_kit.models.PicInfo
-import io.github.d4viddf.hyperisland_kit.models.TextInfo
 
 class MessageTranslator(
     context: Context,
@@ -29,33 +23,21 @@ class MessageTranslator(
         theme: HyperTheme?,
         isUpdate: Boolean = false
     ): HyperIslandData {
-        val extras = sbn.notification.extras
-        val template = extras.getString(Notification.EXTRA_TEMPLATE) ?: ""
-        val subText = extras.getString(Notification.EXTRA_SUB_TEXT) ?: ""
-
-        val isMedia = template.contains("MediaStyle")
-        val isCall = sbn.notification.category == Notification.CATEGORY_CALL
-
-        val displayContent = when {
-            isMedia -> context.getString(R.string.status_now_playing)
-            isCall && subText.isNotEmpty() -> "$text • $subText"
-            subText.isNotEmpty() -> if (text.isNotEmpty()) "$text • $subText" else subText
-            else -> text
-        }
-
         val highlightColor = resolveColor(theme, sbn.packageName, "#FFFFFF")
+        val presentation = resolveIslandText(sbn, title, text, config, sender = title)
+        val compact = compactIslandAssets(sbn, picKey, presentation)
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         // --- CONFIGURATION ---
-        builder.applyFloatingPresentation(config.isFloat ?: false, isUpdate)
-        builder.setIslandConfig(timeout = config.timeout , dismissible = true, highlightColor = highlightColor, expandedTimeMs = config.floatTimeout)
+        builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
+        builder.setIslandConfig(
+            timeout = config.timeout,
+            dismissible = true,
+            highlightColor = highlightColor,
+            expandedTimeMs = if (isUpdate) null else config.floatTimeout,
+        )
         builder.setShowNotification(config.isShowShade ?: false)
-        if (!isUpdate) builder.setReopen(true)
-
-        val hiddenKey = "hidden_pixel"
-        builder.addPicture(resolveIcon(sbn, picKey))
-        builder.addPicture(getTransparentPicture(hiddenKey))
 
         val bridgeActions = extractBridgeActions(
             sbn = sbn,
@@ -63,29 +45,18 @@ class MessageTranslator(
             theme = theme
         )
 
-        // Base Info (Shade)
-        builder.setBaseInfo(
-            type = 2,
-            title = title,
-            content = displayContent
-        )
+        builder.addPicture(compact.avatar)
+        compact.attachment?.let(builder::addPicture)
+        // HyperIsland's notification_island template uses iconTextInfo, not chatInfo.
+        // chatInfo is Xiaomi's IM/promoted path; SystemUI-owned proxies hit
+        // PromotedNotificationParamUtils NPE + checkError and the island is deleted.
         builder.setIconTextInfo(
-            picKey= picKey,
+            picKey = compact.smallKey,
             title = title,
-            content = displayContent
+            content = text
         )
-
-        // Island Layout
-        if (isMedia) {
-            builder.setBigIslandInfo(left = ImageTextInfoLeft(1, PicInfo(1, picKey), TextInfo("", "")))
-        } else {
-            builder.setBigIslandInfo(
-                left = ImageTextInfoLeft(1, PicInfo(1, picKey), TextInfo("", "")),
-                right = ImageTextInfoRight(1, PicInfo(1, hiddenKey), TextInfo(title, displayContent))
-            )
-        }
-
-        builder.setSmallIsland(picKey)
+        builder.setBigIslandInfo(left = compact.left, right = compact.right)
+        builder.setSmallIsland(compact.smallKey)
 
         // Add Actions
         if (bridgeActions.isNotEmpty()) {
@@ -119,6 +90,10 @@ class MessageTranslator(
         }
 
 
-        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
+        return HyperIslandData(
+            builder.buildResourceBundle(),
+            builder.buildJsonParam(),
+            highlightColor,
+        )
     }
 }

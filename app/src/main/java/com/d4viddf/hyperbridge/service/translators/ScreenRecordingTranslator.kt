@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.drawable.Icon
 import android.os.Bundle
 import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig
 import com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign
@@ -25,6 +26,7 @@ class ScreenRecordingTranslator(private val context: Context) {
         design: ScreenRecordingDesignConfig = ScreenRecordingDesignConfig()
     ): HyperIslandData {
         val canStop = session.capabilities.canStop
+        val canPause = session.capabilities.canPause
         val payload = ScreenRecordingPayloadFactory.build(
             session = session,
             now = now,
@@ -35,18 +37,24 @@ class ScreenRecordingTranslator(private val context: Context) {
         )
 
         return HyperIslandData(
-            resources = buildResources(session, canStop),
+            resources = buildResources(session, canStop, canPause),
             jsonParam = payload
         )
     }
 
-    private fun buildResources(session: ScreenRecordingSession, canStop: Boolean): Bundle {
+    private fun buildResources(session: ScreenRecordingSession, canStop: Boolean, canPause: Boolean): Bundle {
         val pictures = Bundle().apply {
-            putParcelable(PIC_TICKER, Icon.createWithResource(context, R.drawable.ic_screen_recording_ticker))
+            putParcelable(PIC_TICKER, Icon.createWithResource(context, tickerIcon()))
             putParcelable(
                 PIC_APP_BADGE,
                 Icon.createWithResource(context, R.drawable.ic_screen_recording_app_badge_blank)
             )
+            if (canPause) {
+                putParcelable(PIC_PAUSE, Icon.createWithResource(context, R.drawable.ic_focus_pause_light))
+                putParcelable(PIC_PAUSE_DARK, Icon.createWithResource(context, R.drawable.ic_focus_pause))
+                putParcelable(PIC_RESUME, Icon.createWithResource(context, R.drawable.ic_focus_resume_light))
+                putParcelable(PIC_RESUME_DARK, Icon.createWithResource(context, R.drawable.ic_focus_resume))
+            }
             if (canStop) {
                 putParcelable(PIC_STOP, Icon.createWithResource(context, R.drawable.ic_screen_recording_stop_light))
                 putParcelable(PIC_STOP_DARK, Icon.createWithResource(context, R.drawable.ic_screen_recording_stop_dark))
@@ -55,6 +63,35 @@ class ScreenRecordingTranslator(private val context: Context) {
 
         return Bundle().apply {
             putBundle("miui.focus.pics", pictures)
+            val actions = Bundle()
+            var actionIndex = 1
+            if (canPause) {
+                val pauseIntent = Intent(context, ScreenRecordingActionReceiver::class.java).apply {
+                    action = if (session.paused) {
+                        ScreenRecordingActionReceiver.ACTION_RESUME
+                    } else {
+                        ScreenRecordingActionReceiver.ACTION_PAUSE
+                    }
+                    putExtra(EXTRA_SESSION_ID, session.logicalId)
+                }
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    session.logicalId.hashCode() + actionIndex,
+                    pauseIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                actions.putParcelable(
+                    ACTION_PAUSE,
+                    Notification.Action.Builder(
+                        null,
+                        context.getString(
+                            if (session.paused) R.string.screen_recording_resume else R.string.screen_recording_pause
+                        ),
+                        pendingIntent
+                    ).build()
+                )
+                actionIndex++
+            }
             if (canStop) {
                 val stopIntent = Intent(context, ScreenRecordingActionReceiver::class.java).apply {
                     action = ScreenRecordingActionReceiver.ACTION_STOP
@@ -62,21 +99,31 @@ class ScreenRecordingTranslator(private val context: Context) {
                 }
                 val pendingIntent = PendingIntent.getBroadcast(
                     context,
-                    session.logicalId.hashCode(),
+                    session.logicalId.hashCode() + actionIndex,
                     stopIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-                val stopAction = Notification.Action.Builder(
-                    null,
-                    context.getString(R.string.screen_recording_stop),
-                    pendingIntent
-                ).build()
-                putBundle("miui.focus.actions", Bundle().apply {
-                    putParcelable(ACTION_STOP, stopAction)
-                })
+                actions.putParcelable(
+                    if (canPause) ACTION_STOP else ACTION_PAUSE,
+                    Notification.Action.Builder(
+                        null,
+                        context.getString(R.string.screen_recording_stop),
+                        pendingIntent
+                    ).build()
+                )
+            }
+            if (!actions.isEmpty) {
+                putBundle("miui.focus.actions", actions)
             }
         }
     }
+
+    private fun tickerIcon(): Int =
+        if (HookConfigSync.screenRecorderIconStyle(context) == "voice_recorder") {
+            R.drawable.ic_focus_ticker_recorder
+        } else {
+            R.drawable.ic_screen_recording_ticker
+        }
 
     companion object {
         const val BUSINESS = "screen_recording"
@@ -84,11 +131,17 @@ class ScreenRecordingTranslator(private val context: Context) {
         const val HIGHLIGHT_COLOR = "#FB382F"
         const val ISLAND_TIMEOUT_SECONDS = 43_200
         const val TIMER_TYPE_COUNT_UP = 1
-        const val ACTION_STOP = "miui.focus.action_1"
+        const val TIMER_TYPE_PAUSED = 2
+        const val ACTION_PAUSE = "miui.focus.action_1"
+        const val ACTION_STOP = "miui.focus.action_2"
         const val PIC_TICKER = "miui.focus.pic_ticker"
         const val PIC_APP_BADGE = "miui.focus.pic_recorder_app_badge"
         const val PIC_STOP = "miui.focus.pic_stop"
         const val PIC_STOP_DARK = "miui.focus.pic_stop_dark"
+        const val PIC_PAUSE = "miui.focus.pic_pause"
+        const val PIC_PAUSE_DARK = "miui.focus.pic_pause_dark"
+        const val PIC_RESUME = "miui.focus.pic_resume"
+        const val PIC_RESUME_DARK = "miui.focus.pic_resume_dark"
         const val EXTRA_SESSION_ID = "screen_recording_session_id"
     }
 }
@@ -107,14 +160,19 @@ internal object ScreenRecordingPayloadFactory {
         notifyId: String,
         design: ScreenRecordingDesignConfig = ScreenRecordingDesignConfig()
     ): String {
+        val timerType = if (session.paused) {
+            ScreenRecordingTranslator.TIMER_TYPE_PAUSED
+        } else {
+            ScreenRecordingTranslator.TIMER_TYPE_COUNT_UP
+        }
         val timerInfo = RecorderTimerInfo(
             timerWhen = session.startedAt,
-            timerType = ScreenRecordingTranslator.TIMER_TYPE_COUNT_UP,
+            timerType = timerType,
             timerSystemCurrent = now
         )
         val chatTimerInfo = RecorderChatTimerInfo(
             timerWhen = session.startedAt,
-            timerType = ScreenRecordingTranslator.TIMER_TYPE_COUNT_UP,
+            timerType = timerType,
             timerTotal = session.startedAt,
             timerSystemCurrent = now
         )
@@ -184,19 +242,42 @@ internal object ScreenRecordingPayloadFactory {
                     picProfileDark = ScreenRecordingTranslator.PIC_TICKER,
                     appIconPkg = ScreenRecordingTranslator.PIC_APP_BADGE
                 ),
-                actions = if (session.capabilities.canStop) {
-                    listOf(
-                        RecorderActionRef(
-                            actionIntentType = 0,
-                            action = ScreenRecordingTranslator.ACTION_STOP,
-                            type = 0,
-                            actionIcon = ScreenRecordingTranslator.PIC_STOP,
-                            actionIconDark = ScreenRecordingTranslator.PIC_STOP_DARK
+                actions = buildList {
+                    if (session.capabilities.canPause) {
+                        add(
+                            RecorderActionRef(
+                                actionIntentType = 0,
+                                action = ScreenRecordingTranslator.ACTION_PAUSE,
+                                type = 0,
+                                actionIcon = if (session.paused) {
+                                    ScreenRecordingTranslator.PIC_RESUME
+                                } else {
+                                    ScreenRecordingTranslator.PIC_PAUSE
+                                },
+                                actionIconDark = if (session.paused) {
+                                    ScreenRecordingTranslator.PIC_RESUME_DARK
+                                } else {
+                                    ScreenRecordingTranslator.PIC_PAUSE_DARK
+                                }
+                            )
                         )
-                    )
-                } else {
-                    null
-                }
+                    }
+                    if (session.capabilities.canStop) {
+                        add(
+                            RecorderActionRef(
+                                actionIntentType = 0,
+                                action = if (session.capabilities.canPause) {
+                                    ScreenRecordingTranslator.ACTION_STOP
+                                } else {
+                                    ScreenRecordingTranslator.ACTION_PAUSE
+                                },
+                                type = 0,
+                                actionIcon = ScreenRecordingTranslator.PIC_STOP,
+                                actionIconDark = ScreenRecordingTranslator.PIC_STOP_DARK
+                            )
+                        )
+                    }
+                }.ifEmpty { null }
             )
         )
 

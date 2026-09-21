@@ -10,9 +10,11 @@ import android.graphics.drawable.Drawable
 import androidx.core.graphics.createBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.d4viddf.hyperbridge.HyperBridgeApplication
 import com.d4viddf.hyperbridge.data.AppCacheManager
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.NavContent
 import com.d4viddf.hyperbridge.models.NotificationType
@@ -284,10 +286,21 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     fun toggleSystemIntegration(id: SystemIntegrationId, enabled: Boolean) {
         viewModelScope.launch {
             when (id) {
-                SystemIntegrationId.SCREEN_RECORDER -> preferences.toggleApp(
-                    ScreenRecordingClassifier.PACKAGE_NAME,
-                    enabled
-                )
+                SystemIntegrationId.SCREEN_RECORDER -> {
+                    preferences.toggleApp(ScreenRecordingClassifier.PACKAGE_NAME, enabled)
+                    if (enabled) {
+                        preferences.setScreenRecordingReplaceFloating(true)
+                        HookConfigSync.setScreenRecorderReplacement(
+                            getApplication(),
+                            true,
+                            false,
+                            "screen_recorder",
+                        )
+                        (getApplication() as? HyperBridgeApplication)?.requestScopes(
+                            setOf(ScreenRecordingClassifier.PACKAGE_NAME)
+                        ) {}
+                    }
+                }
                 SystemIntegrationId.VPN -> preferences.setVpnIslandEnabled(enabled)
             }
         }

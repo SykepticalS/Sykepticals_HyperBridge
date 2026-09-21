@@ -20,6 +20,8 @@ sealed interface ApplyRequirement {
             "focus_whitelist_hook" -> Restart(setOf(RestartTarget.SYSTEM_UI))
             "focus_auth_hook" -> Restart(setOf(RestartTarget.XMSF))
             "outer_glow_hook", "heads_up_suppression_hook" -> Restart(setOf(RestartTarget.SYSTEM_UI))
+            "screen_recording_replace_floating",
+            "screen_recorder_replace" -> Restart(setOf(RestartTarget.SCREEN_RECORDER))
             else -> HotReload
         }
     }

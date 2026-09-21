@@ -99,7 +99,7 @@ fun ThemeBehaviourContent() {
     val preferences = remember { AppPreferences(context) }
 
     val globalConfig by preferences.globalConfigFlow.collectAsState(initial = IslandConfig(
-        isFloat = false,
+        firstFloat = false,
         isShowShade = false,
         timeout = 10
     ))

@@ -1,0 +1,114 @@
+package io.github.hyperisland.xposed.templates
+
+import android.content.Context
+import android.os.Bundle
+import android.graphics.drawable.Icon
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Color
+import android.graphics.Typeface
+import io.github.hyperisland.xposed.template.core.contracts.IslandTemplate
+import io.github.hyperisland.xposed.template.core.models.IslandViewModel
+import io.github.hyperisland.xposed.template.core.models.NotifData
+import io.github.hyperisland.xposed.template.core.customization.FocusCustomizationEngine
+import io.github.hyperisland.xposed.renderer.RendererContext
+import io.github.hyperisland.xposed.renderer.resolveRenderer
+import io.github.hyperisland.xposed.utils.toRounded
+import io.github.hyperisland.xposed.log
+import io.github.hyperisland.xposed.islanddispatch.IslandDispatcher
+import io.github.hyperisland.xposed.islanddispatch.definition.IslandRequest
+import io.github.hyperisland.xposed.islanddispatch.definition.IslandDispatchContract
+import io.github.hyperisland.xposed.hook.SystemUI.NotificationCountTracker
+import java.util.concurrent.ConcurrentHashMap
+
+/** 展开内容沿用原通知，收起的大岛只显示图标和活动通知数。 */
+object NotificationCountIslandNotification : IslandTemplate {
+    const val TEMPLATE_ID = "notification_count_island"
+    override val id = TEMPLATE_ID
+    override val defaultFocusTitleExpr = "${'$'}{title}"
+    override val defaultFocusContentExpr = "${'$'}{subtitle_or_title}"
+    override val defaultIslandLeftExpr = ""
+    override val defaultIslandRightExpr = "${'$'}{notification_count}"
+    private val lastPostedSignature = ConcurrentHashMap<String, String>()
+
+    fun reset(scope: NotificationCountTracker.Scope) { lastPostedSignature.remove(scopeKey(scope)) }
+    fun resetAll() { lastPostedSignature.clear() }
+
+    private fun scopeKey(scope: NotificationCountTracker.Scope) = "${scope.pkg}\u0000${scope.channelId}"
+
+    override fun islandExpressionVars(data: NotifData, vm: IslandViewModel) =
+        mapOf("notification_count" to data.notificationCount.coerceAtLeast(0).toString())
+
+    override fun inject(context: Context, extras: Bundle, data: NotifData) {
+        extras.putBoolean(IslandDispatchContract.EXTRA_SUPPRESS_SOURCE_HEADS_UP, true)
+        val scope = NotificationCountTracker.Scope(data.pkg, data.channelId)
+        val notificationId = NotificationCountTracker.notificationId(scope)
+        val count = data.notificationCount.coerceAtLeast(0)
+        val signature = "$count|${data.notificationKey.orEmpty()}|${data.title}|${data.subtitle}"
+        if (lastPostedSignature.put(scopeKey(scope), signature) == signature) {
+            log("count-trace template skip pkg=${data.pkg} channel=${data.channelId} count=$count (unchanged)")
+            return
+        }
+        val fallback = Icon.createWithResource(context, android.R.drawable.ic_dialog_info)
+        val icon = (data.largeIcon ?: data.notifIcon ?: data.appIconRaw ?: fallback).toRounded(context)
+        val countIcon = createCountIcon(context, count)
+        // 数量岛必须独立代发；不修改原始通知 extras，展开时原通知内容保持不变。
+        val posted = IslandDispatcher.post(context, IslandRequest(
+            title = "",
+            content = count.toString(),
+            icon = icon,
+            rightIcon = countIcon,
+            notifId = notificationId,
+            timeoutSecs = data.islandTimeout,
+            firstFloat = data.firstFloat == "on",
+            enableFloat = data.enableFloatMode == "on",
+            showNotification = false,
+            contentIntent = data.contentIntent,
+            isOngoing = data.isOngoing,
+            preserveStatusBarSmallIcon = false,
+            highlightColor = data.highlightColor,
+            showRightHighlightColor = data.showRightHighlightColor,
+            islandOuterGlow = data.islandOuterGlow,
+            islandOuterGlowColor = data.islandOuterGlowColor,
+            sourcePackage = data.pkg,
+            sourceChannelId = data.channelId,
+            // 保留焦点通知区域，展开时显示最近一条原始通知的内容。
+            islandOnly = false,
+            focusTitle = data.title,
+            focusContent = data.subtitle.ifEmpty { data.title },
+            updatable = false,
+            islandEnabled = data.islandEnabled,
+            bypassSceneBehavior = false,
+        ))
+        log("count-trace template post pkg=${data.pkg} channel=${data.channelId} count=$count timeout=${data.islandTimeout} ongoing=${data.isOngoing} posted=$posted notifId=$notificationId updatable=false")
+    }
+
+    /** Gray circular badge used by the right island area; the text remains the expanded content. */
+    private fun createCountIcon(context: Context, count: Int): Icon {
+        val density = context.resources.displayMetrics.density
+        val size = (40f * density).toInt().coerceAtLeast(40)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val center = size / 2f
+        val radius = size * 0.49f
+        val circle = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(220, 110, 110, 110)
+        }
+        canvas.drawCircle(center, center, radius, circle)
+        val label = count.coerceAtLeast(0).let { if (it > 99) "99+" else it.toString() }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = when {
+                label.length >= 3 -> size * 0.27f
+                label.length == 2 -> size * 0.34f
+                else -> size * 0.44f
+            }
+        }
+        val baseline = center - (text.ascent() + text.descent()) / 2f
+        canvas.drawText(label, center, baseline, text)
+        return Icon.createWithBitmap(bitmap)
+    }
+}

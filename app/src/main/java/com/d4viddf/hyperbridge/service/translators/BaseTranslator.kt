@@ -29,12 +29,18 @@ import androidx.graphics.shapes.toPath
 import androidx.palette.graphics.Palette
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.BridgeAction
+import com.d4viddf.hyperbridge.models.IslandConfig
+import com.d4viddf.hyperbridge.models.IslandTextPresentation
+import com.d4viddf.hyperbridge.models.IslandTextPresentationResolver
+import com.d4viddf.hyperbridge.models.IslandTextSource
 import com.d4viddf.hyperbridge.models.theme.ActionButtonMode
 import com.d4viddf.hyperbridge.models.theme.ActionConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.models.theme.ResourceType
 import com.d4viddf.hyperbridge.models.theme.ThemeResource
 import com.d4viddf.hyperbridge.service.visual.IconGeometry
+import com.d4viddf.hyperbridge.service.visual.LargeIconRole
+import com.d4viddf.hyperbridge.service.visual.NotificationVisualPlanner
 import com.d4viddf.hyperbridge.service.visual.NotificationVisualSource
 import com.d4viddf.hyperbridge.service.visual.PixelBounds
 import com.d4viddf.hyperbridge.service.visual.ResolvedNotificationVisual
@@ -52,6 +58,31 @@ abstract class BaseTranslator(
     protected val context: Context,
     protected val repository: ThemeRepository? = null
 ) {
+
+    protected fun resolveIslandText(
+        sbn: StatusBarNotification,
+        title: String,
+        content: String,
+        config: IslandConfig,
+        sender: String = "",
+        state: String = "",
+        progress: String = "",
+    ): IslandTextPresentation {
+        val extras = sbn.notification.extras
+        val appLabel = runCatching {
+            context.packageManager.getApplicationLabel(
+                context.packageManager.getApplicationInfo(sbn.packageName, 0)
+            ).toString()
+        }.getOrDefault(sbn.packageName)
+        val subtitle = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+        return IslandTextPresentationResolver.resolve(
+            source = IslandTextSource(title, content, subtitle, appLabel, sender, state, progress),
+            left = config.leftContent,
+            right = config.rightContent,
+            leftExpression = config.leftCustomExpression,
+            rightExpression = config.rightCustomExpression,
+        )
+    }
 
     enum class ActionDisplayMode { TEXT, ICON, BOTH }
 
@@ -198,14 +229,54 @@ abstract class BaseTranslator(
         sbn: StatusBarNotification,
         picKey: String,
         preferNativeAppBadge: Boolean = false
+    ): HyperPicture = pictureFromVisual(
+        picKey,
+        resolveAvatarVisual(sbn),
+        sbn.packageName,
+        preferNativeAppBadge = preferNativeAppBadge,
+    )
+
+    protected data class CompactIslandAssets(
+        val avatar: HyperPicture,
+        val attachment: HyperPicture?,
+        val left: io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft,
+        val right: io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight,
+        val smallKey: String,
+    )
+
+    protected fun compactIslandAssets(
+        sbn: StatusBarNotification,
+        picKey: String,
+        presentation: IslandTextPresentation,
+    ): CompactIslandAssets {
+        val avatar = resolveAvatarVisual(sbn)
+        val attachmentKey = "${picKey}_media"
+        val attachment = resolveAttachmentVisual(sbn, avatar.bitmap)
+        val (left, right) = IslandCompactLayout.sides(
+            picKey = picKey,
+            presentation = presentation,
+            rightPicKey = attachmentKey.takeIf { attachment != null },
+        )
+        return CompactIslandAssets(
+            avatar = pictureFromVisual(picKey, avatar, sbn.packageName),
+            attachment = attachment?.let { pictureFromVisual(attachmentKey, it, sbn.packageName, skipAppBadge = true) },
+            left = left,
+            right = right,
+            smallKey = picKey,
+        )
+    }
+
+    private fun pictureFromVisual(
+        picKey: String,
+        visual: ResolvedNotificationVisual,
+        packageName: String,
+        preferNativeAppBadge: Boolean = false,
+        skipAppBadge: Boolean = false,
     ): HyperPicture {
-        val visual = resolveNotificationVisual(sbn)
         var originalBitmap = visual.bitmap
-        if (visual.shouldShowAppBadge && !preferNativeAppBadge) {
-            originalBitmap = compositeAppBadge(originalBitmap, sbn.packageName)
+        if (visual.shouldShowAppBadge && !preferNativeAppBadge && !skipAppBadge) {
+            originalBitmap = compositeAppBadge(originalBitmap, packageName)
         }
-        // Small notification icons are tintable glyphs. Application icons and meaningful
-        // content images are artwork and must retain their native colors.
         if ((visual.source == NotificationVisualSource.SMALL_ICON ||
                     visual.source == NotificationVisualSource.FALLBACK) &&
             isBitmapDarkAndMonochrome(originalBitmap)
@@ -304,7 +375,9 @@ abstract class BaseTranslator(
         sbn: StatusBarNotification,
         config: com.d4viddf.hyperbridge.models.IslandConfig,
         theme: HyperTheme? = null,
-        mode: ActionDisplayMode = ActionDisplayMode.BOTH
+        mode: ActionDisplayMode = ActionDisplayMode.BOTH,
+        actionKeyPrefix: String? = null,
+        fallbackActionGlyphs: Boolean = false,
     ): List<BridgeAction> {
         val bridgeActions = mutableListOf<BridgeAction>()
         val actions = sbn.notification.actions ?: return emptyList()
@@ -328,7 +401,7 @@ abstract class BaseTranslator(
                 return@forEachIndexed
             }
 
-            val uniqueKey = "act_${sbn.key.hashCode()}_$index"
+            val uniqueKey = "${actionKeyPrefix ?: "act_${sbn.key.hashCode()}"}_$index"
 
             val actionConfig = resolveActionConfig(theme, sbn.packageName, rawTitle)
 
@@ -368,6 +441,11 @@ abstract class BaseTranslator(
                     bitmapToUse = loadIconBitmap(originalIcon, sbn.packageName)
                 }
             }
+            if ((bitmapToUse == null || !isUsableBitmap(bitmapToUse)) && fallbackActionGlyphs && shouldLoadIcon) {
+                fallbackActionGlyphRes(rawTitle)?.let { resId ->
+                    bitmapToUse = ContextCompat.getDrawable(context, resId)?.mutate()?.toBitmap(width = 96, height = 96)
+                }
+            }
 
             if (bitmapToUse != null) {
                 val processedBitmap = if (theme != null) {
@@ -381,22 +459,17 @@ abstract class BaseTranslator(
                 hyperPic = HyperPicture("${uniqueKey}_icon", processedBitmap)
             }
 
-            val finalIntent = if (hasRemoteInput) {
-                if (config.enableInlineReply != false) {
-                    val replyIntent = android.content.Intent(context, com.d4viddf.hyperbridge.receiver.InlineReplyReceiver::class.java).apply {
-                        putExtra("pending_intent", androidAction.actionIntent)
-                        putExtra("result_key", androidAction.remoteInputs!![0].resultKey)
-                        putExtra("package_name", sbn.packageName)
-                    }
-                    PendingIntent.getBroadcast(
-                        context,
-                        uniqueKey.hashCode(),
-                        replyIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                    )
-                } else {
-                    sbn.notification.contentIntent ?: androidAction.actionIntent
-                }
+            val inlineReply = hasRemoteInput && config.enableInlineReply != false
+            val finalIntent = if (inlineReply) {
+                com.d4viddf.hyperbridge.ui.InlineReplyIntents.pendingIntent(
+                    context,
+                    uniqueKey.hashCode(),
+                    androidAction.actionIntent,
+                    androidAction.remoteInputs!![0].resultKey,
+                    sbn.packageName,
+                )
+            } else if (hasRemoteInput) {
+                sbn.notification.contentIntent ?: androidAction.actionIntent
             } else {
                 androidAction.actionIntent
             }
@@ -408,7 +481,7 @@ abstract class BaseTranslator(
                 title = finalTitle,
                 icon = actionIcon,
                 pendingIntent = finalIntent,
-                actionIntentType = 1,
+                actionIntentType = if (inlineReply) 2 else 1,
                 actionBgColor = appliedBgColor,
                 titleColor = finalTintColorHex
             )
@@ -518,61 +591,44 @@ abstract class BaseTranslator(
 
 
     protected fun getNotificationBitmap(sbn: StatusBarNotification): Bitmap? {
-        return resolveNotificationVisual(sbn).bitmap
+        return resolveAvatarVisual(sbn).bitmap
     }
 
-    protected fun resolveNotificationVisual(sbn: StatusBarNotification): ResolvedNotificationVisual {
+    protected fun resolveNotificationVisual(sbn: StatusBarNotification): ResolvedNotificationVisual =
+        resolveAvatarVisual(sbn)
+
+    private fun resolveAvatarVisual(sbn: StatusBarNotification): ResolvedNotificationVisual {
         val pkg = sbn.packageName
-        val extras = sbn.notification.extras
-
         try {
-            val picture = extras.getParcelableCompat<Bitmap>(Notification.EXTRA_PICTURE)
-            if (picture != null && isUsableBitmap(picture)) {
-                return ResolvedNotificationVisual(picture, NotificationVisualSource.PICTURE)
+            loadPersonBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+            loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+
+            val picture = loadPictureBitmap(sbn)
+            val largeBig = loadLargeIconBigBitmap(sbn)
+            if (largeBig != null &&
+                NotificationVisualPlanner.isLikelyAvatar(largeBig.width, largeBig.height) &&
+                !sameBitmap(largeBig, picture)
+            ) {
+                return ResolvedNotificationVisual(largeBig, NotificationVisualSource.LARGE_ICON)
             }
 
-            val template = extras.getString(Notification.EXTRA_TEMPLATE)
-            if (template == "android.app.Notification\$MessagingStyle") {
-                val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-                if (messages != null && messages.isNotEmpty()) {
-                    val lastMessage = messages.last() as? Bundle
-                    if (lastMessage != null) {
-                        val senderPerson = lastMessage.getParcelableCompat<Person>("sender_person")
-                        if (senderPerson?.icon != null) {
-                            val bitmap = loadIconBitmap(senderPerson.icon!!, pkg)
-                            if (bitmap != null && isUsableBitmap(bitmap)) {
-                                return ResolvedNotificationVisual(bitmap, NotificationVisualSource.PERSON)
-                            }
-                        }
-                    }
+            val large = loadLargeIconBitmap(sbn)
+            if (large != null) {
+                val role = NotificationVisualPlanner.largeIconRole(
+                    hasPicture = picture != null,
+                    hasPersonIcon = false,
+                    width = large.width,
+                    height = large.height,
+                    sameAsPicture = sameBitmap(large, picture),
+                    mediaShareWithoutPersonIcon = isMediaShareNotification(sbn),
+                )
+                if (role == LargeIconRole.AVATAR) {
+                    return ResolvedNotificationVisual(large, NotificationVisualSource.LARGE_ICON)
                 }
             }
 
-            if (sbn.notification.category == Notification.CATEGORY_CALL) {
-                val person = extras.getParcelableCompat<Person>(Notification.EXTRA_CALL_PERSON)
-                    ?: extras.getParcelableCompat<Person>(Notification.EXTRA_MESSAGING_PERSON)
-                    ?: extras.getParcelableArrayListCompat<Person>(Notification.EXTRA_PEOPLE_LIST)?.firstOrNull()
-
-                if (person != null && person.icon != null) {
-                    val bitmap = loadIconBitmap(person.icon!!, pkg)
-                    if (bitmap != null && isUsableBitmap(bitmap)) {
-                        return ResolvedNotificationVisual(bitmap, NotificationVisualSource.PERSON)
-                    }
-                }
-            }
-
-            val largeIcon = sbn.notification.getLargeIcon()
-            if (largeIcon != null) {
-                val bitmap = loadIconBitmap(largeIcon, pkg)
-                if (bitmap != null && isUsableBitmap(bitmap)) {
-                    return ResolvedNotificationVisual(bitmap, NotificationVisualSource.LARGE_ICON)
-                }
-            }
-
-            @Suppress("DEPRECATION")
-            val largeIconBitmap = extras.getParcelableCompat<Bitmap>(Notification.EXTRA_LARGE_ICON)
-            if (largeIconBitmap != null && isUsableBitmap(largeIconBitmap)) {
-                return ResolvedNotificationVisual(largeIconBitmap, NotificationVisualSource.LARGE_ICON)
+            remoteAvatarBitmap(sbn, picture)?.let {
+                return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON)
             }
 
             if (sbn.notification.smallIcon != null) {
@@ -586,16 +642,168 @@ abstract class BaseTranslator(
             if (appIcon != null && isUsableBitmap(appIcon)) {
                 return ResolvedNotificationVisual(appIcon, NotificationVisualSource.APP_ICON)
             }
-
         } catch (e: Exception) {
-            Log.e("BaseTranslator", "Error extracting bitmap", e)
+            Log.e("BaseTranslator", "Error extracting avatar", e)
             val appIcon = getAppIconBitmap(pkg)
             if (appIcon != null && isUsableBitmap(appIcon)) {
                 return ResolvedNotificationVisual(appIcon, NotificationVisualSource.APP_ICON)
             }
         }
-
         return ResolvedNotificationVisual(createFallbackBitmap(), NotificationVisualSource.FALLBACK)
+    }
+
+    private fun resolveAttachmentVisual(sbn: StatusBarNotification, avatar: Bitmap): ResolvedNotificationVisual? {
+        val picture = loadPictureBitmap(sbn)
+        if (picture != null && isUsableBitmap(picture) && !sameBitmap(picture, avatar)) {
+            return ResolvedNotificationVisual(picture, NotificationVisualSource.PICTURE)
+        }
+        val large = loadLargeIconBitmap(sbn)
+        if (large != null && isUsableBitmap(large)) {
+            val personIcon = loadPersonBitmap(sbn) != null || loadShortcutBitmap(sbn) != null
+            val role = NotificationVisualPlanner.largeIconRole(
+                hasPicture = picture != null,
+                hasPersonIcon = personIcon,
+                width = large.width,
+                height = large.height,
+                sameAsPicture = sameBitmap(large, picture),
+                mediaShareWithoutPersonIcon = isMediaShareNotification(sbn) && !personIcon,
+            )
+            if (role == LargeIconRole.ATTACHMENT &&
+                NotificationVisualPlanner.isDistinctMedia(
+                    large.width,
+                    large.height,
+                    avatar.width,
+                    avatar.height,
+                    sameBitmap(large, avatar),
+                )
+            ) {
+                return ResolvedNotificationVisual(large, NotificationVisualSource.LARGE_ICON)
+            }
+        }
+        return remoteAttachmentBitmap(sbn, avatar)?.let {
+            ResolvedNotificationVisual(it, NotificationVisualSource.PICTURE)
+        }
+    }
+
+    private fun loadPictureBitmap(sbn: StatusBarNotification): Bitmap? {
+        val extras = sbn.notification.extras
+        extras.getParcelableCompat<Bitmap>(Notification.EXTRA_PICTURE)
+            ?.takeIf(::isUsableBitmap)
+            ?.let { return it }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            extras.getParcelableCompat<Icon>(Notification.EXTRA_PICTURE_ICON)
+                ?.let { loadIconBitmap(it, sbn.packageName) }
+                ?.takeIf(::isUsableBitmap)
+                ?.let { return it }
+        }
+        return null
+    }
+
+    private fun loadLargeIconBitmap(sbn: StatusBarNotification): Bitmap? {
+        sbn.notification.getLargeIcon()?.let { loadIconBitmap(it, sbn.packageName) }
+            ?.takeIf(::isUsableBitmap)
+            ?.let { return it }
+        @Suppress("DEPRECATION")
+        return sbn.notification.extras.getParcelableCompat<Bitmap>(Notification.EXTRA_LARGE_ICON)
+            ?.takeIf(::isUsableBitmap)
+    }
+
+    private fun loadLargeIconBigBitmap(sbn: StatusBarNotification): Bitmap? {
+        val extras = sbn.notification.extras
+        extras.getParcelableCompat<Icon>(Notification.EXTRA_LARGE_ICON_BIG)
+            ?.let { loadIconBitmap(it, sbn.packageName) }
+            ?.takeIf(::isUsableBitmap)
+            ?.let { return it }
+        return extras.getParcelableCompat<Bitmap>(Notification.EXTRA_LARGE_ICON_BIG)
+            ?.takeIf(::isUsableBitmap)
+    }
+
+    private fun loadShortcutBitmap(sbn: StatusBarNotification): Bitmap? =
+        com.d4viddf.hyperbridge.service.NotificationConversationShortcut.iconBitmap(context, sbn)
+            ?.takeIf(::isUsableBitmap)
+
+    private fun isMediaShareNotification(sbn: StatusBarNotification): Boolean {
+        val extras = sbn.notification.extras
+        return listOf(
+            extras.getCharSequence(Notification.EXTRA_TITLE),
+            extras.getCharSequence(Notification.EXTRA_TEXT),
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+            extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT),
+            sbn.notification.tickerText,
+        ).any { com.d4viddf.hyperbridge.service.NotificationIdentityResolver.isMediaShareCaption(it) }
+    }
+
+    private fun sameBitmap(left: Bitmap?, right: Bitmap?): Boolean {
+        if (left == null || right == null) return false
+        return left === right || runCatching { left.sameAs(right) }.getOrDefault(false)
+    }
+
+    private fun remoteViewsExtract(sbn: StatusBarNotification) =
+        com.d4viddf.hyperbridge.service.NotificationRemoteViewsParser.collect(
+            sbn.notification,
+            context,
+            recoverIfMissing = true,
+        )
+
+    private fun remoteAvatarBitmap(sbn: StatusBarNotification, picture: Bitmap?): Bitmap? =
+        remoteViewsExtract(sbn).bitmaps
+            .filter { isUsableBitmap(it) && NotificationVisualPlanner.isLikelyAvatar(it.width, it.height) }
+            .filter { !sameBitmap(it, picture) }
+            .minByOrNull { it.width.toLong() * it.height.toLong() }
+
+    private fun remoteAttachmentBitmap(sbn: StatusBarNotification, avatar: Bitmap): Bitmap? =
+        remoteViewsExtract(sbn).bitmaps
+            .filter {
+                isUsableBitmap(it) &&
+                    NotificationVisualPlanner.isDistinctMedia(
+                        it.width,
+                        it.height,
+                        avatar.width,
+                        avatar.height,
+                        sameBitmap(it, avatar),
+                    )
+            }
+            .maxByOrNull { it.width.toLong() * it.height.toLong() }
+
+    private fun loadPersonBitmap(sbn: StatusBarNotification): Bitmap? {
+        val pkg = sbn.packageName
+        val extras = sbn.notification.extras
+        val self = selfPersonNames(sbn)
+        val fromMessages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            ?.toList()
+            .orEmpty()
+            .asReversed()
+            .firstNotNullOfOrNull { parcelable ->
+                val bundle = parcelable as? Bundle ?: return@firstNotNullOfOrNull null
+                val person = bundle.getParcelableCompat<Person>("sender_person") ?: return@firstNotNullOfOrNull null
+                if (self.any { it.equals(person.name?.toString()?.trim().orEmpty(), ignoreCase = true) }) {
+                    return@firstNotNullOfOrNull null
+                }
+                person.icon?.let { loadIconBitmap(it, pkg) }?.takeIf(::isUsableBitmap)
+            }
+        if (fromMessages != null) return fromMessages
+        val people = buildList {
+            extras.getParcelableCompat<Person>(Notification.EXTRA_CALL_PERSON)?.let(::add)
+            extras.getParcelableArrayListCompat<Person>(Notification.EXTRA_PEOPLE_LIST)
+                ?.filterNot { person ->
+                    self.any { it.equals(person.name?.toString()?.trim().orEmpty(), ignoreCase = true) }
+                }
+                ?.let(::addAll)
+        }
+        return people.firstNotNullOfOrNull { person ->
+            person.icon?.let { loadIconBitmap(it, pkg) }?.takeIf(::isUsableBitmap)
+        }
+    }
+
+    private fun selfPersonNames(sbn: StatusBarNotification): Set<String> {
+        val extras = sbn.notification.extras
+        val names = linkedSetOf<String>()
+        extras.getCharSequence(Notification.EXTRA_SELF_DISPLAY_NAME)?.toString()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(names::add)
+        extras.getParcelableCompat<Person>(Notification.EXTRA_MESSAGING_PERSON)
+            ?.name?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(names::add)
+        return names
     }
 
     protected fun createRoundedIconWithBackground(source: Bitmap, backgroundColor: Int, paddingDp: Int = 8): Bitmap {
@@ -659,7 +867,7 @@ abstract class BaseTranslator(
         }
     }
 
-    private fun isUsableBitmap(bitmap: Bitmap?): Boolean {
+    protected fun isUsableBitmap(bitmap: Bitmap?): Boolean {
         if (bitmap == null || bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return false
         return bitmap.width <= 2_048 &&
                 bitmap.height <= 2_048 &&
@@ -684,19 +892,39 @@ abstract class BaseTranslator(
         height: Int? = null
     ): Bitmap? {
         return try {
-            val drawable = if (icon.type == Icon.TYPE_RESOURCE) {
-                try {
-                    val targetContext = context.createPackageContext(packageName, 0)
-                    icon.loadDrawable(targetContext)
-                } catch (e: Exception) {
-                    icon.loadDrawable(context)
+            val resPackage = runCatching { icon.resPackage }.getOrNull()?.takeIf { it.isNotBlank() }
+            val drawable = when {
+                icon.type != Icon.TYPE_RESOURCE -> icon.loadDrawable(context)
+                else -> {
+                    val contexts = listOfNotNull(
+                        context,
+                        runCatching { context.createPackageContext(packageName, 0) }.getOrNull(),
+                        resPackage?.takeIf { it != packageName }?.let {
+                            runCatching { context.createPackageContext(it, 0) }.getOrNull()
+                        },
+                        runCatching { context.createPackageContext("android", 0) }.getOrNull(),
+                    ).distinct()
+                    contexts.firstNotNullOfOrNull { candidate ->
+                        runCatching { icon.loadDrawable(candidate) }.getOrNull()
+                    }
                 }
-            } else {
-                icon.loadDrawable(context)
             }
             drawable?.toBitmap(width = width, height = height)
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun fallbackActionGlyphRes(title: String): Int? {
+        val value = title.lowercase()
+        return when {
+            value.isBlank() -> android.R.drawable.ic_menu_more
+            listOf("pause", "pausar", "pausa").any { it in value } -> android.R.drawable.ic_media_pause
+            listOf("resume", "play", "contin", "reanud", "reprendre").any { it in value } -> android.R.drawable.ic_media_play
+            listOf("cancel", "stop", "remove", "delete", "cancelar", "detener", "eliminar").any { it in value } ->
+                android.R.drawable.ic_menu_close_clear_cancel
+            listOf("open", "view", "abrir", "ver").any { it in value } -> android.R.drawable.ic_menu_view
+            else -> android.R.drawable.ic_menu_more
         }
     }
 

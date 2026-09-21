@@ -24,6 +24,17 @@ class MessageNotificationResolverTest {
     }
 
     @Test
+    fun sameSenderTitleIsConversationIdentityWhenShortcutIsMissing() {
+        val first = resolver.resolve(signals(shortcutId = null, conversationTitle = "Ada", notificationId = 1))
+        val second = resolver.resolve(signals(shortcutId = null, conversationTitle = "Ada", notificationId = 2))
+        val other = resolver.resolve(signals(shortcutId = null, conversationTitle = "Sam", notificationId = 3))
+
+        assertEquals(first.logicalId, second.logicalId)
+        assertNotEquals(first.logicalId, other.logicalId)
+        assertEquals("conversation", first.source)
+    }
+
+    @Test
     fun stableNotificationSlotIgnoresMutableDisplayTitle() {
         val first = resolver.resolve(signals(shortcutId = null))
         val second = resolver.resolve(signals(shortcutId = null))
@@ -44,14 +55,15 @@ class MessageNotificationResolverTest {
     private fun signals(
         shortcutId: String? = "chat",
         isSummary: Boolean = false,
-        notificationId: Int = 9
+        notificationId: Int = 9,
+        conversationTitle: String? = null,
     ) = MessageNotificationSignals(
         packageName = "example.messages",
         notificationId = notificationId,
         notificationTag = null,
         shortcutId = shortcutId,
         locusId = null,
-        conversationTitle = null,
+        conversationTitle = conversationTitle,
         isGroupSummary = isSummary
     )
 }

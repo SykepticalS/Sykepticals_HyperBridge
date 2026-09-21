@@ -91,7 +91,7 @@ class IslandUpdateResolverTest {
     }
 
     @Test
-    fun messageBurstsUseNewBridgeIdsToForceReopen() {
+    fun sameConversationMessageUpdatesExistingIslandInPlace() {
         val first = IslandUpdateResolver.decide(
             logicalId = "conversation-a",
             candidateBridgeId = 42,
@@ -104,24 +104,60 @@ class IslandUpdateResolverTest {
             candidateBridgeId = 999,
             contentHash = "where are you?".hashCode(),
             previous = PreviousIslandPresentation("conversation-a", first.bridgeId, "hello".hashCode()),
-            notificationType = NotificationType.MESSAGE
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = messageEvent(200L, 2)
         )
         val third = IslandUpdateResolver.decide(
             logicalId = "conversation-a",
             candidateBridgeId = 1000,
             contentHash = "HELLO".hashCode(),
-            previous = PreviousIslandPresentation("conversation-a", second.bridgeId, "where are you?".hashCode()),
-            notificationType = NotificationType.MESSAGE
+            previous = PreviousIslandPresentation(
+                "conversation-a",
+                second.bridgeId,
+                "where are you?".hashCode(),
+                messageEventFingerprint = messageEvent(200L, 2)
+            ),
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = messageEvent(300L, 3)
         )
 
-        assertEquals(999, second.bridgeId)
-        assertEquals(1000, third.bridgeId)
-        assertEquals(IslandPresentationKind.NEW, second.kind)
-        assertEquals(IslandPresentationKind.NEW, third.kind)
-        assertTrue(second.presentationReason.mayAutoExpand)
-        assertTrue(third.presentationReason.mayAutoExpand)
-        assertTrue(second.cancelBeforeNotify)
-        assertTrue(third.cancelBeforeNotify)
+        assertEquals(first.bridgeId, second.bridgeId)
+        assertEquals(second.bridgeId, third.bridgeId)
+        assertEquals(IslandPresentationKind.UPDATE, second.kind)
+        assertEquals(IslandPresentationKind.UPDATE, third.kind)
+        assertFalse(second.presentationReason.mayAutoExpand)
+        assertFalse(third.presentationReason.mayAutoExpand)
+        assertFalse(second.cancelBeforeNotify)
+        assertFalse(third.cancelBeforeNotify)
+    }
+
+    @Test
+    fun chromeDownloadProgressIsAnInPlaceUpdate() {
+        val first = IslandUpdateResolver.decide(
+            logicalId = "download:com.android.chrome:file:report.pdf",
+            candidateBridgeId = 42,
+            contentHash = 10,
+            previous = null,
+            notificationType = NotificationType.DOWNLOAD
+        )
+        val second = IslandUpdateResolver.decide(
+            logicalId = "download:com.android.chrome:file:report.pdf",
+            candidateBridgeId = 99,
+            contentHash = 55,
+            previous = PreviousIslandPresentation(
+                "download:com.android.chrome:file:report.pdf",
+                first.bridgeId,
+                10
+            ),
+            notificationType = NotificationType.DOWNLOAD,
+            presentationReason = IslandPresentationReason.CONTENT_UPDATE
+        )
+
+        assertEquals(IslandPresentationKind.UPDATE, second.kind)
+        assertEquals(first.bridgeId, second.bridgeId)
+        assertTrue(second.onlyAlertOnce)
+        assertFalse(second.cancelBeforeNotify)
+        assertFalse(second.presentationReason.mayAutoExpand)
     }
 
     @Test
@@ -197,7 +233,7 @@ class IslandUpdateResolverTest {
     }
 
     @Test
-    fun identicalTextWithDifferentMessageEventCreatesFreshGeneration() {
+    fun identicalTextWithDifferentMessageEventUpdatesInPlace() {
         val firstEvent = messageEvent(timestamp = 100L, messageCount = 1)
         val secondEvent = messageEvent(timestamp = 200L, messageCount = 2)
         val decision = IslandUpdateResolver.decide(
@@ -214,15 +250,15 @@ class IslandUpdateResolverTest {
             messageEventFingerprint = secondEvent
         )
 
-        assertEquals(IslandPresentationKind.NEW, decision.kind)
-        assertEquals(999, decision.bridgeId)
-        assertEquals(IslandPresentationReason.NEW_EVENT, decision.presentationReason)
-        assertFalse(decision.onlyAlertOnce)
-        assertTrue(decision.cancelBeforeNotify)
+        assertEquals(IslandPresentationKind.UPDATE, decision.kind)
+        assertEquals(42, decision.bridgeId)
+        assertTrue(decision.onlyAlertOnce)
+        assertEquals(IslandPresentationReason.CONTENT_UPDATE, decision.presentationReason)
+        assertFalse(decision.cancelBeforeNotify)
     }
 
     @Test
-    fun messageLikeStandardNotificationUsesMessageReplacementLifecycle() {
+    fun messageLikeStandardNotificationUpdatesExistingConversation() {
         val decision = IslandUpdateResolver.decide(
             logicalId = "conversation-a",
             candidateBridgeId = 999,
@@ -238,23 +274,25 @@ class IslandUpdateResolverTest {
             messageEventFingerprint = messageEvent(200L, 2)
         )
 
-        assertEquals(IslandPresentationKind.NEW, decision.kind)
-        assertTrue(decision.cancelBeforeNotify)
+        assertEquals(IslandPresentationKind.UPDATE, decision.kind)
+        assertEquals(42, decision.bridgeId)
+        assertFalse(decision.cancelBeforeNotify)
     }
 
     @Test
-    fun messageBridgeIdsChangeByGenerationAndAvoidReservedRanges() {
+    fun messageBridgeIdsStayStableForTheSameConversation() {
         val first = MessageBridgeIdPolicy.candidate("conversation-a", 2L, 123)
         val second = MessageBridgeIdPolicy.candidate("conversation-a", 3L, 456)
 
         assertTrue(first < -1_000_000_000)
         assertTrue(second < -1_000_000_000)
-        assertTrue(first != second)
+        assertEquals(first, second)
         assertTrue(first != PermanentIslandManager.PERMANENT_BRIDGE_ID)
+        assertTrue(first != MessageBridgeIdPolicy.candidate("conversation-b", 2L, 123))
     }
 
     @Test
-    fun messageBridgeIdIncludesEventIdentityEvenForSameGenerationAndContent() {
+    fun messageBridgeIdIgnoresEventIdentitySoNotifyCanUpdate() {
         val first = MessageBridgeIdPolicy.candidate(
             logicalId = "conversation-a",
             generation = 2L,
@@ -268,7 +306,7 @@ class IslandUpdateResolverTest {
             messageEventFingerprint = messageEvent(200L, 2)
         )
 
-        assertTrue(first != second)
+        assertEquals(first, second)
     }
 
     @Test
@@ -290,6 +328,154 @@ class IslandUpdateResolverTest {
         assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 0, true, false, false))
         assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 0, false, true, true))
         assertFalse(PermanentIslandVisibilityPolicy.desiredActive(false, 0, false, false, false))
+    }
+
+    @Test
+    fun reconciliationNeverReapsMessageForMissingRegroupedSource() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.MESSAGE,
+                removeOriginalNotification = false,
+                dismissWithOriginal = true
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.STANDARD,
+                removeOriginalNotification = false,
+                dismissWithOriginal = true
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.DOWNLOAD,
+                removeOriginalNotification = false,
+                dismissWithOriginal = true
+            )
+        )
+    }
+
+    @Test
+    fun appCancelDoesNotDismissInProgressDownloadIsland() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.DOWNLOAD,
+                dismissWithOriginal = true,
+                isAppCancellation = true
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.PROGRESS,
+                dismissWithOriginal = true,
+                isAppCancellation = true
+            )
+        )
+    }
+
+    @Test
+    fun messageReplacementCancelDoesNotDismissTheIsland() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.MESSAGE,
+                dismissWithOriginal = true,
+                isAppCancellation = true
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.STANDARD,
+                dismissWithOriginal = true,
+                isAppCancellation = true
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.MESSAGE,
+                dismissWithOriginal = true,
+                isAppCancellation = false
+            )
+        )
+    }
+
+    @Test
+    fun cacheMissOnTheSameConversationStillReusesTheFocusNotifyId() {
+        val logicalId = "conversation:whatsapp:ada"
+        val firstId = MessageBridgeIdPolicy.candidate(logicalId, 1L, "hello".hashCode())
+        val secondId = MessageBridgeIdPolicy.candidate(logicalId, 99L, "uhh".hashCode())
+        assertEquals(firstId, secondId)
+
+        val afterCacheClear = IslandUpdateResolver.decide(
+            logicalId = logicalId,
+            candidateBridgeId = secondId,
+            contentHash = "uhh".hashCode(),
+            previous = null,
+            notificationType = NotificationType.STANDARD,
+            isMessagingEvent = true,
+            messageEventFingerprint = messageEvent(200L, 2)
+        )
+        assertEquals(IslandPresentationKind.NEW, afterCacheClear.kind)
+        assertEquals(firstId, afterCacheClear.bridgeId)
+        assertFalse(afterCacheClear.cancelBeforeNotify)
+    }
+
+    @Test
+    fun sameConversationKeepsBridgeIdWhenContentChanges() {
+        val first = IslandUpdateResolver.decide(
+            logicalId = "conversation-a",
+            candidateBridgeId = 42,
+            contentHash = 1,
+            previous = null,
+            notificationType = NotificationType.MESSAGE
+        )
+        val update = IslandUpdateResolver.decide(
+            logicalId = "conversation-a",
+            candidateBridgeId = 99,
+            contentHash = 2,
+            previous = PreviousIslandPresentation("conversation-a", first.bridgeId, 1),
+            notificationType = NotificationType.MESSAGE,
+            messageEventFingerprint = messageEvent(200L, 2)
+        )
+        assertEquals(IslandPresentationKind.UPDATE, update.kind)
+        assertEquals(first.bridgeId, update.bridgeId)
+        assertFalse(update.cancelBeforeNotify)
+    }
+
+    @Test
+    fun reconciliationStillReapsSourceBoundIslandTypes() {
+        assertTrue(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.MEDIA,
+                removeOriginalNotification = false,
+                dismissWithOriginal = false
+            )
+        )
+    }
+
+    @Test
+    fun callProxyStaysPostedEvenWithoutOngoingSourceFlag() {
+        assertTrue(NotificationLifecyclePolicy.proxyStaysPosted(NotificationType.CALL))
+        assertFalse(NotificationLifecyclePolicy.proxyStaysPosted(NotificationType.STANDARD))
+        assertFalse(NotificationLifecyclePolicy.proxyStaysPosted(NotificationType.MESSAGE))
+    }
+
+    @Test
+    fun callReconciliationLooksAtSourceKeyNotLogicalId() {
+        val current = setOf("0|com.android.dialer|42|null|0")
+        assertTrue(
+            NotificationLifecyclePolicy.isTrackedSourcePresent(
+                logicalId = "call:com.android.dialer:1",
+                sourceKey = "0|com.android.dialer|42|null|0",
+                currentSourceKeys = current
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.isTrackedSourcePresent(
+                logicalId = "call:com.android.dialer:1",
+                sourceKey = "0|com.android.dialer|42|null|0",
+                currentSourceKeys = emptySet()
+            )
+        )
     }
 
     private fun messageEvent(timestamp: Long, messageCount: Int): MessageEventFingerprint {

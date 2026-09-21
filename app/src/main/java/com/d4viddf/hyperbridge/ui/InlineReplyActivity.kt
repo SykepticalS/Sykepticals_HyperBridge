@@ -6,9 +6,13 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -45,29 +49,72 @@ import androidx.compose.ui.unit.dp
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.ui.theme.HyperBridgeTheme
 
-/** User-initiated reply surface. An Activity avoids the obsolete overlay permission. */
+/**
+ * Standalone reply surface launched directly from island/notification actions.
+ * Targeting this activity (not a broadcast trampoline) lets SystemUI start it
+ * over whichever app is in the foreground.
+ */
 class InlineReplyActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val pendingIntent = if (Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableExtra(EXTRA_PENDING_INTENT, PendingIntent::class.java)
-        } else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_PENDING_INTENT)
-        val resultKey = intent.getStringExtra(EXTRA_RESULT_KEY)
-        if (pendingIntent == null || resultKey == null) {
+        configureOverlayWindow()
+        render(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        render(intent)
+    }
+
+    private fun configureOverlayWindow() {
+        enableEdgeToEdge()
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+    }
+
+    override fun finish() {
+        super.finish()
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+    }
+
+    private fun render(source: Intent) {
+        val pendingIntent = source.replyPendingIntent()
+        val resultKey = source.getStringExtra(EXTRA_RESULT_KEY)
+        if (pendingIntent == null || resultKey.isNullOrBlank()) {
             finish()
             return
         }
         setContent {
             HyperBridgeTheme {
-                var message by remember { mutableStateOf("") }
+                var message by remember(pendingIntent, resultKey) { mutableStateOf("") }
                 val focusRequester = remember { FocusRequester() }
-                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                LaunchedEffect(pendingIntent, resultKey) { focusRequester.requestFocus() }
                 Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)),
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { finish() },
+                        ),
                     contentAlignment = Alignment.BottomCenter,
                 ) {
                     Row(
-                        Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(16.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(16.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {},
+                            ),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -118,9 +165,14 @@ class InlineReplyActivity : ComponentActivity() {
         finish()
     }
 
+    private fun Intent.replyPendingIntent(): PendingIntent? = if (Build.VERSION.SDK_INT >= 33) {
+        getParcelableExtra(EXTRA_PENDING_INTENT, PendingIntent::class.java)
+    } else @Suppress("DEPRECATION") getParcelableExtra(EXTRA_PENDING_INTENT)
+
     companion object {
         const val EXTRA_PENDING_INTENT = "pending_intent"
         const val EXTRA_RESULT_KEY = "result_key"
+        const val EXTRA_PACKAGE_NAME = "package_name"
         private const val TAG = "InlineReplyActivity"
     }
 }

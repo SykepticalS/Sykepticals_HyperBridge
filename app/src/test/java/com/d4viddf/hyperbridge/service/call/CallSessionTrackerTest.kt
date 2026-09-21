@@ -9,6 +9,11 @@ import org.junit.Test
 
 class CallSessionTrackerTest {
     @Test
+    fun callIslandsUseAPersistentHyperOsTimeout() {
+        assertEquals(86_400_000, CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS)
+    }
+
+    @Test
     fun ongoingPresentationImmediatelyKeepsOutgoingCallPreConnected() {
         val session = CallSessionTracker().resolve(
             input(classification(CallState.OUTGOING_CALLING, presentation = CallPresentationType.ONGOING), 10_000L)

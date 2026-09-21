@@ -32,13 +32,33 @@ object SettingsKeys {
     const val POPUP_SEMANTIC_RULES_FINGERPRINT = "popup_semantic_rules_fingerprint"
 
     // Global Configs
-    const val GLOBAL_FLOAT = "global_float"
+    const val GLOBAL_FLOAT = "global_float" // legacy migration source
+    const val GLOBAL_FIRST_FLOAT = "global_first_float"
+    const val GLOBAL_FLOAT_ON_UPDATE = "global_float_on_update"
     const val GLOBAL_SHADE = "global_shade"
     const val GLOBAL_TIMEOUT = "global_timeout"
     const val GLOBAL_FLOAT_TIMEOUT = "global_float_timeout"
     const val GLOBAL_REMOVE_NOTIF = "global_remove_original_notif"
     const val GLOBAL_DISMISS_WITH_ORIGINAL = "global_dismiss_with_original"
     const val GLOBAL_ENABLE_INLINE_REPLY = "global_enable_inline_reply"
+    const val GLOBAL_MARQUEE = "global_marquee"
+    const val GLOBAL_MARQUEE_DISMISS = "global_marquee_dismiss"
+    const val GLOBAL_LEFT_CONTENT = "global_left_content"
+    const val GLOBAL_RIGHT_CONTENT = "global_right_content"
+    const val GLOBAL_LEFT_EXPRESSION = "global_left_expression"
+    const val GLOBAL_RIGHT_EXPRESSION = "global_right_expression"
+    const val GLOBAL_ISLAND_GLOW = "global_island_glow"
+    const val GLOBAL_FOCUS_GLOW = "global_focus_glow"
+    const val GLOBAL_ISLAND_GLOW_COLOR = "global_island_glow_color"
+    const val GLOBAL_FOCUS_GLOW_COLOR = "global_focus_glow_color"
+    const val GLOBAL_FORCE_ISLAND_GLOW = "global_force_island_glow"
+    const val GLOBAL_FORCE_FOCUS_GLOW = "global_force_focus_glow"
+    const val GLOBAL_CONTACT_PINK_GLOW = "global_contact_pink_glow"
+    const val GLOBAL_RESTORE_LOCKSCREEN = "global_restore_lockscreen"
+    const val GLOBAL_DND_BEHAVIOR = "global_dnd_behavior"
+    const val GLOBAL_FULLSCREEN_BEHAVIOR = "global_fullscreen_behavior"
+    const val GLOBAL_LANDSCAPE_BEHAVIOR = "global_landscape_behavior"
+    const val ISLAND_CONFIG_V2_MIGRATED = "island_config_v2_migrated"
     const val GLOBAL_BLOCKED_TERMS = "global_blocked_terms"
 
     // Nav
@@ -49,4 +69,7 @@ object SettingsKeys {
     const val SCREEN_RECORDING_TIMEOUT = "screen_recording_timeout"
     const val SCREEN_RECORDING_LEFT_DESIGN = "screen_recording_left_design"
     const val SCREEN_RECORDING_RIGHT_DESIGN = "screen_recording_right_design"
+    const val SCREEN_RECORDING_REPLACE_FLOATING = "screen_recording_replace_floating"
+    const val SCREEN_RECORDING_IMMEDIATE_START = "screen_recording_immediate_start"
+    const val SCREEN_RECORDING_ICON_STYLE = "screen_recording_icon_style"
 }

@@ -12,7 +12,8 @@ data class ScreenRecordingSessionInput(
     val sourceKey: String,
     val packageName: String,
     val sourcePostTime: Long,
-    val capabilities: ScreenRecordingCapabilities
+    val capabilities: ScreenRecordingCapabilities,
+    val paused: Boolean = false
 )
 
 data class ScreenRecordingSession(
@@ -20,7 +21,8 @@ data class ScreenRecordingSession(
     val sourceKey: String,
     val packageName: String,
     val startedAt: Long,
-    val capabilities: ScreenRecordingCapabilities
+    val capabilities: ScreenRecordingCapabilities,
+    val paused: Boolean = false
 )
 
 object ScreenRecordingSavedIdentity {
@@ -35,7 +37,7 @@ class ScreenRecordingSessionTracker {
     fun resolve(input: ScreenRecordingSessionInput): ScreenRecordingSession {
         val current = sessionsBySource[input.sourceKey]
         if (current != null && current.startedAt == input.sourcePostTime) {
-            val updated = current.copy(capabilities = input.capabilities)
+            val updated = current.copy(capabilities = input.capabilities, paused = input.paused)
             sessionsBySource[input.sourceKey] = updated
             return updated
         }
@@ -45,7 +47,8 @@ class ScreenRecordingSessionTracker {
             sourceKey = input.sourceKey,
             packageName = input.packageName,
             startedAt = input.sourcePostTime,
-            capabilities = input.capabilities
+            capabilities = input.capabilities,
+            paused = input.paused
         )
         sessionsBySource[input.sourceKey] = session
         return session
@@ -81,6 +84,7 @@ object ScreenRecordingSemanticFingerprint {
         session.capabilities.canStop,
         session.capabilities.canPause,
         session.capabilities.canResume,
+        session.paused,
         design.left.name,
         design.right.name,
         "screen_recording_avatar_timer_v14_blank_app_badge",

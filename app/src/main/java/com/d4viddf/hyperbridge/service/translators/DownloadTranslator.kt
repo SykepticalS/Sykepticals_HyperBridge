@@ -7,13 +7,15 @@ import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
+import com.d4viddf.hyperbridge.models.IslandVisualMetadata
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.HyperPicture
+import io.github.d4viddf.hyperisland_kit.models.CircularProgressInfo
 import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
 import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight
 import io.github.d4viddf.hyperisland_kit.models.PicInfo
-import io.github.d4viddf.hyperisland_kit.models.TextInfo
+import io.github.d4viddf.hyperisland_kit.models.ProgressTextInfo
 
 class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslator(context, repo) {
 
@@ -38,13 +40,14 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
 
         val customTick = getThemeBitmap(theme, "tick_icon")
 
-        val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
         builder.setShowNotification(config.isShowShade ?: true)
         
-        val isFloatEnabled = config.isFloat ?: false
-        builder.setEnableFloat(isFloatEnabled && !isUpdate)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
+        val floatPresentation = IslandFloatingPresentationPolicy.resolve(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
+        val isFloatEnabled = floatPresentation.enableFloat
+        builder.setEnableFloat(floatPresentation.enableFloat)
+        builder.setIslandFirstFloat(floatPresentation.islandFirstFloat)
 
         val extras = sbn.notification.extras
         val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
@@ -76,7 +79,13 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             }
         }
 
-        val actions = extractBridgeActions(sbn, config, theme)
+        val actions = extractBridgeActions(
+            sbn = sbn,
+            config = config,
+            theme = theme,
+            actionKeyPrefix = "act_${picKey.removePrefix("pic_")}",
+            fallbackActionGlyphs = true,
+        )
 
         builder.setChatInfo(
             title = title,
@@ -95,22 +104,44 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
                 right = ImageTextInfoRight(2, PicInfo(1, tickKey))
             )
             builder.setSmallIsland(tickKey)
-            builder.setIslandConfig(timeout = config.timeout , dismissible = true, expandedTimeMs = if (isFloatEnabled) config.floatTimeout else null)
         } else {
             if (isIndeterminate) {
+                val presentation = resolveIslandText(
+                    sbn = sbn,
+                    title = title,
+                    content = textContent,
+                    config = config,
+                    state = context.getString(R.string.downloading),
+                    progress = "",
+                )
                 builder.setBigIslandInfo(
-                    left = ImageTextInfoLeft(1, PicInfo(1, picKey), TextInfo("", "")),
-                    right = ImageTextInfoRight(1, PicInfo(1, hiddenKey), TextInfo(title, context.getString(R.string.downloading)))
+                    left = IslandCompactLayout.left(picKey, presentation.left.ifBlank { title }),
+                    right = IslandCompactLayout.right(
+                        presentation.right.ifBlank { context.getString(R.string.downloading) },
+                    ),
                 )
                 builder.setSmallIsland(picKey)
             } else {
-                builder.setBigIslandProgressCircle(picKey, "", percent, themeProgressColor, true)
+                builder.setBigIslandInfo(
+                    left = IslandCompactLayout.left(picKey, ""),
+                    progressText = ProgressTextInfo(
+                        progressInfo = CircularProgressInfo(progress = percent),
+                        textInfo = IslandCompactLayout.text(
+                            textContent.ifBlank { "$percent%" },
+                        ),
+                    ),
+                )
                 builder.setSmallIslandCircularProgress(picKey, percent, themeProgressColor, isCCW = true)
             }
         }
 
         val highlight = resolveColor(theme, sbn.packageName, themeProgressColor)
-        builder.setIslandConfig(timeout = config.timeout, highlightColor = highlight, expandedTimeMs = config.floatTimeout)
+        builder.setIslandConfig(
+            timeout = config.timeout,
+            highlightColor = highlight,
+            dismissible = isFinished,
+            expandedTimeMs = if (isFloatEnabled) config.floatTimeout else null,
+        )
         actions.forEach { it.actionImage?.let { pic -> builder.addPicture(pic) } }
         val hyperActions = actions.map { it.action }.toTypedArray()
         hyperActions.forEach {
@@ -118,6 +149,10 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         }
         hyperActions.forEach { builder.addHiddenAction(it) }
 
-        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
+        val json = IslandVisualMetadata.injectProgressColor(
+            IslandVisualMetadata.injectUpdatable(builder.buildJsonParam(), updatable = !isFinished),
+            themeProgressColor,
+        )
+        return HyperIslandData(builder.buildResourceBundle(), json, highlight)
     }
 }

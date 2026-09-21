@@ -5,6 +5,7 @@ object IslandProtocol {
     const val APP_PACKAGE = "com.sykeptical.hyperbridge"
     const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     const val XMSF_PACKAGE = "com.xiaomi.xmsf"
+    const val SCREEN_RECORDER_PACKAGE = "com.miui.screenrecorder"
     const val OWNER = APP_PACKAGE
     const val PERMISSION = "$APP_PACKAGE.permission.SEND_ISLAND"
 
@@ -30,8 +31,26 @@ object IslandProtocol {
     const val EXTRA_NONCE = "hyperbridge.nonce"
     const val EXTRA_CAPABILITIES = "hyperbridge.capabilities"
     const val EXTRA_HOOK_PACKAGE = "hyperbridge.hook_package"
-    const val EXTRA_SUPPRESS_SOURCE_HEADS_UP = "hyperbridge.suppress_source_heads_up"
+    // Keep this identical to HyperIsland's IslandDispatchContract so the source marker and the
+    // copied SystemUI suppression hook share the same proven contract.
+    const val EXTRA_SUPPRESS_SOURCE_HEADS_UP = "hyperisland.suppress_source_heads_up"
     const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"
+    const val EXTRA_MARQUEE_ENABLED = "hyperbridge.marquee.enabled"
+    const val EXTRA_MARQUEE_MODE = "hyperbridge.marquee.mode"
+    const val EXTRA_ORIGINAL_TIMEOUT = "hyperbridge.marquee.original_timeout"
+    const val EXTRA_SOURCE_ONGOING = "hyperbridge.source_ongoing"
+    const val EXTRA_GLOW_ISLAND_MODE = "hyperbridge.glow.island_mode"
+    const val EXTRA_GLOW_FOCUS_MODE = "hyperbridge.glow.focus_mode"
+    const val EXTRA_GLOW_ISLAND_COLOR = "hyperbridge.glow.island_color"
+    const val EXTRA_GLOW_FOCUS_COLOR = "hyperbridge.glow.focus_color"
+    const val EXTRA_GLOW_DYNAMIC_COLOR = "hyperbridge.glow.dynamic_color"
+    const val EXTRA_FORCE_ISLAND_GLOW = "hyperbridge.glow.force_island"
+    const val EXTRA_FORCE_FOCUS_GLOW = "hyperbridge.glow.force_focus"
+    const val EXTRA_UPDATABLE = "hyperbridge.updatable"
+    const val MIUI_SBN = "miui.sbn"
+    const val MIUI_BIG_ISLAND_EFFECT = "miui.bigIsland.effect.src"
+    const val MIUI_EFFECT = "miui.effect.src"
+    const val EFFECT_OUTER_GLOW = "outer_glow"
 
     const val RESULT_POSTED = 1
     const val RESULT_REJECTED = 2
@@ -41,6 +60,9 @@ object IslandProtocol {
     const val CAP_FOCUS_BYPASS = 1 shl 2
     const val CAP_HEADS_UP = 1 shl 3
     const val CAP_NOTIFICATION_INGRESS = 1 shl 4
+    const val CAP_MARQUEE = 1 shl 5
+    const val CAP_ISLAND_DISMISS = 1 shl 6
+    const val CAP_FULL_GLOW = 1 shl 7
     const val REQUIRED_CAPABILITIES = CAP_POST or CAP_TAGGED_CANCEL or CAP_FOCUS_BYPASS or
         CAP_HEADS_UP or CAP_NOTIFICATION_INGRESS
 

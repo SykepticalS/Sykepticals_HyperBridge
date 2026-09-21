@@ -83,26 +83,20 @@ object IslandUpdateResolver {
             )
         }
 
-        if (isMessagingEvent && !sameKnownMessageEvent) {
-            val newEventReason = when (presentationReason) {
+        val updateReason = when {
+            isMessagingEvent && !sameKnownMessageEvent -> when (presentationReason) {
                 IslandPresentationReason.RECONCILE,
                 IslandPresentationReason.RESTORE -> presentationReason
-                else -> IslandPresentationReason.NEW_EVENT
+                else -> IslandPresentationReason.CONTENT_UPDATE
             }
-            return IslandUpdateDecision(
-                kind = IslandPresentationKind.NEW,
-                bridgeId = candidateBridgeId,
-                onlyAlertOnce = !newEventReason.mayAutoExpand,
-                presentationReason = newEventReason,
-                cancelBeforeNotify = true
-            )
+            else -> presentationReason
         }
 
         return IslandUpdateDecision(
             kind = IslandPresentationKind.UPDATE,
             bridgeId = previous.bridgeId,
-            onlyAlertOnce = !presentationReason.mayAutoExpand,
-            presentationReason = presentationReason
+            onlyAlertOnce = !updateReason.mayAutoExpand,
+            presentationReason = updateReason
         )
     }
 }
@@ -111,21 +105,20 @@ object MessageBridgeIdPolicy {
     private const val RANGE_START = -1_900_000_000
     private const val RANGE_SIZE = 800_000_000
 
-    /** Message replacements use a private negative band, away from permanent/widget/watch ids. */
+    /**
+     * HyperOS Focus identity is `(tag, id)`. Mixing generation/content into the id made every
+     * WhatsApp follow-up a new island, so Xiaomi ran add+checkError and deleted the view.
+     * Keep the notify id on the conversation only; payload changes go through notify(same id).
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun candidate(
         logicalId: String,
-        generation: Long,
-        contentHash: Int,
+        generation: Long = 0L,
+        contentHash: Int = 0,
         attempt: Int = 0,
         messageEventFingerprint: MessageEventFingerprint? = null
     ): Int {
-        val mixed = listOf(
-            logicalId,
-            generation,
-            contentHash,
-            messageEventFingerprint?.stableHash,
-            attempt
-        ).hashCode().toLong()
+        val mixed = logicalId.hashCode().toLong()
         return RANGE_START + Math.floorMod(mixed, RANGE_SIZE.toLong()).toInt()
     }
 }
@@ -188,6 +181,26 @@ object NotificationLifecyclePolicy {
         else -> false
     }
 
+    fun isProgressLifecycle(type: NotificationType?): Boolean =
+        type == NotificationType.DOWNLOAD || type == NotificationType.PROGRESS
+
+    /**
+     * Call/media/nav/recording islands outlive the source FLAG_ONGOING_EVENT. Outgoing
+     * "calling" notifications often omit that flag, and mirroring auto-cancel lets HyperOS
+     * retire the proxy while the session is still live.
+     */
+    fun proxyStaysPosted(type: NotificationType?): Boolean = dismissesWithSource(type)
+
+    /** Logical ids such as `call:pkg:1` are never present in the live source snapshot. */
+    fun isTrackedSourcePresent(
+        logicalId: String,
+        sourceKey: String,
+        currentSourceKeys: Set<String>
+    ): Boolean {
+        val trackedSourceKey = sourceKey.ifBlank { logicalId }
+        return trackedSourceKey in currentSourceKeys || logicalId in currentSourceKeys
+    }
+
     fun canIntentionallyMirrorSource(type: NotificationType): Boolean =
         type == NotificationType.MESSAGE || type == NotificationType.STANDARD
 
@@ -195,6 +208,37 @@ object NotificationLifecyclePolicy {
         dismissSourceOnContentClick: Boolean,
         wasContentClick: Boolean
     ): Boolean = dismissSourceOnContentClick && wasContentClick
+
+    /** App-driven message regrouping is not a user dismissal and must not preempt auto-hide. */
+    fun shouldDismissIslandOnSourceRemoval(
+        type: NotificationType?,
+        dismissWithOriginal: Boolean,
+        isAppCancellation: Boolean
+    ): Boolean {
+        if (type == NotificationType.MESSAGE || type == NotificationType.STANDARD) {
+            // WhatsApp cancels the previous SBN when posting a same-person follow-up.
+            // HyperIsland keeps that island because it is the source notification;
+            // our proxy must survive the same cancel so notify(same id) can update it.
+            return false
+        }
+        if (dismissesWithSource(type)) return true
+        if (!dismissWithOriginal) return false
+        return !(isAppCancellation && isProgressLifecycle(type))
+    }
+
+    /** A periodic snapshot cannot distinguish app regrouping from a user dismissal. */
+    fun shouldReapMissingSource(
+        type: NotificationType?,
+        removeOriginalNotification: Boolean,
+        dismissWithOriginal: Boolean
+    ): Boolean {
+        if (type == NotificationType.MESSAGE ||
+            type == NotificationType.STANDARD ||
+            isProgressLifecycle(type)
+        ) return false
+        if (removeOriginalNotification) return false
+        return dismissesWithSource(type) || dismissWithOriginal
+    }
 
     fun presentationReason(hasPrevious: Boolean, recovery: Boolean): IslandPresentationReason = when {
         recovery -> IslandPresentationReason.RECONCILE

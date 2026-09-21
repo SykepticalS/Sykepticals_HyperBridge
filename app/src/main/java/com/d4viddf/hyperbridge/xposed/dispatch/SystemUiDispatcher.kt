@@ -12,22 +12,29 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.ResultReceiver
+import android.service.notification.StatusBarNotification
+import android.util.Log
 import com.d4viddf.hyperbridge.island.backend.IslandOwnership
-import com.d4viddf.hyperbridge.island.backend.IslandMetadata
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.xposed.log
 import com.d4viddf.hyperbridge.xposed.hooks.FocusWhitelistHook
 import com.d4viddf.hyperbridge.xposed.hooks.HeadsUpSuppressionHook
 import com.d4viddf.hyperbridge.xposed.hooks.SystemUiNotificationIngressHook
+import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
+import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
+import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
 import io.github.libxposed.api.XposedModule
 import java.util.concurrent.ConcurrentHashMap
+import java.lang.ref.WeakReference
 
 object SystemUiDispatcher {
     private data class OwnedKey(val tag: String, val id: Int)
     private val generations = ConcurrentHashMap<OwnedKey, Long>()
+    @Volatile private var systemUiContext = WeakReference<Context>(null)
     @Volatile private var registered = false
 
     fun register(context: Context, module: XposedModule) {
+        systemUiContext = WeakReference(context.applicationContext)
         if (registered) return
         synchronized(this) {
             if (registered) return@synchronized
@@ -66,6 +73,38 @@ object SystemUiDispatcher {
         }
     }
 
+    fun cancelClickedOwnedIsland(sbn: StatusBarNotification) {
+        runCatching {
+            val context = systemUiContext.get() ?: return@runCatching
+            val owned = if (
+                sbn.packageName == IslandProtocol.SYSTEM_UI_PACKAGE &&
+                sbn.notification.extras.getString(IslandProtocol.EXTRA_OWNER) == IslandProtocol.OWNER
+            ) {
+                sbn
+            } else {
+                val sourceKey = sbn.key
+                context.getSystemService(NotificationManager::class.java)
+                    ?.activeNotifications
+                    ?.firstOrNull {
+                        it.packageName == IslandProtocol.SYSTEM_UI_PACKAGE &&
+                            it.notification.extras.getString(IslandProtocol.EXTRA_OWNER) ==
+                                IslandProtocol.OWNER &&
+                            it.notification.extras.getString(IslandProtocol.EXTRA_SOURCE_KEY) == sourceKey
+                    }
+            } ?: return@runCatching
+            val tag = owned.tag ?: return@runCatching
+            cancelOwned(
+                context = context,
+                tag = tag,
+                id = owned.id,
+                requestedGeneration = owned.notification.extras.getLong(
+                    IslandProtocol.EXTRA_GENERATION,
+                    Long.MAX_VALUE,
+                ),
+            )
+        }
+    }
+
     private fun post(context: Context, intent: Intent, module: XposedModule) {
         val acknowledgement = intent.getParcelableExtra(
             IslandProtocol.EXTRA_RESULT_RECEIVER,
@@ -84,8 +123,6 @@ object SystemUiDispatcher {
             val id = intent.getIntExtra(IslandProtocol.EXTRA_ID, Int.MIN_VALUE)
             require(id != Int.MIN_VALUE) { "Missing notification id" }
             val generation = intent.getLongExtra(IslandProtocol.EXTRA_GENERATION, 0L)
-            val current = generations[OwnedKey(tag, id)]
-            require(current == null || generation >= current) { "Stale generation" }
             postOwned(context, tag, id, notification, generation).getOrThrow()
         }
         result.onFailure { module.log("HyperBridge: dispatcher post failed: ${it.message}") }
@@ -128,12 +165,12 @@ object SystemUiDispatcher {
         }
         val key = OwnedKey(tag, id)
         val current = generations[key]
-        if (current != null && generation < current) return@runCatching
         val manager = context.getSystemService(NotificationManager::class.java)
             ?: error("NotificationManager unavailable")
         ensureChannel(manager, notification.channelId)
         manager.notify(tag, id, notification)
-        generations[key] = generation
+        generations[key] = maxOf(current ?: Long.MIN_VALUE, generation)
+        Log.i("HyperBridge", "notify tag=$tag id=$id gen=$generation prevGen=$current")
     }
 
     fun cancelOwned(
@@ -180,9 +217,12 @@ object SystemUiDispatcher {
             val focus = if (FocusWhitelistHook.isActive()) IslandProtocol.CAP_FOCUS_BYPASS else 0
             val headsUp = if (HeadsUpSuppressionHook.isActive()) IslandProtocol.CAP_HEADS_UP else 0
             val ingress = if (SystemUiNotificationIngressHook.isActive()) IslandProtocol.CAP_NOTIFICATION_INGRESS else 0
+            val marquee = if (MarqueeHook.isActive()) IslandProtocol.CAP_MARQUEE else 0
+            val dismiss = if (ActiveIslandDismissHook.isActive()) IslandProtocol.CAP_ISLAND_DISMISS else 0
+            val glow = if (OuterGlowHook.isActive()) IslandProtocol.CAP_FULL_GLOW else 0
             putExtra(IslandProtocol.EXTRA_CAPABILITIES,
                 IslandProtocol.CAP_POST or IslandProtocol.CAP_TAGGED_CANCEL or
-                    focus or headsUp or ingress)
+                    focus or headsUp or ingress or marquee or dismiss or glow)
         }
         val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
         context.sendBroadcast(reply, null, options)

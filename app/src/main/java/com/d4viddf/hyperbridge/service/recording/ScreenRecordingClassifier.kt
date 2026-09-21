@@ -19,18 +19,22 @@ object ScreenRecordingClassifier {
     fun isScreenRecording(signals: ScreenRecordingSignals): Boolean =
         signals.packageName == PACKAGE_NAME &&
                 signals.notificationId == ACTIVE_NOTIFICATION_ID &&
-                signals.channelId == ACTIVE_CHANNEL_ID &&
+                channelMatches(signals.channelId, ACTIVE_CHANNEL_ID) &&
                 signals.isOngoing &&
-                signals.isForegroundService &&
                 !signals.isGroupSummary
 
     fun isSavedScreenRecording(signals: ScreenRecordingSignals): Boolean =
         signals.packageName == PACKAGE_NAME &&
                 signals.notificationId == SAVED_NOTIFICATION_ID &&
-                signals.channelId == SAVED_CHANNEL_ID &&
+                channelMatches(signals.channelId, SAVED_CHANNEL_ID) &&
                 !signals.isOngoing &&
                 !signals.isForegroundService &&
                 !signals.isGroupSummary
+
+    private fun channelMatches(actual: String?, expected: String): Boolean {
+        val value = actual.orEmpty()
+        return value.isBlank() || value == expected || value.contains("screenrecorder", ignoreCase = true)
+    }
 }
 
 object ScreenRecordingTimeoutPolicy {

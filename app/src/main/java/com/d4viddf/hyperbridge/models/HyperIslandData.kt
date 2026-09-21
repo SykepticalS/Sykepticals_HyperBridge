@@ -4,5 +4,6 @@ import android.os.Bundle
 
 data class HyperIslandData(
     val resources: Bundle,
-    val jsonParam: String
+    val jsonParam: String,
+    val accentColor: String? = null,
 )

@@ -66,6 +66,17 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
                 HookConfigSync.updatePolicy(this@HyperBridgeApplication, packages, globalTypes, overrides)
             }
         }
+        scope.launch {
+            combine(
+                preferences.screenRecordingReplaceFloatingFlow,
+                preferences.screenRecordingImmediateStartFlow,
+                preferences.screenRecordingIconStyleFlow,
+            ) { replace, immediate, icon ->
+                Triple(replace, immediate, icon)
+            }.collect { (replace, immediate, icon) ->
+                HookConfigSync.setScreenRecorderReplacement(this@HyperBridgeApplication, replace, immediate, icon)
+            }
+        }
     }
 
     override fun onServiceBind(service: XposedService) {
@@ -109,9 +120,12 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
     }
 
     fun requestRequiredScopes(onResult: (Result<Set<String>>) -> Unit) {
+        requestScopes(setOf(IslandProtocol.SYSTEM_UI_PACKAGE, IslandProtocol.XMSF_PACKAGE), onResult)
+    }
+
+    fun requestScopes(packages: Collection<String>, onResult: (Result<Set<String>>) -> Unit) {
         val service = xposedService ?: return onResult(Result.failure(IllegalStateException("LSPosed service unavailable")))
-        val required = setOf(IslandProtocol.SYSTEM_UI_PACKAGE, IslandProtocol.XMSF_PACKAGE)
-        val missing = required - service.scope.toSet()
+        val missing = packages.toSet() - service.scope.toSet()
         if (missing.isEmpty()) return onResult(Result.success(service.scope.toSet()))
         service.requestScope(missing.toList(), object : XposedService.OnScopeEventListener {
             override fun onScopeRequestApproved(scope: List<String>) {

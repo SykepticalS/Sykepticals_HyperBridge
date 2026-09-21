@@ -11,6 +11,11 @@ import com.d4viddf.hyperbridge.data.db.SettingsDao
 import com.d4viddf.hyperbridge.data.db.SettingsKeys
 import com.d4viddf.hyperbridge.models.CallStage
 import com.d4viddf.hyperbridge.models.IslandConfig
+import com.d4viddf.hyperbridge.models.GlowMode
+import com.d4viddf.hyperbridge.models.IslandSceneBehavior
+import com.d4viddf.hyperbridge.models.IslandTextContent
+import com.d4viddf.hyperbridge.models.MarqueeDismissMode
+import com.d4viddf.hyperbridge.models.FloatConfigMigration
 import com.d4viddf.hyperbridge.models.IslandLimitMode
 import com.d4viddf.hyperbridge.models.NavContent
 import com.d4viddf.hyperbridge.models.NotificationType
@@ -166,6 +171,22 @@ class AppPreferences internal constructor(
 
                     dao.insert(AppSetting("download_message_migration_complete", "true"))
                 }
+
+                if (dao.getSetting(SettingsKeys.ISLAND_CONFIG_V2_MIGRATED) != "true") {
+                    dao.getSetting(SettingsKeys.GLOBAL_FLOAT)?.let { old ->
+                        val migrated = FloatConfigMigration.fromLegacy(old.toBooleanStrictOrNull())
+                        migrated.first?.let { dao.insert(AppSetting(SettingsKeys.GLOBAL_FIRST_FLOAT, it.toString())) }
+                        migrated.second?.let { dao.insert(AppSetting(SettingsKeys.GLOBAL_FLOAT_ON_UPDATE, it.toString())) }
+                    }
+                    dao.getAllSync().filter { it.key.startsWith("config_") && it.key.endsWith("_float") }
+                        .forEach { old ->
+                            val base = old.key.removeSuffix("_float")
+                            val migrated = FloatConfigMigration.fromLegacy(old.value.toBooleanStrictOrNull())
+                            migrated.first?.let { dao.insert(AppSetting("${base}_first_float", it.toString())) }
+                            migrated.second?.let { dao.insert(AppSetting("${base}_float_on_update", it.toString())) }
+                        }
+                    dao.insert(AppSetting(SettingsKeys.ISLAND_CONFIG_V2_MIGRATED, "true"))
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -313,74 +334,133 @@ class AppPreferences internal constructor(
     }
 
     val globalConfigFlow: Flow<IslandConfig> = combine(
-        dao.getSettingFlow(SettingsKeys.GLOBAL_FLOAT),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FIRST_FLOAT),
         dao.getSettingFlow(SettingsKeys.GLOBAL_SHADE),
         dao.getSettingFlow(SettingsKeys.GLOBAL_TIMEOUT),
         dao.getSettingFlow(SettingsKeys.GLOBAL_FLOAT_TIMEOUT),
         dao.getSettingFlow(SettingsKeys.GLOBAL_REMOVE_NOTIF),
         dao.getSettingFlow(SettingsKeys.GLOBAL_DISMISS_WITH_ORIGINAL),
-        dao.getSettingFlow(SettingsKeys.GLOBAL_ENABLE_INLINE_REPLY)
+        dao.getSettingFlow(SettingsKeys.GLOBAL_ENABLE_INLINE_REPLY),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FLOAT_ON_UPDATE),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_MARQUEE),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_MARQUEE_DISMISS),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_LEFT_CONTENT),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_RIGHT_CONTENT),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_LEFT_EXPRESSION),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_RIGHT_EXPRESSION),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_ISLAND_GLOW),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FOCUS_GLOW),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_ISLAND_GLOW_COLOR),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FOCUS_GLOW_COLOR),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FORCE_ISLAND_GLOW),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FORCE_FOCUS_GLOW),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_CONTACT_PINK_GLOW),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_RESTORE_LOCKSCREEN),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_DND_BEHAVIOR),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_FULLSCREEN_BEHAVIOR),
+        dao.getSettingFlow(SettingsKeys.GLOBAL_LANDSCAPE_BEHAVIOR),
     ) { args: Array<String?> ->
         IslandConfig(
-            args[0].toBoolean(true),
-            args[1].toBoolean(false),
-            args[2]?.toIntOrNull(),
-            args[3]?.toIntOrNull(),
-            args[4]?.toBooleanStrictOrNull(),
-            args[5]?.toBooleanStrictOrNull() ?: true,
-            args[6]?.toBooleanStrictOrNull()
+            firstFloat = args[0]?.toBooleanStrictOrNull() ?: memoryCache[SettingsKeys.GLOBAL_FLOAT].toBoolean(true),
+            isShowShade = args[1].toBoolean(false), timeout = args[2]?.toIntOrNull(),
+            floatTimeout = args[3]?.toIntOrNull(), removeOriginalNotification = args[4]?.toBooleanStrictOrNull(),
+            dismissWithOriginal = args[5]?.toBooleanStrictOrNull() ?: true,
+            enableInlineReply = args[6]?.toBooleanStrictOrNull(), floatOnUpdate = args[7].toBoolean(false),
+            marqueeEnabled = args[8].toBoolean(false), marqueeDismissMode = MarqueeDismissMode.parse(args[9]),
+            leftContent = args[10]?.let { runCatching { IslandTextContent.valueOf(it) }.getOrNull() } ?: IslandTextContent.AUTOMATIC,
+            rightContent = args[11]?.let { runCatching { IslandTextContent.valueOf(it) }.getOrNull() } ?: IslandTextContent.AUTOMATIC,
+            leftCustomExpression = args[12], rightCustomExpression = args[13],
+            islandGlowMode = GlowMode.parse(args[14]) ?: GlowMode.OFF, focusGlowMode = GlowMode.parse(args[15]) ?: GlowMode.OFF,
+            islandGlowColor = args[16], focusGlowColor = args[17],
+            forceIslandGlow = args[18].toBoolean(false), forceFocusGlow = args[19].toBoolean(false),
+            contactPinkGlow = args[20].toBoolean(false),
+            restoreLockscreen = args[21].toBoolean(false),
+            dndBehavior = args[22]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() } ?: IslandSceneBehavior.SUPPRESS,
+            fullscreenBehavior = args[23]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() } ?: IslandSceneBehavior.DEFAULT,
+            landscapeBehavior = args[24]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() } ?: IslandSceneBehavior.DEFAULT,
         )
     }
 
     suspend fun updateGlobalConfig(config: IslandConfig) {
-        config.isFloat?.let { save(SettingsKeys.GLOBAL_FLOAT, it.toString()) }
+        config.firstFloat?.let { save(SettingsKeys.GLOBAL_FIRST_FLOAT, it.toString()) }
+        config.floatOnUpdate?.let { save(SettingsKeys.GLOBAL_FLOAT_ON_UPDATE, it.toString()) }
         config.isShowShade?.let { save(SettingsKeys.GLOBAL_SHADE, it.toString()) }
         config.timeout?.let { save(SettingsKeys.GLOBAL_TIMEOUT, it.toString()) }
         config.floatTimeout?.let { save(SettingsKeys.GLOBAL_FLOAT_TIMEOUT, it.toString()) }
         config.removeOriginalNotification?.let { save(SettingsKeys.GLOBAL_REMOVE_NOTIF, it.toString()) }
         config.dismissWithOriginal?.let { save(SettingsKeys.GLOBAL_DISMISS_WITH_ORIGINAL, it.toString()) }
         config.enableInlineReply?.let { save(SettingsKeys.GLOBAL_ENABLE_INLINE_REPLY, it.toString()) }
+        config.marqueeEnabled?.let { save(SettingsKeys.GLOBAL_MARQUEE, it.toString()) }
+        config.marqueeDismissMode?.let { save(SettingsKeys.GLOBAL_MARQUEE_DISMISS, it.name) }
+        config.leftContent?.let { save(SettingsKeys.GLOBAL_LEFT_CONTENT, it.name) }
+        config.rightContent?.let { save(SettingsKeys.GLOBAL_RIGHT_CONTENT, it.name) }
+        config.leftCustomExpression?.let { save(SettingsKeys.GLOBAL_LEFT_EXPRESSION, it) }
+        config.rightCustomExpression?.let { save(SettingsKeys.GLOBAL_RIGHT_EXPRESSION, it) }
+        config.islandGlowMode?.let { save(SettingsKeys.GLOBAL_ISLAND_GLOW, it.name) }
+        config.focusGlowMode?.let { save(SettingsKeys.GLOBAL_FOCUS_GLOW, it.name) }
+        config.islandGlowColor?.let { save(SettingsKeys.GLOBAL_ISLAND_GLOW_COLOR, it) }
+        config.focusGlowColor?.let { save(SettingsKeys.GLOBAL_FOCUS_GLOW_COLOR, it) }
+        config.forceIslandGlow?.let { save(SettingsKeys.GLOBAL_FORCE_ISLAND_GLOW, it.toString()) }
+        config.forceFocusGlow?.let { save(SettingsKeys.GLOBAL_FORCE_FOCUS_GLOW, it.toString()) }
+        config.contactPinkGlow?.let { save(SettingsKeys.GLOBAL_CONTACT_PINK_GLOW, it.toString()) }
+        config.restoreLockscreen?.let { save(SettingsKeys.GLOBAL_RESTORE_LOCKSCREEN, it.toString()) }
+        config.dndBehavior?.let { save(SettingsKeys.GLOBAL_DND_BEHAVIOR, it.name) }
+        config.fullscreenBehavior?.let { save(SettingsKeys.GLOBAL_FULLSCREEN_BEHAVIOR, it.name) }
+        config.landscapeBehavior?.let { save(SettingsKeys.GLOBAL_LANDSCAPE_BEHAVIOR, it.name) }
     }
 
     fun getAppIslandConfig(packageName: String): Flow<IslandConfig> {
-        return combine(
-            dao.getSettingFlow("config_${packageName}_float"),
-            dao.getSettingFlow("config_${packageName}_shade"),
-            dao.getSettingFlow("config_${packageName}_timeout"),
-            dao.getSettingFlow("config_${packageName}_float_timeout"),
-            dao.getSettingFlow("config_${packageName}_remove_notif"),
-            dao.getSettingFlow("config_${packageName}_dismiss_with_original"),
-            dao.getSettingFlow("config_${packageName}_enable_inline_reply")
-        ) { args: Array<String?> ->
-            IslandConfig(
-                args[0]?.toBooleanStrictOrNull(),
-                args[1]?.toBooleanStrictOrNull(),
-                args[2]?.toIntOrNull(),
-                args[3]?.toIntOrNull(),
-                args[4]?.toBooleanStrictOrNull(),
-                args[5]?.toBooleanStrictOrNull(),
-                args[6]?.toBooleanStrictOrNull()
-            )
-        }
+        val keys = appIslandConfigKeys(packageName)
+        return combine(*keys.map { dao.getSettingFlow(it) }.toTypedArray()) { args -> parseAppIslandConfig(args) }
     }
 
     suspend fun updateAppIslandConfig(packageName: String, config: IslandConfig) {
-        val fKey = "config_${packageName}_float"
-        val sKey = "config_${packageName}_shade"
-        val tKey = "config_${packageName}_timeout"
-        val ftKey = "config_${packageName}_float_timeout"
-        val rnKey = "config_${packageName}_remove_notif"
-        val dwoKey = "config_${packageName}_dismiss_with_original"
-        val eirKey = "config_${packageName}_enable_inline_reply"
-
-        if (config.isFloat != null) save(fKey, config.isFloat.toString()) else remove(fKey)
-        if (config.isShowShade != null) save(sKey, config.isShowShade.toString()) else remove(sKey)
-        if (config.timeout != null) save(tKey, config.timeout.toString()) else remove(tKey)
-        if (config.floatTimeout != null) save(ftKey, config.floatTimeout.toString()) else remove(ftKey)
-        if (config.removeOriginalNotification != null) save(rnKey, config.removeOriginalNotification.toString()) else remove(rnKey)
-        if (config.dismissWithOriginal != null) save(dwoKey, config.dismissWithOriginal.toString()) else remove(dwoKey)
-        if (config.enableInlineReply != null) save(eirKey, config.enableInlineReply.toString()) else remove(eirKey)
+        val values = listOf(
+            config.firstFloat, config.isShowShade, config.timeout, config.floatTimeout,
+            config.removeOriginalNotification, config.dismissWithOriginal, config.enableInlineReply,
+            config.floatOnUpdate, config.marqueeEnabled, config.marqueeDismissMode?.name,
+            config.leftContent?.name, config.rightContent?.name, config.leftCustomExpression,
+            config.rightCustomExpression, config.islandGlowMode?.name, config.focusGlowMode?.name,
+            config.islandGlowColor, config.focusGlowColor, config.forceIslandGlow, config.forceFocusGlow,
+            config.contactPinkGlow, config.restoreLockscreen, config.dndBehavior?.name, config.fullscreenBehavior?.name,
+            config.landscapeBehavior?.name,
+        )
+        appIslandConfigKeys(packageName).zip(values).forEach { (key, value) ->
+            if (value == null) remove(key) else save(key, value.toString())
+        }
     }
+
+    private fun appIslandConfigKeys(packageName: String): List<String> {
+        val base = "config_${packageName}_"
+        return listOf(
+            "first_float", "shade", "timeout", "float_timeout", "remove_notif",
+            "dismiss_with_original", "enable_inline_reply", "float_on_update", "marquee",
+            "marquee_dismiss", "left_content", "right_content", "left_expression", "right_expression",
+            "island_glow", "focus_glow", "island_glow_color", "focus_glow_color",
+            "force_island_glow", "force_focus_glow", "contact_pink_glow", "restore_lockscreen", "dnd_behavior",
+            "fullscreen_behavior", "landscape_behavior",
+        ).map { base + it }
+    }
+
+    private fun parseAppIslandConfig(args: Array<String?>): IslandConfig = IslandConfig(
+        firstFloat = args[0]?.toBooleanStrictOrNull(), isShowShade = args[1]?.toBooleanStrictOrNull(),
+        timeout = args[2]?.toIntOrNull(), floatTimeout = args[3]?.toIntOrNull(),
+        removeOriginalNotification = args[4]?.toBooleanStrictOrNull(),
+        dismissWithOriginal = args[5]?.toBooleanStrictOrNull(), enableInlineReply = args[6]?.toBooleanStrictOrNull(),
+        floatOnUpdate = args[7]?.toBooleanStrictOrNull(), marqueeEnabled = args[8]?.toBooleanStrictOrNull(),
+        marqueeDismissMode = args[9]?.let(MarqueeDismissMode::parse),
+        leftContent = args[10]?.let { runCatching { IslandTextContent.valueOf(it) }.getOrNull() },
+        rightContent = args[11]?.let { runCatching { IslandTextContent.valueOf(it) }.getOrNull() },
+        leftCustomExpression = args[12], rightCustomExpression = args[13],
+        islandGlowMode = GlowMode.parse(args[14]), focusGlowMode = GlowMode.parse(args[15]),
+        islandGlowColor = args[16], focusGlowColor = args[17],
+        forceIslandGlow = args[18]?.toBooleanStrictOrNull(), forceFocusGlow = args[19]?.toBooleanStrictOrNull(),
+        contactPinkGlow = args[20]?.toBooleanStrictOrNull(),
+        restoreLockscreen = args[21]?.toBooleanStrictOrNull(),
+        dndBehavior = args[22]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() },
+        fullscreenBehavior = args[23]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() },
+        landscapeBehavior = args[24]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() },
+    )
 
     // --- SYSTEM ISLAND: SCREEN RECORDING ---
     val screenRecordingTimeoutFlow: Flow<Int> =
@@ -412,6 +492,25 @@ class AppPreferences internal constructor(
     suspend fun setScreenRecordingRightDesign(design: com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign) =
         save(SettingsKeys.SCREEN_RECORDING_RIGHT_DESIGN, design.name)
 
+    val screenRecordingReplaceFloatingFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_REPLACE_FLOATING).map { it.toBoolean(true) }
+
+    suspend fun setScreenRecordingReplaceFloating(enabled: Boolean) =
+        save(SettingsKeys.SCREEN_RECORDING_REPLACE_FLOATING, enabled.toString())
+
+    val screenRecordingImmediateStartFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_IMMEDIATE_START).map { it.toBoolean(false) }
+
+    suspend fun setScreenRecordingImmediateStart(enabled: Boolean) =
+        save(SettingsKeys.SCREEN_RECORDING_IMMEDIATE_START, enabled.toString())
+
+    val screenRecordingIconStyleFlow: Flow<String> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_ICON_STYLE).map {
+            it?.takeIf(String::isNotBlank) ?: "screen_recorder"
+        }
+
+    suspend fun setScreenRecordingIconStyle(style: String) =
+        save(SettingsKeys.SCREEN_RECORDING_ICON_STYLE, style)
 
     // --- NAVIGATION ---
     val globalBlockedTermsFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.GLOBAL_BLOCKED_TERMS).map { it.deserializeSet() }
@@ -715,26 +814,39 @@ class AppPreferences internal constructor(
     }
 
     fun getAppIslandConfigSync(packageName: String): IslandConfig {
-        return IslandConfig(
-            memoryCache["config_${packageName}_float"]?.toBooleanStrictOrNull(),
-            memoryCache["config_${packageName}_shade"]?.toBooleanStrictOrNull(),
-            memoryCache["config_${packageName}_timeout"]?.toIntOrNull(),
-            memoryCache["config_${packageName}_float_timeout"]?.toIntOrNull(),
-            memoryCache["config_${packageName}_remove_notif"]?.toBooleanStrictOrNull(),
-            memoryCache["config_${packageName}_dismiss_with_original"]?.toBooleanStrictOrNull(),
-            memoryCache["config_${packageName}_enable_inline_reply"]?.toBooleanStrictOrNull()
-        )
+        val args = appIslandConfigKeys(packageName).map { memoryCache[it] }.toTypedArray()
+        if (args[0] == null) args[0] = memoryCache["config_${packageName}_float"]
+        return parseAppIslandConfig(args)
     }
 
     fun getGlobalConfigSync(): IslandConfig {
         return IslandConfig(
-            memoryCache[SettingsKeys.GLOBAL_FLOAT].toBoolean(true),
-            memoryCache[SettingsKeys.GLOBAL_SHADE].toBoolean(false),
-            memoryCache[SettingsKeys.GLOBAL_TIMEOUT]?.toIntOrNull(),
-            memoryCache[SettingsKeys.GLOBAL_FLOAT_TIMEOUT]?.toIntOrNull(),
-            memoryCache[SettingsKeys.GLOBAL_REMOVE_NOTIF]?.toBooleanStrictOrNull(),
-            memoryCache[SettingsKeys.GLOBAL_DISMISS_WITH_ORIGINAL]?.toBooleanStrictOrNull() ?: true,
-            memoryCache[SettingsKeys.GLOBAL_ENABLE_INLINE_REPLY]?.toBooleanStrictOrNull()
+            firstFloat = memoryCache[SettingsKeys.GLOBAL_FIRST_FLOAT]?.toBooleanStrictOrNull()
+                ?: memoryCache[SettingsKeys.GLOBAL_FLOAT].toBoolean(true),
+            isShowShade = memoryCache[SettingsKeys.GLOBAL_SHADE].toBoolean(false),
+            timeout = memoryCache[SettingsKeys.GLOBAL_TIMEOUT]?.toIntOrNull(),
+            floatTimeout = memoryCache[SettingsKeys.GLOBAL_FLOAT_TIMEOUT]?.toIntOrNull(),
+            removeOriginalNotification = memoryCache[SettingsKeys.GLOBAL_REMOVE_NOTIF]?.toBooleanStrictOrNull(),
+            dismissWithOriginal = memoryCache[SettingsKeys.GLOBAL_DISMISS_WITH_ORIGINAL]?.toBooleanStrictOrNull() ?: true,
+            enableInlineReply = memoryCache[SettingsKeys.GLOBAL_ENABLE_INLINE_REPLY]?.toBooleanStrictOrNull(),
+            floatOnUpdate = memoryCache[SettingsKeys.GLOBAL_FLOAT_ON_UPDATE].toBoolean(false),
+            marqueeEnabled = memoryCache[SettingsKeys.GLOBAL_MARQUEE].toBoolean(false),
+            marqueeDismissMode = MarqueeDismissMode.parse(memoryCache[SettingsKeys.GLOBAL_MARQUEE_DISMISS]),
+            leftContent = memoryCache[SettingsKeys.GLOBAL_LEFT_CONTENT]?.let { runCatching { IslandTextContent.valueOf(it) }.getOrNull() } ?: IslandTextContent.AUTOMATIC,
+            rightContent = memoryCache[SettingsKeys.GLOBAL_RIGHT_CONTENT]?.let { runCatching { IslandTextContent.valueOf(it) }.getOrNull() } ?: IslandTextContent.AUTOMATIC,
+            leftCustomExpression = memoryCache[SettingsKeys.GLOBAL_LEFT_EXPRESSION],
+            rightCustomExpression = memoryCache[SettingsKeys.GLOBAL_RIGHT_EXPRESSION],
+            islandGlowMode = GlowMode.parse(memoryCache[SettingsKeys.GLOBAL_ISLAND_GLOW]) ?: GlowMode.OFF,
+            focusGlowMode = GlowMode.parse(memoryCache[SettingsKeys.GLOBAL_FOCUS_GLOW]) ?: GlowMode.OFF,
+            islandGlowColor = memoryCache[SettingsKeys.GLOBAL_ISLAND_GLOW_COLOR],
+            focusGlowColor = memoryCache[SettingsKeys.GLOBAL_FOCUS_GLOW_COLOR],
+            forceIslandGlow = memoryCache[SettingsKeys.GLOBAL_FORCE_ISLAND_GLOW].toBoolean(false),
+            forceFocusGlow = memoryCache[SettingsKeys.GLOBAL_FORCE_FOCUS_GLOW].toBoolean(false),
+            contactPinkGlow = memoryCache[SettingsKeys.GLOBAL_CONTACT_PINK_GLOW].toBoolean(false),
+            restoreLockscreen = memoryCache[SettingsKeys.GLOBAL_RESTORE_LOCKSCREEN].toBoolean(false),
+            dndBehavior = memoryCache[SettingsKeys.GLOBAL_DND_BEHAVIOR]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() } ?: IslandSceneBehavior.SUPPRESS,
+            fullscreenBehavior = memoryCache[SettingsKeys.GLOBAL_FULLSCREEN_BEHAVIOR]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() } ?: IslandSceneBehavior.DEFAULT,
+            landscapeBehavior = memoryCache[SettingsKeys.GLOBAL_LANDSCAPE_BEHAVIOR]?.let { runCatching { IslandSceneBehavior.valueOf(it) }.getOrNull() } ?: IslandSceneBehavior.DEFAULT,
         )
     }
 

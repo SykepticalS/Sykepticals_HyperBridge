@@ -162,7 +162,7 @@ fun AppConfigScreen(
 
     val appIslandConfig by viewModel.getAppIslandConfig(packageName).collectAsState(initial = IslandConfig())
     val globalConfig by viewModel.globalConfigFlow.collectAsState(
-        initial = IslandConfig(isFloat = true, isShowShade = true, timeout = 5)
+        initial = IslandConfig(firstFloat = true, isShowShade = true, timeout = 5)
     )
 
     val blockedTerms by viewModel.getAppBlockedTerms(packageName).collectAsState(initial = emptySet())
@@ -353,11 +353,11 @@ fun AppConfigContent(
     val inactiveDesc = stringResource(R.string.cd_app_state_inactive)
     val navEditDesc = stringResource(R.string.cd_nav_edit)
     val activeTypesSubtitle = stringResource(R.string.active_notifications_subtitle, activeTypes.size)
-    val isUsingGlobal = appIslandConfig.isFloat == null
+    val isUsingGlobal = !appIslandConfig.hasOverrides()
     val behaviorSubtitle = if (isUsingGlobal) {
         stringResource(R.string.use_global_default)
     } else {
-        "${if (appIslandConfig.isFloat == true) activeDesc else inactiveDesc} • ${appIslandConfig.timeout ?: 5}s"
+        "${if (appIslandConfig.firstFloat == true) activeDesc else inactiveDesc} • ${appIslandConfig.timeout ?: 5}s"
     }
     val blockedSubtitle = stringResource(R.string.blocked_terms_count, blockedTerms.size)
     val widgetsSubtitle = if (savedWidgetIds.isNotEmpty()) {
@@ -1049,7 +1049,7 @@ fun AppBehaviorContent(
     activeDesc: String,
     inactiveDesc: String
 ) {
-    val isUsingGlobal = appConfig.isFloat == null
+    val isUsingGlobal = !appConfig.hasOverrides()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1066,11 +1066,9 @@ fun AppBehaviorContent(
                     .fillMaxWidth()
                     .clickable {
                         if (isUsingGlobal) {
-                            // Turn off global: copy current global values into custom
-                            onUpdate(globalConfig.copy(isFloat = globalConfig.isFloat ?: false))
+                            onUpdate(globalConfig)
                         } else {
-                            // Turn on global: reset custom values to null
-                            onUpdate(IslandConfig(null, null, null, null, null, null, null))
+                            onUpdate(IslandConfig())
                         }
                     }
                     .padding(horizontal = 20.dp, vertical = 16.dp),
@@ -1097,9 +1095,9 @@ fun AppBehaviorContent(
                     checked = isUsingGlobal,
                     onCheckedChange = { useGlobal ->
                         if (useGlobal) {
-                            onUpdate(IslandConfig(null, null, null, null, null, null, null))
+                            onUpdate(IslandConfig())
                         } else {
-                            onUpdate(globalConfig.copy(isFloat = globalConfig.isFloat ?: false))
+                            onUpdate(globalConfig)
                         }
                     },
                     modifier = Modifier.semantics {
@@ -1115,12 +1113,7 @@ fun AppBehaviorContent(
         IslandSettingsControl(
             config = appConfig,
             defaultConfig = globalConfig,
-            onUpdate = { updatedConfig ->
-                val customConfig = updatedConfig.copy(
-                    isFloat = updatedConfig.isFloat ?: globalConfig.isFloat ?: false
-                )
-                onUpdate(customConfig)
-            }
+            onUpdate = onUpdate
         )
     }
 }
@@ -1673,8 +1666,8 @@ private fun SampleAppConfigContent(currentSubscreen: AppConfigSubscreen?) {
         isManagedByTheme = false,
         activeTypes = setOf(NotificationType.MEDIA.name, NotificationType.MESSAGE.name),
         activeCallStages = CallStage.entries.toSet(),
-        appIslandConfig = IslandConfig(isFloat = true, isShowShade = true, timeout = 5),
-        globalConfig = IslandConfig(isFloat = true, isShowShade = true, timeout = 5),
+        appIslandConfig = IslandConfig(firstFloat = true, isShowShade = true, timeout = 5),
+        globalConfig = IslandConfig(firstFloat = true, isShowShade = true, timeout = 5),
         blockedTerms = setOf("Ad", "Promo"),
         savedWidgetIds = emptyList(),
         availableProviders = emptyList(),

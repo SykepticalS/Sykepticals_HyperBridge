@@ -8,6 +8,8 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Parcel
 import android.util.Log
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
+import com.d4viddf.hyperbridge.screenrecorder.ScreenRecorderCommands
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,6 +64,10 @@ class XiaomiScreenRecordingControlBackend(context: Context) : ScreenRecordingCon
     private var verified = false
 
     override suspend fun probeCapabilities(): ScreenRecordingCapabilities {
+        if (HookConfigSync.replaceScreenRecorder(appContext)) {
+            verified = true
+            return ScreenRecordingCapabilities(canStop = true, canPause = true, canResume = true)
+        }
         if (verified) return ScreenRecordingCapabilities(canStop = true)
         if (!hasSafeExportedService()) return ScreenRecordingCapabilities(canStop = false)
 
@@ -71,6 +77,10 @@ class XiaomiScreenRecordingControlBackend(context: Context) : ScreenRecordingCon
     }
 
     override suspend fun stop(): Result<Unit> {
+        if (HookConfigSync.replaceScreenRecorder(appContext)) {
+            val hooked = ScreenRecorderCommands.stop(appContext)
+            if (hooked.isSuccess) return hooked
+        }
         if (!verified) {
             val capabilities = probeCapabilities()
             if (!capabilities.canStop) {

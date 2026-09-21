@@ -1,0 +1,112 @@
+name: Telegram Release Notify
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to notify'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to notify (e.g. v1.9.9)'
+        required: true
+        type: string
+
+jobs:
+  telegram:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate Telegram topic config
+        run: |
+          if [ -z "${{ secrets.TG_RELEASES_THREAD_ID }}" ]; then
+            echo "::error::TG_RELEASES_THREAD_ID is not set. Add the Releases topic message_thread_id as a repository secret."
+            exit 1
+          fi
+
+      - name: Resolve release tag
+        id: release
+        run: |
+          TAG="${{ inputs.tag }}"
+
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::notice::No published release found for $TAG. Skipping Telegram notification."
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Get release info
+        if: steps.release.outputs.found == 'true'
+        id: release_info
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Download and send release assets
+        if: steps.release.outputs.found == 'true'
+        run: |
+          TAG="${{ steps.release_info.outputs.tag_name }}"
+          assets=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets -q '.assets | map({name, browser_download_url: .url})')
+          gh release view "$TAG" --repo "${{ github.repository }}" --json body -q .body > release-body.md
+
+          TAG="$TAG" python3 - <<'PY' > telegram-caption.html
+          import html
+          import os
+
+          tag = html.escape(os.environ["TAG"], quote=False)
+          with open("release-body.md", "r", encoding="utf-8") as file:
+            body = file.read()
+          prefix = f"🚀 <b>新版本发布</b>\n🏷 版本：<code>{tag}</code>\n📋 更新日志：\n<pre>"
+          suffix = "</pre>"
+          budget = 1024 - len(prefix) - len(suffix)
+          escaped = ""
+          truncated = False
+
+          for char in body:
+            value = html.escape(char, quote=False)
+            if len(escaped) + len(value) > budget:
+              truncated = True
+              break
+            escaped += value
+
+          if truncated and budget >= 3:
+            while len(escaped) + 3 > budget:
+              escaped = escaped[:-1]
+            escaped += "..."
+
+          print(prefix + escaped + suffix)
+          PY
+
+          caption_sent=false
+
+          echo "$assets" | jq -r '.[] | [.name, .browser_download_url] | @tsv' | while IFS=$'\t' read -r name url; do
+            echo "Downloading $name from $url"
+
+            curl -L -o "$name" "$url"
+
+            echo "Sending $name to Telegram"
+
+            if [ "$caption_sent" = false ]; then
+              curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendDocument" \
+                -F "chat_id=${{ secrets.TG_CHAT_ID }}" \
+                -F "message_thread_id=${{ secrets.TG_RELEASES_THREAD_ID }}" \
+                -F "document=@$name" \
+                -F "parse_mode=HTML" \
+                -F "caption=<telegram-caption.html"
+              caption_sent=true
+            else
+              curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendDocument" \
+                -F "chat_id=${{ secrets.TG_CHAT_ID }}" \
+                -F "message_thread_id=${{ secrets.TG_RELEASES_THREAD_ID }}" \
+                -F "document=@$name"
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}

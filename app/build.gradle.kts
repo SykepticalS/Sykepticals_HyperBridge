@@ -85,6 +85,7 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation("androidx.navigationevent:navigationevent-android:1.1.2")
 
     compileOnly(libs.libxposed.api)
     implementation(libs.libxposed.service)

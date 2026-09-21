@@ -18,19 +18,17 @@ import com.d4viddf.hyperbridge.models.IslandConfig
 import io.github.d4viddf.hyperisland_kit.HyperAction
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import io.github.d4viddf.hyperisland_kit.HyperPicture
-import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
-import io.github.d4viddf.hyperisland_kit.models.PicInfo
-import io.github.d4viddf.hyperisland_kit.models.TextInfo
 import androidx.core.graphics.createBitmap
 
 class MediaTranslator(context: Context) : BaseTranslator(context) {
 
-    fun translate(sbn: StatusBarNotification, picKey: String, config: IslandConfig): HyperIslandData {
+    fun translate(sbn: StatusBarNotification, picKey: String, config: IslandConfig, isUpdate: Boolean = false): HyperIslandData {
         val extras = sbn.notification.extras
 
         // --- 1. Metadata ---
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "Unknown Title"
         val artist = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: "Unknown Artist"
+        val presentation = resolveIslandText(sbn, title, artist, config)
 
         // Load Album Art
         val largeIcon = sbn.notification.getLargeIcon()
@@ -77,10 +75,9 @@ class MediaTranslator(context: Context) : BaseTranslator(context) {
         val builder = HyperIslandNotification.Builder(context, "bridge_${sbn.packageName}", title)
 
         val finalTimeout = config.timeout ?: 0
-        builder.setEnableFloat(config.isFloat ?: false)
+        builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
         builder.setIslandConfig(timeout = finalTimeout)
         builder.setShowNotification(config.isShowShade ?: true)
-        builder.setIslandFirstFloat(config.isFloat ?: false)
 
 
         // --- RESOURCES ---
@@ -145,17 +142,15 @@ class MediaTranslator(context: Context) : BaseTranslator(context) {
         // --- Island (Collapsed) ---
         builder.setSmallIsland(if (albumArt != null) artKey else picKey)
 
-        builder.setBigIslandInfo(
-            left = ImageTextInfoLeft(
-                type = 1,
-                picInfo = PicInfo(type = 1, pic = if (albumArt != null) artKey else picKey),
-                textInfo = TextInfo(title = "", content = "")
-            )
+        val (left, right) = IslandCompactLayout.sides(
+            if (albumArt != null) artKey else picKey,
+            presentation,
         )
+        builder.setBigIslandInfo(left = left, right = right)
         builder.setIslandConfig(highlightColor = containerColorHex, expandedTimeMs = config.floatTimeout)
         builder.setHideDeco(true).setReopen(true).setShowSmallIcon(true)
 
-        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
+        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam(), containerColorHex)
     }
 
     // --- HELPERS ---

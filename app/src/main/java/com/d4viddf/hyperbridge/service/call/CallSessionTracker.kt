@@ -53,6 +53,11 @@ data class CallSession(
     val transitionReason: String = "pre-connected-no-active-evidence"
 )
 
+/** HyperOS expires a missing islandTimeout; call sessions own their own lifecycle. */
+object CallIslandTimeoutPolicy {
+    const val PERSISTENT_TIMEOUT_MILLIS = 86_400_000
+}
+
 /** The translator must never create a timer for a pre-connected call state. */
 object CallTimerPolicy {
     fun connectedAtForTimer(session: CallSession): Long? {
