@@ -17,6 +17,9 @@ internal data class OwnedIslandSnapshot(
     val owner: String? get() = extras.getString(IslandProtocol.EXTRA_OWNER)
         ?: sbn?.notification?.extras?.getString(IslandProtocol.EXTRA_OWNER)
     val owned: Boolean get() = owner == IslandProtocol.OWNER
+    val islandKey: String?
+        get() = extras.getString(IslandProtocol.EXTRA_SOURCE_KEY)?.takeIf { it.isNotBlank() }
+            ?: sbn?.key?.takeIf { it.isNotBlank() }
     val generation: Long
         get() = extras.getLong(IslandProtocol.EXTRA_GENERATION, Long.MIN_VALUE).takeUnless { it == Long.MIN_VALUE }
             ?: sbn?.notification?.extras?.getLong(IslandProtocol.EXTRA_GENERATION, Long.MIN_VALUE)

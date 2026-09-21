@@ -61,7 +61,8 @@ object NotificationIdentityResolver {
             shortcutLabel.clean().takeUnless { it.equals(app, true) || it.equals(self, true) }.orEmpty(),
         )
         val conversation = stripUnreadCount(conversationRaw)
-        val groupConversation = isGroupConversation || looksLikeGroupConversation(conversationRaw)
+        val groupConversation = isGroupConversation ||
+            looksLikeGroupConversation(conversationRaw)
         val tickerSender = parseTickerSender(ticker.clean(), app, self)
         val shareSender = parseShareSender(title.clean(), app, self)
             .ifBlank { parseShareSender(text.clean(), app, self) }
@@ -71,16 +72,23 @@ object NotificationIdentityResolver {
         val childSender = messageSender.clean().takeUnless {
             it.equals(app, true) || it.equals(self, true)
         }.orEmpty()
-        val sender = firstDistinct(
-            conversation,
-            names.firstOrNull().orEmpty(),
+        val personSender = firstDistinct(
             childSender,
+            names.firstOrNull().orEmpty(),
             tickerSender,
             shareSender,
             remoteName,
         )
+        val sender = if (groupConversation) personSender else firstDistinct(
+            conversation,
+            personSender,
+        )
         val rawTitle = firstDistinct(title.clean(), bigTitle.clean())
-        val resolvedTitle = sender.ifBlank { stripSenderPrefix(rawTitle, names) }.let(::stripUnreadCount)
+        val resolvedTitle = if (groupConversation) {
+            personSender.ifBlank { conversation }.ifBlank { stripSenderPrefix(rawTitle, names) }
+        } else {
+            sender.ifBlank { stripSenderPrefix(rawTitle, names) }
+        }.let(::stripUnreadCount)
         val latestLine = textLines.asReversed().firstOrNull { it.clean().isNotEmpty() }.clean()
         val body = buildList {
             add(messageText.clean())
@@ -103,20 +111,7 @@ object NotificationIdentityResolver {
                 !candidate.equals(self, ignoreCase = true) &&
                 !isIdentityTitle(candidate, resolvedTitle, conversation, names, app)
         }.orEmpty()
-        return resolvedTitle to formatGroupChildBody(groupConversation, childSender, resolvedTitle, body)
-    }
-
-    private fun formatGroupChildBody(
-        isGroup: Boolean,
-        childSender: String,
-        title: String,
-        body: String,
-    ): String {
-        if (!isGroup || childSender.isBlank() || childSender.equals(title, ignoreCase = true)) return body
-        if (body.isBlank()) return childSender
-        val prefix = "$childSender:"
-        if (body.startsWith(prefix, ignoreCase = true)) return body
-        return "$prefix $body"
+        return resolvedTitle to body
     }
 
     private fun looksLikeGroupConversation(conversationTitle: String): Boolean =

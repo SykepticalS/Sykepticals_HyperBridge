@@ -37,6 +37,7 @@ import com.d4viddf.hyperbridge.service.translators.NavTranslator
 import com.d4viddf.hyperbridge.service.translators.ProgressTranslator
 import com.d4viddf.hyperbridge.service.translators.DownloadTranslator
 import com.d4viddf.hyperbridge.service.translators.IslandCompactLayout
+import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentationPolicy
 import com.d4viddf.hyperbridge.service.translators.StandardTranslator
 import com.d4viddf.hyperbridge.service.translators.TimerTranslator
 import com.d4viddf.hyperbridge.service.translators.WidgetTranslator
@@ -1583,8 +1584,13 @@ class NotificationProcessingEngine private constructor(
                 return
             }
 
-            val isUpdate = previous != null
             val candidateBridgeId = previous?.id ?: effectiveKey.hashCode()
+            val postedBridgeId = if (isMessagingLifecycle) {
+                MessageBridgeIdPolicy.candidate(effectiveKey, processingGeneration, 0)
+            } else {
+                candidateBridgeId
+            }
+            val isUpdate = alreadyPostedIsland(effectiveKey, postedBridgeId, previous)
 
             if (isMessagingLifecycle && previous != null &&
                 previous.sourceKey == sbn.key && sbn.postTime < previous.sourcePostTime
@@ -1658,7 +1664,7 @@ class NotificationProcessingEngine private constructor(
                     logicalId = effectiveKey,
                     candidateBridgeId = presentationBridgeId,
                     contentHash = newContentHash,
-                    previous = previous?.let { PreviousIslandPresentation(it.logicalId, it.id, it.lastContentHash, it.messageEventFingerprint) },
+                    previous = previousIslandPresentation(previous, isUpdate, effectiveKey, presentationBridgeId),
                     notificationType = type,
                     isMessagingEvent = isMessagingLifecycle,
                     messageEventFingerprint = messageEventFingerprint
@@ -1686,13 +1692,24 @@ class NotificationProcessingEngine private constructor(
                     updatable = NotificationLifecyclePolicy.isProgressLifecycle(type),
                 )
                 IslandVisualExtras.apply(notification.extras, visualPlan)
+                val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+                    finalConfig.firstFloat ?: false,
+                    finalConfig.floatOnUpdate ?: false,
+                    isUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                )
                 if (decision.kind == IslandPresentationKind.UPDATE) {
                     notification.extras.putBoolean("miui.island.updateNoFloat", true)
                 }
+                notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
                 notification.extras.getString("miui.focus.param")?.let { json ->
                     notification.extras.putString(
                         "miui.focus.param",
-                        IslandVisualMetadata.injectUpdatable(json, visualPlan.updatable),
+                        IslandVisualMetadata.injectFloatingFlags(
+                            IslandVisualMetadata.injectUpdatable(json, visualPlan.updatable),
+                            floatPresentation.enableFloat,
+                            floatPresentation.islandFirstFloat,
+                            floatPresentation.reopen,
+                        ),
                     )
                 }
 
@@ -1810,7 +1827,7 @@ class NotificationProcessingEngine private constructor(
                 logicalId = effectiveKey,
                 candidateBridgeId = presentationBridgeId,
                 contentHash = newContentHash,
-                previous = previous?.let { PreviousIslandPresentation(it.logicalId, it.id, it.lastContentHash, it.messageEventFingerprint) },
+                previous = previousIslandPresentation(previous, isUpdate, effectiveKey, presentationBridgeId),
                 notificationType = type,
                 isMessagingEvent = isMessagingLifecycle,
                 messageEventFingerprint = messageEventFingerprint
@@ -2238,15 +2255,26 @@ class NotificationProcessingEngine private constructor(
             marqueeCapable = marqueeCapabilitiesReady(),
             updatable = updatable,
         )
+        val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+            config.firstFloat ?: false,
+            config.floatOnUpdate ?: false,
+            isUpdate = inPlaceUpdate,
+        )
         val notification = builder.build()
         notification.extras.putString(
             "miui.focus.param",
-            IslandVisualMetadata.injectUpdatable(
-                IslandVisualMetadata.injectGlowJson(data.jsonParam, glow),
-                updatable,
+            IslandVisualMetadata.injectFloatingFlags(
+                IslandVisualMetadata.injectUpdatable(
+                    IslandVisualMetadata.injectGlowJson(data.jsonParam, glow),
+                    updatable,
+                ),
+                floatPresentation.enableFloat,
+                floatPresentation.islandFirstFloat,
+                floatPresentation.reopen,
             ),
         )
         IslandVisualExtras.apply(notification.extras, visualPlan)
+        notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
         if (inPlaceUpdate) {
             notification.extras.putBoolean("miui.island.updateNoFloat", true)
         }
@@ -2543,6 +2571,32 @@ class NotificationProcessingEngine private constructor(
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun alreadyPostedIsland(logicalId: String, bridgeId: Int, previous: ActiveIsland?): Boolean {
+        if (previous != null) return true
+        if (activeIslands.containsKey(logicalId)) return true
+        if (activeTranslations.containsKey(logicalId)) return true
+        return reverseTranslations.containsKey(bridgeId)
+    }
+
+    private fun previousIslandPresentation(
+        previous: ActiveIsland?,
+        alreadyPosted: Boolean,
+        logicalId: String,
+        bridgeId: Int,
+    ): PreviousIslandPresentation? {
+        if (previous != null) {
+            return PreviousIslandPresentation(
+                previous.logicalId,
+                previous.id,
+                previous.lastContentHash,
+                previous.messageEventFingerprint,
+            )
+        }
+        if (!alreadyPosted) return null
+        val postedId = reverseTranslations.entries.firstOrNull { it.value == logicalId }?.key ?: bridgeId
+        return PreviousIslandPresentation(logicalId, postedId, Int.MIN_VALUE)
     }
 
     private fun postIsland(

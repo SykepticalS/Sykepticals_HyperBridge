@@ -164,6 +164,32 @@ class IslandPresentationTest {
         assertFalse(notLive.contains("\"updatable\":true"))
     }
 
+    @Test fun injectFloatingFlagsWritesEnableFloatFirstFloatAndReopen() {
+        val json = """{"param_v2":{"param_island":{},"enableFloat":true,"islandFirstFloat":true,"reopen":true}}"""
+        val patched = IslandVisualMetadata.injectFloatingFlags(json, enableFloat = false)
+        val paramV2 = com.google.gson.JsonParser.parseString(patched).asJsonObject.getAsJsonObject("param_v2")
+        assertFalse(paramV2["enableFloat"].asBoolean)
+        assertFalse(paramV2["islandFirstFloat"].asBoolean)
+        assertFalse(paramV2["reopen"].asBoolean)
+        val expanded = IslandVisualMetadata.injectFloatingFlags(json, enableFloat = true, islandFirstFloat = true, reopen = true)
+        val expandedV2 = com.google.gson.JsonParser.parseString(expanded).asJsonObject.getAsJsonObject("param_v2")
+        assertTrue(expandedV2["enableFloat"].asBoolean)
+        assertTrue(expandedV2["reopen"].asBoolean)
+    }
+
+    @Test fun glowIsolationNeverStartsFromADifferentIsland() {
+        assertTrue(IslandGlowIsolation.shouldStartGlow(currentOwned = true, currentRequestsGlow = true))
+        assertFalse(IslandGlowIsolation.shouldStartGlow(currentOwned = true, currentRequestsGlow = false))
+        assertFalse(IslandGlowIsolation.shouldStartGlow(currentOwned = false, currentRequestsGlow = true))
+        assertTrue(IslandGlowIsolation.shouldStopGlow(currentKnown = true, currentOwned = true, currentRequestsGlow = false))
+        assertTrue(IslandGlowIsolation.shouldStopGlow(currentKnown = true, currentOwned = false, currentRequestsGlow = false))
+        assertFalse(IslandGlowIsolation.shouldStopGlow(currentKnown = false, currentOwned = false, currentRequestsGlow = false))
+        assertFalse(IslandGlowIsolation.canReuseRecentTarget("island-a", "island-b", currentRequestsGlow = false))
+        assertTrue(IslandGlowIsolation.canReuseRecentTarget("island-a", "island-a", currentRequestsGlow = false))
+        assertTrue(IslandGlowIsolation.canReuseRecentTarget("island-b", "island-a", currentRequestsGlow = true))
+        assertFalse(IslandGlowIsolation.canReuseRecentTarget(null, "island-a", currentRequestsGlow = false))
+    }
+
     @Test fun appIconPalettePrefersNonWhiteAccentThenIcon() {
         assertEquals("#25D366", com.d4viddf.hyperbridge.service.visual.AppIconPalette.prefer("#FFFFFF", "#25D366"))
         assertEquals("#112233", com.d4viddf.hyperbridge.service.visual.AppIconPalette.prefer("#112233", "#25D366"))

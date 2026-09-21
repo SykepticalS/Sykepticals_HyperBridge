@@ -77,6 +77,26 @@ object IslandVisualMetadata {
         }.getOrDefault(jsonParam)
     }
 
+    /**
+     * HyperOS reads these from `param_v2`. Kit defaults and omitted-false values otherwise
+     * re-expand an already visible island on the next notify().
+     */
+    fun injectFloatingFlags(
+        jsonParam: String,
+        enableFloat: Boolean,
+        islandFirstFloat: Boolean = enableFloat,
+        reopen: Boolean = enableFloat,
+    ): String {
+        return runCatching {
+            val root = JsonParser.parseString(jsonParam).asJsonObject
+            val paramV2 = root.getAsJsonObject("param_v2") ?: return jsonParam
+            paramV2.addProperty("enableFloat", enableFloat)
+            paramV2.addProperty("islandFirstFloat", islandFirstFloat)
+            paramV2.addProperty("reopen", reopen)
+            Gson().toJson(root)
+        }.getOrDefault(jsonParam)
+    }
+
     fun injectProgressColor(jsonParam: String, color: String?): String {
         if (color.isNullOrBlank()) return jsonParam
         return runCatching {

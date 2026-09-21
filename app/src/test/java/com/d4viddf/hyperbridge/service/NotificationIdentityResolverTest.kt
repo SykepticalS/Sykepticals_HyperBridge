@@ -83,7 +83,7 @@ class NotificationIdentityResolverTest {
     }
 
     @Test
-    fun groupChildMessagePrefixesSenderOnTheSubtitle() {
+    fun groupConversationUsesSenderTitleAndRawMessage() {
         val (title, text) = NotificationIdentityResolver.resolve(
             appLabel = "WhatsApp",
             title = "Soemthing (3 messages): Skeptral Wha",
@@ -95,8 +95,24 @@ class NotificationIdentityResolverTest {
             selfName = "You",
             isGroupConversation = true,
         )
-        assertEquals("Soemthing", title)
-        assertEquals("Skeptral Wha: hi", text)
+        assertEquals("Skeptral Wha", title)
+        assertEquals("hi", text)
+    }
+
+    @Test
+    fun unreadCountConversationTitleUsesSenderOnTheLeft() {
+        val (title, text) = NotificationIdentityResolver.resolve(
+            appLabel = "WhatsApp",
+            title = "Family (2 messages)",
+            text = "hello there",
+            conversationTitle = "Family (2 messages)",
+            personNames = listOf("Mom"),
+            messageSender = "Mom",
+            messageText = "hello there",
+            selfName = "You",
+        )
+        assertEquals("Mom", title)
+        assertEquals("hello there", text)
     }
 
     @Test
