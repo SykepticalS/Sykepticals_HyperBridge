@@ -107,6 +107,7 @@ class InlineReplyActivity : ComponentActivity() {
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .background(Color(0xFF101010))
                             .navigationBarsPadding()
                             .imePadding()
                             .padding(16.dp)
@@ -125,8 +126,13 @@ class InlineReplyActivity : ComponentActivity() {
                             placeholder = { Text(stringResource(R.string.reply_hint)) },
                             shape = RoundedCornerShape(24.dp),
                             colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF2C2C2E),
+                                unfocusedContainerColor = Color(0xFF2C2C2E),
+                                disabledContainerColor = Color(0xFF2C2C2E),
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
                             ),
                             maxLines = 4,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),

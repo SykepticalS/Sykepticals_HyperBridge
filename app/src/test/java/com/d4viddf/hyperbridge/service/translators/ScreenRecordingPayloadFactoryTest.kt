@@ -31,15 +31,13 @@ class ScreenRecordingPayloadFactoryTest {
         assertEquals(1, param["protocol"].asInt)
         assertEquals("screen_recording", param["business"].asString)
         assertEquals("recorder", param["scene"].asString)
-        assertEquals("", param["content"].asString)
-        assertEquals("", param["ticker"].asString)
+        assertEquals("Recording..", param["content"].asString)
+        assertEquals("Recording..", param["ticker"].asString)
         assertFalse(param["enableFloat"].asBoolean)
-        assertFalse(param["showSmallIcon"].asBoolean)
-        assertTrue(param["hideDeco"].asBoolean)
         assertFalse(param["islandFirstFloat"].asBoolean)
         assertEquals(1, island["islandPriority"].asInt)
         assertEquals(2, island["islandProperty"].asInt)
-        assertEquals(43_200, island["islandTimeout"].asInt)
+        assertEquals(Int.MAX_VALUE, island["islandTimeout"].asInt)
         assertEquals("#FB382F", island["highlightColor"].asString)
         assertEquals(1_000L, timer["timerWhen"].asLong)
         assertEquals(1, timer["timerType"].asInt)
@@ -48,7 +46,7 @@ class ScreenRecordingPayloadFactoryTest {
         assertEquals("Recording..", minimizedLabel["title"].asString)
         assertEquals(1, expandedPulse["type"].asInt)
         assertEquals("miui.focus.pic_ticker", expandedPulse["pic"].asString)
-        assertFalse(param.has("animTextInfo"))
+        assertEquals("voiceWaveBig", param.getAsJsonObject("animTextInfo").getAsJsonObject("animIconInfo")["src"].asString)
         assertEquals("miui.focus.pic_ticker", expanded["picProfile"].asString)
         assertEquals("miui.focus.pic_ticker", expanded["picProfileDark"].asString)
         assertEquals("miui.focus.pic_recorder_app_badge", expanded["appIconPkg"].asString)
@@ -165,20 +163,46 @@ class ScreenRecordingPayloadFactoryTest {
         assertFalse(bigIsland.has("sameWidthDigitInfo"))
     }
 
+    @Test
+    fun countdownUsesRightSideSecondsInsteadOfTimer() {
+        val root = JsonParser.parseString(
+            payload(
+                canStop = true,
+                countdownRemaining = 3,
+                compactText = "Starting…",
+                expandedText = "Starting…",
+            )
+        ).asJsonObject
+        val param = root.getAsJsonObject("param_v2")
+        val bigIsland = param.getAsJsonObject("param_island").getAsJsonObject("bigIslandArea")
+        val right = bigIsland.getAsJsonObject("imageTextInfoRight")
+
+        assertFalse(bigIsland.has("sameWidthDigitInfo"))
+        assertEquals(2, right["type"].asInt)
+        assertEquals("3", right.getAsJsonObject("textInfo")["title"].asString)
+        assertEquals("Starting…", bigIsland.getAsJsonObject("imageTextInfoLeft").getAsJsonObject("textInfo")["title"].asString)
+        assertEquals("Starting…", param["ticker"].asString)
+        assertFalse(param.has("animTextInfo"))
+    }
+
     private fun payload(
         canStop: Boolean,
-        design: com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig = com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig()
+        design: com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig = com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig(),
+        countdownRemaining: Int = 0,
+        compactText: String = "Recording..",
+        expandedText: String = "Recording screen..",
     ) = ScreenRecordingPayloadFactory.build(
         session = ScreenRecordingSession(
             logicalId = "screen-recording:key:1000",
             sourceKey = "key",
             packageName = "com.miui.screenrecorder",
             startedAt = 1_000L,
-            capabilities = ScreenRecordingCapabilities(canStop = canStop)
+            capabilities = ScreenRecordingCapabilities(canStop = canStop),
+            countdownRemaining = countdownRemaining,
         ),
         now = 9_000L,
-        compactText = "Recording..",
-        expandedText = "Recording screen..",
+        compactText = compactText,
+        expandedText = expandedText,
         notifyId = "com.d4viddf.hyperbridge:42",
         design = design
     )

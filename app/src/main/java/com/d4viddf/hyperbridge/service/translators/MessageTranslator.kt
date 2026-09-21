@@ -31,11 +31,18 @@ class MessageTranslator(
 
         // --- CONFIGURATION ---
         builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
+        val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+            config.firstFloat ?: false,
+            config.floatOnUpdate ?: false,
+            isUpdate,
+        )
         builder.setIslandConfig(
             timeout = config.timeout,
-            dismissible = true,
+            // Kit's misleading name serializes to dismissIsland: a removal request on update,
+            // not permission for the user to swipe. HyperIsland leaves this false.
+            dismissible = false,
             highlightColor = highlightColor,
-            expandedTimeMs = if (isUpdate) null else config.floatTimeout,
+            expandedTimeMs = floatPresentation.expandedTimeMs(config.floatTimeout),
         )
         builder.setShowNotification(config.isShowShade ?: false)
 

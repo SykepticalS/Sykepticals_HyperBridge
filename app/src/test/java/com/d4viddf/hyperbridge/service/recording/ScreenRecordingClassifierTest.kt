@@ -28,6 +28,7 @@ class ScreenRecordingClassifierTest {
     @Test
     fun ongoingRecorderNotificationDoesNotRequireForegroundServiceFlag() {
         assertTrue(ScreenRecordingClassifier.isScreenRecording(activeSignals().copy(isForegroundService = false)))
+        assertTrue(ScreenRecordingClassifier.isScreenRecording(activeSignals().copy(isOngoing = false)))
         assertTrue(ScreenRecordingClassifier.isScreenRecording(activeSignals().copy(channelId = null)))
         assertTrue(
             ScreenRecordingClassifier.isScreenRecording(

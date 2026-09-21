@@ -95,7 +95,6 @@
         <service
             android:name=".screenrecorder.ScreenRecorderControlService"
             android:exported="true"
-            android:process=":screen_recorder_control"
             android:stopWithTask="false">
             <intent-filter>
                 <action android:name="com.sykeptical.hyperbridge.action.SCREEN_RECORDER_CONTROL" />
@@ -133,7 +132,7 @@
 
         <receiver
             android:name=".receiver.InlineReplyReceiver"
-            android:exported="false" />
+            android:exported="true" />
 
         <receiver
             android:name=".receiver.ScreenRecordingActionReceiver"
@@ -145,7 +144,7 @@
 
         <activity
             android:name=".ui.InlineReplyActivity"
-            android:exported="false"
+            android:exported="true"
             android:excludeFromRecents="true"
             android:autoRemoveFromRecents="true"
             android:launchMode="singleInstance"

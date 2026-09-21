@@ -21,6 +21,7 @@ import android.os.Bundle
 import android.os.Parcelable
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
@@ -249,9 +250,12 @@ abstract class BaseTranslator(
         picKey: String,
         presentation: IslandTextPresentation,
     ): CompactIslandAssets {
+        val started = android.os.SystemClock.elapsedRealtime()
         val avatar = resolveAvatarVisual(sbn)
+        val avatarReady = android.os.SystemClock.elapsedRealtime()
         val attachmentKey = "${picKey}_media"
         val attachment = resolveAttachmentVisual(sbn, avatar.bitmap)
+        Log.d("HyperBridgeTiming", "visual package=${sbn.packageName} avatarMs=${avatarReady - started} attachmentMs=${android.os.SystemClock.elapsedRealtime() - avatarReady}")
         val (left, right) = IslandCompactLayout.sides(
             picKey = picKey,
             presentation = presentation,
@@ -481,7 +485,7 @@ abstract class BaseTranslator(
                 title = finalTitle,
                 icon = actionIcon,
                 pendingIntent = finalIntent,
-                actionIntentType = if (inlineReply) 2 else 1,
+                actionIntentType = 1,
                 actionBgColor = appliedBgColor,
                 titleColor = finalTintColorHex
             )
@@ -600,6 +604,21 @@ abstract class BaseTranslator(
     private fun resolveAvatarVisual(sbn: StatusBarNotification): ResolvedNotificationVisual {
         val pkg = sbn.packageName
         try {
+            if (isGroupConversation(sbn)) {
+                loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+                val groupLargeBig = loadLargeIconBigBitmap(sbn)
+                if (groupLargeBig != null &&
+                    NotificationVisualPlanner.isLikelyAvatar(groupLargeBig.width, groupLargeBig.height)
+                ) {
+                    return ResolvedNotificationVisual(groupLargeBig, NotificationVisualSource.LARGE_ICON)
+                }
+                val groupLarge = loadLargeIconBitmap(sbn)
+                if (groupLarge != null &&
+                    NotificationVisualPlanner.isLikelyAvatar(groupLarge.width, groupLarge.height)
+                ) {
+                    return ResolvedNotificationVisual(groupLarge, NotificationVisualSource.LARGE_ICON)
+                }
+            }
             loadPersonBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
             loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
 
@@ -685,6 +704,17 @@ abstract class BaseTranslator(
         }
     }
 
+    private fun isGroupConversation(sbn: StatusBarNotification): Boolean {
+        val extras = sbn.notification.extras
+        if (extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)) return true
+        return try {
+            NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(sbn.notification)
+                ?.isGroupConversation == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun loadPictureBitmap(sbn: StatusBarNotification): Bitmap? {
         val extras = sbn.notification.extras
         extras.getParcelableCompat<Bitmap>(Notification.EXTRA_PICTURE)
@@ -742,7 +772,10 @@ abstract class BaseTranslator(
         com.d4viddf.hyperbridge.service.NotificationRemoteViewsParser.collect(
             sbn.notification,
             context,
-            recoverIfMissing = true,
+            // A reconstructed MessagingStyle/InboxStyle layout only repeats extras already
+            // inspected above. Building and reflecting three layouts costs ~2s per WhatsApp
+            // post on HyperOS. Only inspect custom RemoteViews actually supplied by the app.
+            recoverIfMissing = false,
         )
 
     private fun remoteAvatarBitmap(sbn: StatusBarNotification, picture: Bitmap?): Bitmap? =

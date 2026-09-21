@@ -5,12 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
+import android.os.Binder
+import android.app.Notification
 import android.os.IBinder
 import android.service.notification.StatusBarNotification
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.processing.INotificationProcessingService
+import com.d4viddf.hyperbridge.processing.IIslandDispatcher
+import com.d4viddf.hyperbridge.xposed.dispatch.SystemUiDispatcher
 import com.d4viddf.hyperbridge.service.NotificationProcessingService
-import com.d4viddf.hyperbridge.xposed.HookConfig
+import com.d4viddf.hyperbridge.service.NotificationLifecyclePolicy
 import com.d4viddf.hyperbridge.xposed.log
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
@@ -39,12 +43,36 @@ object SystemUiNotificationIngressHook {
     @Volatile private var systemUiContext = WeakReference<Context>(null)
     @Volatile private var logger = WeakReference<XposedModule>(null)
     @Volatile private var active = false
+    @Volatile private var preSnapshotActive = false
+
+    private val dispatcher = object : IIslandDispatcher.Stub() {
+        override fun post(tag: String, id: Int, notification: Notification, generation: Long): Boolean {
+            val context = systemUiContext.get() ?: return false
+            val uid = Binder.getCallingUid()
+            check(IslandProtocol.APP_PACKAGE in context.packageManager.getPackagesForUid(uid).orEmpty()) {
+                "Island dispatcher caller is not HyperBridge"
+            }
+            // notify must execute as SystemUI, not under the incoming app Binder identity.
+            val identity = Binder.clearCallingIdentity()
+            return try {
+                SystemUiDispatcher.postOwned(context, tag, id, notification, generation).isSuccess
+            } finally {
+                Binder.restoreCallingIdentity(identity)
+            }
+        }
+    }
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            processor = INotificationProcessingService.Stub.asInterface(service)
-            binding = false
             processingExecutor.execute {
+                val remote = INotificationProcessingService.Stub.asInterface(service)
+                runCatching { remote.attachDispatcher(dispatcher) }.onFailure {
+                    binding = false
+                    logger.get()?.log("HyperBridge: dispatcher attachment failed: ${it.message}")
+                    return@execute
+                }
+                processor = remote
+                binding = false
                 drainPendingPosts()
                 reconcileRemote()
             }
@@ -63,6 +91,17 @@ object SystemUiNotificationIngressHook {
     }
 
     fun isActive(): Boolean = active
+
+    /** WhatsApp can float its separate group summary after its child was replaced. */
+    fun hasReplacedGroupChild(summary: StatusBarNotification): Boolean {
+        if (summary.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0) return false
+        return activeSources.values.any { child ->
+            child.key != summary.key && child.packageName == summary.packageName &&
+                child.user == summary.user && child.groupKey == summary.groupKey &&
+                child.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 &&
+                child.notification.extras.getBoolean(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP, false)
+        }
+    }
 
     fun reloadEngine() {
         runCatching { processor?.reload() }
@@ -123,7 +162,7 @@ object SystemUiNotificationIngressHook {
                 listener = WeakReference(chain.thisObject)
                 (chain.args.firstOrNull() as? StatusBarNotification)?.let { sbn ->
                     activeSources[sbn.key] = sbn
-                    if (!connectingListener && !isOwnedProxy(sbn)) {
+                    if (!preSnapshotActive && !connectingListener && !isOwnedProxy(sbn)) {
                         processingExecutor.execute { processPosted(sbn, module) }
                     }
                 }
@@ -137,15 +176,19 @@ object SystemUiNotificationIngressHook {
             }
             module.hook(removed).intercept { chain ->
                 listener = WeakReference(chain.thisObject)
-                val result = chain.proceed()
                 val sbn = chain.args[0] as? StatusBarNotification
+                val reason = chain.args.lastOrNull() as? Int ?: 0
+                val result = chain.proceed()
                 if (sbn != null) {
                     pendingPosts.remove(sbn.key)
                     activeSources.computeIfPresent(sbn.key) { _, current ->
                         current.takeUnless { sameGeneration(it, sbn) }
                     }
+                    if (isOwnedProxy(sbn) && NotificationLifecyclePolicy.isUserInitiatedRemoval(reason)) {
+                        ActiveIslandDismissHook.dismissKey(sbn.key)
+                    }
                     processingExecutor.execute {
-                        processRemoved(sbn, chain.args.lastOrNull() as? Int ?: 0, module)
+                        processRemoved(sbn, reason, module)
                     }
                 }
                 result
@@ -153,7 +196,7 @@ object SystemUiNotificationIngressHook {
             module.log("HyperBridge: hooked MiuiNotificationListener posted/removed lifecycle")
 
             active = true
-            module.log("HyperBridge: notification processing dispatched off the SystemUI callback thread")
+            module.log("HyperBridge: ingress ready preSnapshot=$preSnapshotActive directDispatcher=true")
         }.onFailure {
             active = false
             module.log("HyperBridge: SystemUI notification ingress hook failed open: ${it.message}")
@@ -171,13 +214,15 @@ object SystemUiNotificationIngressHook {
                 (chain.args.firstOrNull() as? StatusBarNotification)?.let { sbn ->
                     if (!isOwnedProxy(sbn)) {
                         sbn.notification.extras.remove(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP)
-                        if (HookConfig.expectsReplacement(sbn)) {
-                            markSourceHeadsUpSuppressed(sbn)
-                        }
+                        // HyperIsland posts here, on Xiaomi's background notification thread,
+                        // before InnerNotifBean and heads-up decisions snapshot the source.
+                        // The direct return Binder avoids a main-thread broadcast deadlock.
+                        if (!connectingListener) processPosted(sbn, module)
                     }
                 }
                 chain.proceed()
             }
+            preSnapshotActive = true
             module.log("HyperBridge: hooked pre-snapshot source suppression marker")
         }.onFailure {
             module.log("HyperBridge: pre-snapshot source marker unavailable: ${it.message}")
@@ -191,9 +236,15 @@ object SystemUiNotificationIngressHook {
             return
         }
         runCatching {
-            remote.processPosted(Bundle().apply {
+            val started = android.os.SystemClock.elapsedRealtime()
+            val replaced = remote.processPosted(Bundle().apply {
                 putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
             })
+            if (replaced) markSourceHeadsUpSuppressed(sbn)
+            if (replaced) module.log(
+                "HyperBridge: pre-snapshot replacement package=${sbn.packageName} " +
+                    "elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}",
+            )
         }.onFailure {
             pendingPosts[sbn.key] = sbn
             module.log("HyperBridge: notification processing failed open: ${it.message}")
@@ -206,9 +257,10 @@ object SystemUiNotificationIngressHook {
         val remote = processor ?: return
         pendingPosts.entries.toList().forEach { (key, sbn) ->
             runCatching {
-                remote.processPosted(Bundle().apply {
+                val replaced = remote.processPosted(Bundle().apply {
                     putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
                 })
+                if (replaced) markSourceHeadsUpSuppressed(sbn)
             }.onSuccess {
                 pendingPosts.remove(key, sbn)
             }.onFailure {
@@ -224,6 +276,9 @@ object SystemUiNotificationIngressHook {
             IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP,
             true,
         )
+        activeSources.compute(sbn.key) { _, current ->
+            if (current == null || sameGeneration(current, sbn)) sbn else current
+        }
     }
 
     private fun processRemoved(sbn: StatusBarNotification, reason: Int, module: XposedModule) {

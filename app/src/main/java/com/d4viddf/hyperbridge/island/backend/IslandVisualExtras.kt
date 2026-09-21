@@ -62,6 +62,7 @@ object IslandVisualExtras {
         IslandProtocol.EXTRA_FORCE_ISLAND_GLOW,
         IslandProtocol.EXTRA_FORCE_FOCUS_GLOW,
         IslandProtocol.EXTRA_UPDATABLE,
+        IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION,
     )
 
     private val OWNED_INT_KEYS = arrayOf(IslandProtocol.EXTRA_ORIGINAL_TIMEOUT)

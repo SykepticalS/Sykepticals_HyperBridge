@@ -63,6 +63,9 @@ object ScreenRecorderContract {
     const val KEY_DURATION_MILLIS = "duration_millis"
     const val KEY_SNAPSHOT_ELAPSED = "snapshot_elapsed"
     const val KEY_STARTED_AT_WALL_CLOCK = "started_at_wall_clock"
+    const val KEY_COUNTDOWN_REMAINING = "countdown_remaining"
+    const val COUNTDOWN_SECONDS = 3
+    const val COUNTDOWN_TICK_MS = 1_000L
 
     const val ICON_VOICE_RECORDER = "voice_recorder"
     const val ICON_SCREEN_RECORDER = "screen_recorder"
@@ -72,6 +75,7 @@ object ScreenRecorderContract {
         durationMillis = bundle?.getLong(KEY_DURATION_MILLIS, 0L) ?: 0L,
         snapshotElapsedRealtime = bundle?.getLong(KEY_SNAPSHOT_ELAPSED, 0L) ?: 0L,
         startedAtWallClock = bundle?.getLong(KEY_STARTED_AT_WALL_CLOCK, 0L) ?: 0L,
+        countdownRemaining = bundle?.getInt(KEY_COUNTDOWN_REMAINING, 0) ?: 0,
     )
 
     fun snapshotBundle(snapshot: RecorderSnapshot) = Bundle().apply {
@@ -79,6 +83,7 @@ object ScreenRecorderContract {
         putLong(KEY_DURATION_MILLIS, snapshot.durationMillis)
         putLong(KEY_SNAPSHOT_ELAPSED, snapshot.snapshotElapsedRealtime)
         putLong(KEY_STARTED_AT_WALL_CLOCK, snapshot.startedAtWallClock)
+        putInt(KEY_COUNTDOWN_REMAINING, snapshot.countdownRemaining)
     }
 }
 
@@ -87,6 +92,7 @@ data class RecorderSnapshot(
     val durationMillis: Long = 0L,
     val snapshotElapsedRealtime: Long = 0L,
     val startedAtWallClock: Long = 0L,
+    val countdownRemaining: Int = 0,
 ) {
     val isSessionActive: Boolean
         get() = state != ScreenRecorderContract.STATE_IDLE

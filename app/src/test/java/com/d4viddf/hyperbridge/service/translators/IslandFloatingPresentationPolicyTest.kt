@@ -1,5 +1,6 @@
 package com.d4viddf.hyperbridge.service.translators
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,6 +16,7 @@ class IslandFloatingPresentationPolicyTest {
 
         assertTrue(presentation.enableFloat)
         assertTrue(presentation.islandFirstFloat)
+        assertTrue(presentation.reopen)
     }
 
     @Test
@@ -27,6 +29,8 @@ class IslandFloatingPresentationPolicyTest {
 
         assertFalse(presentation.enableFloat)
         assertFalse(presentation.islandFirstFloat)
+        assertFalse(presentation.reopen)
+        assertEquals(0, presentation.expandedTimeMs(2_000))
     }
 
     @Test
@@ -39,6 +43,7 @@ class IslandFloatingPresentationPolicyTest {
 
         assertFalse(presentation.enableFloat)
         assertFalse(presentation.islandFirstFloat)
+        assertFalse(presentation.reopen)
     }
 
     @Test
@@ -46,6 +51,7 @@ class IslandFloatingPresentationPolicyTest {
         val presentation = IslandFloatingPresentationPolicy.resolve(true, true, isUpdate = true)
         assertTrue(presentation.enableFloat)
         assertTrue(presentation.islandFirstFloat)
+        assertTrue(presentation.reopen)
     }
 
     @Test
@@ -57,5 +63,6 @@ class IslandFloatingPresentationPolicyTest {
         )
         assertFalse(presentation.enableFloat)
         assertFalse(presentation.islandFirstFloat)
+        assertFalse(presentation.reopen)
     }
 }

@@ -22,7 +22,8 @@ data class ScreenRecordingSession(
     val packageName: String,
     val startedAt: Long,
     val capabilities: ScreenRecordingCapabilities,
-    val paused: Boolean = false
+    val paused: Boolean = false,
+    val countdownRemaining: Int = 0,
 )
 
 object ScreenRecordingSavedIdentity {
@@ -85,6 +86,7 @@ object ScreenRecordingSemanticFingerprint {
         session.capabilities.canPause,
         session.capabilities.canResume,
         session.paused,
+        session.countdownRemaining,
         design.left.name,
         design.right.name,
         "screen_recording_avatar_timer_v14_blank_app_badge",

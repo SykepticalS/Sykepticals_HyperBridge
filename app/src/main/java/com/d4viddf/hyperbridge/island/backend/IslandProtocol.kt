@@ -17,6 +17,7 @@ object IslandProtocol {
     const val ACTION_PING_XMSF = "$APP_PACKAGE.action.PING_XMSF"
     const val ACTION_RELOAD_ENGINE = "$APP_PACKAGE.action.RELOAD_ENGINE"
     const val ACTION_CANCEL_SOURCE = "$APP_PACKAGE.action.CANCEL_SOURCE"
+    const val ACTION_REPLY_COMPOSER = "$APP_PACKAGE.action.REPLY_COMPOSER"
 
     const val EXTRA_PROTOCOL = "hyperbridge.protocol"
     const val EXTRA_NOTIFICATION = "hyperbridge.notification"
@@ -47,6 +48,8 @@ object IslandProtocol {
     const val EXTRA_FORCE_ISLAND_GLOW = "hyperbridge.glow.force_island"
     const val EXTRA_FORCE_FOCUS_GLOW = "hyperbridge.glow.force_focus"
     const val EXTRA_UPDATABLE = "hyperbridge.updatable"
+    const val EXTRA_TEXT_UPDATE_ANIMATION = "hyperbridge.text_update_animation"
+    const val EXTRA_REPLY_COMPOSER_OPEN = "hyperbridge.reply_composer_open"
     const val MIUI_SBN = "miui.sbn"
     const val MIUI_BIG_ISLAND_EFFECT = "miui.bigIsland.effect.src"
     const val MIUI_EFFECT = "miui.effect.src"
@@ -63,6 +66,7 @@ object IslandProtocol {
     const val CAP_MARQUEE = 1 shl 5
     const val CAP_ISLAND_DISMISS = 1 shl 6
     const val CAP_FULL_GLOW = 1 shl 7
+    const val CAP_TEXT_UPDATE_ANIMATION = 1 shl 8
     const val REQUIRED_CAPABILITIES = CAP_POST or CAP_TAGGED_CANCEL or CAP_FOCUS_BYPASS or
         CAP_HEADS_UP or CAP_NOTIFICATION_INGRESS
 

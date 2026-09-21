@@ -3,7 +3,8 @@ package com.d4viddf.hyperbridge.service
 data class MessageContentCandidate(
     val sender: String?,
     val text: String?,
-    val timestamp: Long? = null
+    val timestamp: Long? = null,
+    val isSelf: Boolean = false,
 )
 
 data class ResolvedNotificationContent(
@@ -11,7 +12,8 @@ data class ResolvedNotificationContent(
     val text: String,
     val hasMessageContent: Boolean,
     val latestMessageTimestamp: Long?,
-    val messageCount: Int
+    val messageCount: Int,
+    val latestMessageIsSelf: Boolean = false,
 )
 
 /** Resolves display content without depending on any app-specific notification shape. */

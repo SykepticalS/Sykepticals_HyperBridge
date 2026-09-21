@@ -90,7 +90,7 @@ class ScreenRecordingSessionTrackerTest {
                 isAppCancellation = true
             )
         )
-        assertFalse(
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.MESSAGE,
                 dismissWithOriginal = true,

@@ -125,8 +125,10 @@ class IslandUpdateResolverTest {
         assertEquals(second.bridgeId, third.bridgeId)
         assertEquals(IslandPresentationKind.UPDATE, second.kind)
         assertEquals(IslandPresentationKind.UPDATE, third.kind)
-        assertFalse(second.presentationReason.mayAutoExpand)
-        assertFalse(third.presentationReason.mayAutoExpand)
+        assertTrue(second.presentationReason.mayAutoExpand)
+        assertTrue(third.presentationReason.mayAutoExpand)
+        assertFalse(second.onlyAlertOnce)
+        assertFalse(third.onlyAlertOnce)
         assertFalse(second.cancelBeforeNotify)
         assertFalse(third.cancelBeforeNotify)
     }
@@ -252,8 +254,8 @@ class IslandUpdateResolverTest {
 
         assertEquals(IslandPresentationKind.UPDATE, decision.kind)
         assertEquals(42, decision.bridgeId)
-        assertTrue(decision.onlyAlertOnce)
-        assertEquals(IslandPresentationReason.CONTENT_UPDATE, decision.presentationReason)
+        assertFalse(decision.onlyAlertOnce)
+        assertEquals(IslandPresentationReason.NEW_EVENT, decision.presentationReason)
         assertFalse(decision.cancelBeforeNotify)
     }
 
@@ -277,6 +279,25 @@ class IslandUpdateResolverTest {
         assertEquals(IslandPresentationKind.UPDATE, decision.kind)
         assertEquals(42, decision.bridgeId)
         assertFalse(decision.cancelBeforeNotify)
+    }
+
+    @Test
+    fun recoveredNewerMessageDoesNotAlertAgain() {
+        for (reason in listOf(IslandPresentationReason.RESTORE, IslandPresentationReason.RECONCILE)) {
+            val decision = IslandUpdateResolver.decide(
+                logicalId = "conversation-a",
+                candidateBridgeId = 999,
+                contentHash = 456,
+                previous = PreviousIslandPresentation("conversation-a", 42, 123, messageEvent(100L, 1)),
+                notificationType = NotificationType.MESSAGE,
+                presentationReason = reason,
+                messageEventFingerprint = messageEvent(200L, 2),
+            )
+            assertEquals(42, decision.bridgeId)
+            assertTrue(decision.onlyAlertOnce)
+            assertEquals(reason, decision.presentationReason)
+            assertFalse(decision.cancelBeforeNotify)
+        }
     }
 
     @Test
@@ -389,13 +410,31 @@ class IslandUpdateResolverTest {
                 isAppCancellation = true
             )
         )
-        assertFalse(
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.MESSAGE,
                 dismissWithOriginal = true,
                 isAppCancellation = false
             )
         )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.MESSAGE,
+                dismissWithOriginal = false,
+                isAppCancellation = false
+            )
+        )
+    }
+
+    @Test
+    fun shadeSwipeIsAUserInitiatedRemovalAndAppCancelIsNot() {
+        assertTrue(NotificationLifecyclePolicy.isUserInitiatedRemoval(NotificationLifecyclePolicy.REASON_CLICK))
+        assertTrue(NotificationLifecyclePolicy.isUserInitiatedRemoval(NotificationLifecyclePolicy.REASON_CANCEL))
+        assertTrue(NotificationLifecyclePolicy.isUserInitiatedRemoval(NotificationLifecyclePolicy.REASON_CANCEL_ALL))
+        assertTrue(NotificationLifecyclePolicy.isUserInitiatedRemoval(NotificationLifecyclePolicy.REASON_LISTENER_CANCEL))
+        assertFalse(NotificationLifecyclePolicy.isUserInitiatedRemoval(NotificationLifecyclePolicy.REASON_APP_CANCEL))
+        assertTrue(NotificationLifecyclePolicy.isAppCancellationReason(NotificationLifecyclePolicy.REASON_APP_CANCEL))
+        assertFalse(NotificationLifecyclePolicy.isAppCancellationReason(NotificationLifecyclePolicy.REASON_CANCEL))
     }
 
     @Test

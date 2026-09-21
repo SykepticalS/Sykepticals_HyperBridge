@@ -6,12 +6,12 @@ import android.content.ContextWrapper
 import android.content.res.AssetManager
 import android.content.res.Configuration
 import android.content.res.Resources
-import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.service.quicksettings.TileService
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -276,8 +276,11 @@ internal object ScreenRecorderDialogInjector {
             }
         }
         hostDialog.setOnDismissListener { releaseHostResources() }
+        val tileService = unwrapTileService(context)
         hostDialog.window?.apply {
-            setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            if (tileService == null) {
+                setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            }
             setGravity(Gravity.BOTTOM)
             setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
             WindowCompat.setDecorFitsSystemWindows(this, false)
@@ -302,9 +305,12 @@ internal object ScreenRecorderDialogInjector {
         }
         viewTreeOwner.resume()
         RecorderOverlayGate.open()
-        @Suppress("DEPRECATION")
-        runCatching { context.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) }
-        hostDialog.show()
+        if (tileService != null) {
+            tileService.showDialog(hostDialog)
+        }
+        if (!hostDialog.isShowing) {
+            hostDialog.show()
+        }
         viewTreeOwner.attachBackInput(hostDialog.onBackInvokedDispatcher)
         hostDialog.window?.setLayout(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -312,6 +318,15 @@ internal object ScreenRecorderDialogInjector {
         )
         Handler(Looper.getMainLooper()).postDelayed(RecorderOverlayGate::close, 750L)
     }
+}
+
+private fun unwrapTileService(context: Context): TileService? {
+    var current: Context? = context
+    while (current != null) {
+        if (current is TileService) return current
+        current = (current as? ContextWrapper)?.baseContext
+    }
+    return null
 }
 
 internal class InjectedResourceContext(

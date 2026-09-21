@@ -11,6 +11,7 @@ import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
 import android.os.SystemClock
+import com.d4viddf.hyperbridge.service.recording.ScreenRecordingIslandController
 
 /**
  * Owns the recorder session state independently from Xiaomi's notification lifecycle.
@@ -34,14 +35,36 @@ class ScreenRecorderControlService : Service() {
     private var accumulatedMillis = 0L
     private var runningSinceElapsed = 0L
     private var startedAtWallClock = 0L
+    private var countdownRemaining = 0
     private val startTimeout = Runnable {
         if (state == ScreenRecorderContract.STATE_STARTING) reportIdle()
+    }
+    private val countdownTick = object : Runnable {
+        override fun run() {
+            if (state != ScreenRecorderContract.STATE_STARTING) return
+            if (countdownRemaining > 1) {
+                countdownRemaining -= 1
+                broadcastSnapshot()
+                handler.postDelayed(this, ScreenRecorderContract.COUNTDOWN_TICK_MS)
+            } else {
+                countdownRemaining = 0
+                broadcastSnapshot()
+            }
+        }
+    }
+    private val islandController by lazy { ScreenRecordingIslandController(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        islandController
     }
 
     override fun onBind(intent: Intent?): IBinder = messenger.binder
 
     override fun onDestroy() {
         handler.removeCallbacks(startTimeout)
+        handler.removeCallbacks(countdownTick)
+        islandController.cancel()
         clients.clear()
         apiClients.clear()
         super.onDestroy()
@@ -216,7 +239,7 @@ class ScreenRecorderControlService : Service() {
 
     private fun removeClient(binder: IBinder) {
         clients.remove(binder)
-        if (clients.isEmpty()) reportIdle()
+        if (clients.isEmpty() && state == ScreenRecorderContract.STATE_STARTING) reportIdle()
     }
 
     private fun reportStarting() {
@@ -225,8 +248,11 @@ class ScreenRecorderControlService : Service() {
         accumulatedMillis = 0L
         runningSinceElapsed = 0L
         startedAtWallClock = System.currentTimeMillis()
+        countdownRemaining = ScreenRecorderContract.COUNTDOWN_SECONDS
         handler.removeCallbacks(startTimeout)
+        handler.removeCallbacks(countdownTick)
         handler.postDelayed(startTimeout, START_TIMEOUT_MILLIS)
+        handler.postDelayed(countdownTick, ScreenRecorderContract.COUNTDOWN_TICK_MS)
         broadcastSnapshot()
     }
 
@@ -234,12 +260,15 @@ class ScreenRecorderControlService : Service() {
         if (state != ScreenRecorderContract.STATE_IDLE) return false
         reportStarting()
         val extras = sanitizedOptions(options)
-        return if (clients.isEmpty()) {
-            dispatchStartToRecorder(extras)
-        } else {
-            broadcastCommand(ScreenRecorderContract.MSG_COMMAND_START, extras)
-            true
-        }
+        handler.postDelayed({
+            if (state != ScreenRecorderContract.STATE_STARTING) return@postDelayed
+            if (clients.isEmpty()) {
+                dispatchStartToRecorder(extras)
+            } else {
+                broadcastCommand(ScreenRecorderContract.MSG_COMMAND_START, extras)
+            }
+        }, ScreenRecorderContract.COUNTDOWN_SECONDS * ScreenRecorderContract.COUNTDOWN_TICK_MS)
+        return true
     }
 
     /** 仅透传已知的录制选项键，避免把协议字段带进录屏应用。 */
@@ -302,6 +331,8 @@ class ScreenRecorderControlService : Service() {
         }
         state = ScreenRecorderContract.STATE_RECORDING
         handler.removeCallbacks(startTimeout)
+        handler.removeCallbacks(countdownTick)
+        countdownRemaining = 0
         accumulatedMillis = 0L
         runningSinceElapsed = now
         if (startedAtWallClock <= 0L) startedAtWallClock = System.currentTimeMillis()
@@ -330,9 +361,11 @@ class ScreenRecorderControlService : Service() {
         if (state == ScreenRecorderContract.STATE_IDLE) return
         state = ScreenRecorderContract.STATE_IDLE
         handler.removeCallbacks(startTimeout)
+        handler.removeCallbacks(countdownTick)
         accumulatedMillis = 0L
         runningSinceElapsed = 0L
         startedAtWallClock = 0L
+        countdownRemaining = 0
         broadcastSnapshot()
     }
 
@@ -350,24 +383,27 @@ class ScreenRecorderControlService : Service() {
             durationMillis = duration,
             snapshotElapsedRealtime = now,
             startedAtWallClock = startedAtWallClock,
+            countdownRemaining = countdownRemaining,
         )
     }
 
-    private fun sendSnapshot(client: Messenger?) {
+    private fun broadcastSnapshot() {
+        val snapshot = currentSnapshot()
+        clients.values.toList().forEach { sendSnapshot(it, snapshot) }
+        apiClients.values.toList().forEach(::sendApiState)
+        islandController.onSnapshot(snapshot)
+    }
+
+    private fun sendSnapshot(client: Messenger?, snapshot: RecorderSnapshot = currentSnapshot()) {
         if (client == null) return
         val message = Message.obtain(null, ScreenRecorderContract.MSG_STATE_CHANGED).apply {
-            data = ScreenRecorderContract.snapshotBundle(currentSnapshot())
+            data = ScreenRecorderContract.snapshotBundle(snapshot)
         }
         try {
             client.send(message)
         } catch (_: RemoteException) {
             removeClient(client.binder)
         }
-    }
-
-    private fun broadcastSnapshot() {
-        clients.values.toList().forEach(::sendSnapshot)
-        apiClients.values.toList().forEach(::sendApiState)
     }
 
     private fun requestRecorderStop() {

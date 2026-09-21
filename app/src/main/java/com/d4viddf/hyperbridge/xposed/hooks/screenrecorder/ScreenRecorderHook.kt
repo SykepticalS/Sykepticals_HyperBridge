@@ -25,6 +25,9 @@ import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.screenrecorder.RecorderSnapshot
 import com.d4viddf.hyperbridge.screenrecorder.ScreenRecorderContract
+import com.d4viddf.hyperbridge.service.recording.ScreenRecordingCapabilities
+import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSession
+import com.d4viddf.hyperbridge.service.translators.ScreenRecordingTranslator
 import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.log
 import io.github.libxposed.api.XposedModule
@@ -47,6 +50,7 @@ object ScreenRecorderHook {
     private val hookedTileClasses = ConcurrentHashMap.newKeySet<Class<*>>()
     private val hookedRecorderServiceClasses = ConcurrentHashMap.newKeySet<Class<*>>()
     private val hookedRecorderValidationMethods = ConcurrentHashMap.newKeySet<Method>()
+    private val hookedNotifyMethods = ConcurrentHashMap.newKeySet<Method>()
     private val bypassNextLowBatteryWarning = AtomicBoolean(false)
     private val componentsDiscovered = AtomicBoolean(false)
     private val snapshotObserverInstalled = AtomicBoolean(false)
@@ -56,6 +60,8 @@ object ScreenRecorderHook {
     @Volatile private var recordingNotificationBuilder: WeakReference<Notification.Builder>? = null
     @Volatile private var recordingNotificationContext: WeakReference<Context>? = null
     @Volatile private var recordingNotificationBuilderMethod: Method? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingConfirmedStart: Runnable? = null
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         if (param.packageName != ScreenRecorderContract.TARGET_PACKAGE) return
@@ -65,6 +71,7 @@ object ScreenRecorderHook {
         hookMediaMuxerOutput(module)
         hookMediaMuxerLifecycle(module)
         hookOverlayWindowCreation(module)
+        hookNotificationManager(module)
         hookApplicationAttach(module, param.defaultClassLoader)
         bootstrapIfAlreadyAttached(module, param.defaultClassLoader)
     }
@@ -190,8 +197,7 @@ object ScreenRecorderHook {
             runCatching {
                 if (HookConfig.screenRecorderImmediateStart() && !snapshot.isSessionActive) {
                     recorderDialogVisible = false
-                    ScreenRecorderControlClient.reportStarting()
-                    requestRecorderStart(context)
+                    scheduleConfirmedStart(context)
                 } else {
                     showRecorderDialog(context, resolveSettingsActivity(context), snapshot)
                 }
@@ -267,6 +273,7 @@ object ScreenRecorderHook {
                 onResume = { ScreenRecorderControlClient.resume() },
                 onStop = {
                     recorderDialogVisible = false
+                    cancelPendingConfirmedStart()
                     ScreenRecorderControlClient.stop()
                 },
             )
@@ -315,8 +322,7 @@ object ScreenRecorderHook {
                     putString(ScreenRecorderContract.PREF_SOUND, sound.toString())
                 }
                 MotionPhotoSession.arm(context, motionPhoto)
-                ScreenRecorderControlClient.reportStarting()
-                requestRecorderStart(context)
+                scheduleConfirmedStart(context)
             },
             onPause = {},
             onResume = {},
@@ -553,8 +559,7 @@ object ScreenRecorderHook {
                     if (HookConfig.screenRecorderImmediateStart() &&
                         !ScreenRecorderControlClient.snapshot.isSessionActive
                     ) {
-                        ScreenRecorderControlClient.reportStarting()
-                        requestRecorderStart(service)
+                        scheduleConfirmedStart(service)
                         return@intercept Service.START_NOT_STICKY
                     }
                     if (recorderDialogVisible) return@intercept Service.START_NOT_STICKY
@@ -661,24 +666,8 @@ object ScreenRecorderHook {
         val durationMillis = snapshot.durationAt(android.os.SystemClock.elapsedRealtime())
         val timerWhen = nowWallClock - durationMillis
         val isPaused = snapshot.state == ScreenRecorderContract.STATE_PAUSED
-        val pauseIntent = PendingIntent.getService(
-            context,
-            0x4851,
-            Intent(RECORDER_SERVICE_ACTION).apply {
-                setPackage(ScreenRecorderContract.TARGET_PACKAGE)
-                putExtra(ScreenRecorderContract.EXTRA_TOGGLE_PAUSE, true)
-            },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val stopIntent = PendingIntent.getService(
-            context,
-            0x4852,
-            Intent(RECORDER_SERVICE_ACTION).apply {
-                setPackage(ScreenRecorderContract.TARGET_PACKAGE)
-                putExtra(ScreenRecorderContract.EXTRA_CONTROL_STOP, true)
-            },
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val pauseIntent = recorderControlIntent(context, 0x4851, ScreenRecorderContract.EXTRA_TOGGLE_PAUSE)
+        val stopIntent = recorderControlIntent(context, 0x4852, ScreenRecorderContract.EXTRA_CONTROL_STOP)
         val pauseAction = Notification.Action.Builder(
             Icon.createWithResource(
                 IslandProtocol.APP_PACKAGE,
@@ -700,9 +689,146 @@ object ScreenRecorderHook {
             .setUsesChronometer(!isPaused)
             .setOnlyAlertOnce(true)
             .setActions(pauseAction, stopAction)
+        if (HookConfig.replaceScreenRecorder()) {
+            runCatching {
+                val originalExtras = runCatching { Bundle(builder.build().extras) }.getOrElse { Bundle() }
+                originalExtras.putAll(buildFocusExtras(context, snapshot, text, pauseIntent, stopIntent))
+                builder.setExtras(originalExtras)
+            }.onFailure {
+                xposedModule?.log("screen recorder focus extras failed: ${it.message}")
+            }
+        }
         recordingNotificationBuilder = WeakReference(builder)
         recordingNotificationContext = WeakReference(context)
     }
+
+    private fun hookNotificationManager(module: XposedModule) {
+        NotificationManager::class.java.declaredMethods.filter { it.name == "notify" }.forEach { method ->
+            if (!hookedNotifyMethods.add(method)) return@forEach
+            method.isAccessible = true
+            module.hook(method).intercept { chain ->
+                injectFocusOnNotify(chain.thisObject, chain.args.toTypedArray())
+                chain.proceed()
+            }
+        }
+    }
+
+    private fun injectFocusOnNotify(thisObject: Any?, args: Array<out Any?>) {
+        if (!HookConfig.replaceScreenRecorder()) return
+        val notification = args.lastOrNull() as? Notification ?: return
+        val id = recordingNotifyId(args) ?: return
+        if (id != RECORDING_NOTIFICATION_ID) return
+        if (!notification.extras.getString("miui.focus.param").isNullOrBlank()) return
+        val context = recordingNotificationContext?.get()
+            ?: notificationManagerContext(thisObject)
+            ?: return
+        val snapshot = ScreenRecorderControlClient.snapshot
+        if (!snapshot.isSessionActive) return
+        val text = screenRecorderUiText(context)
+        val pauseIntent = recorderControlIntent(
+            context,
+            0x4851,
+            ScreenRecorderContract.EXTRA_TOGGLE_PAUSE,
+        )
+        val stopIntent = recorderControlIntent(
+            context,
+            0x4852,
+            ScreenRecorderContract.EXTRA_CONTROL_STOP,
+        )
+        runCatching {
+            notification.extras.putAll(buildFocusExtras(context, snapshot, text, pauseIntent, stopIntent))
+        }
+    }
+
+    private fun recordingNotifyId(args: Array<out Any?>): Int? = when (args.size) {
+        2 -> args[0] as? Int
+        3 -> args[1] as? Int
+        else -> null
+    }
+
+    private fun notificationManagerContext(manager: Any?): Context? {
+        val notificationManager = manager as? NotificationManager ?: return null
+        return runCatching {
+            val field = NotificationManager::class.java.getDeclaredField("mContext").apply {
+                isAccessible = true
+            }
+            field.get(notificationManager) as? Context
+        }.getOrNull()
+    }
+
+    private fun recorderControlIntent(context: Context, requestCode: Int, extra: String): PendingIntent =
+        PendingIntent.getService(
+            context,
+            requestCode,
+            Intent(RECORDER_SERVICE_ACTION).apply {
+                setPackage(ScreenRecorderContract.TARGET_PACKAGE)
+                putExtra(extra, true)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun buildFocusExtras(
+        context: Context,
+        snapshot: RecorderSnapshot,
+        text: ScreenRecorderUiText,
+        pauseIntent: PendingIntent,
+        stopIntent: PendingIntent,
+    ): Bundle {
+        val session = recordingSessionFrom(snapshot)
+        val compact = when {
+            snapshot.state == ScreenRecorderContract.STATE_STARTING ->
+                stringOrFallback(context, R.string.screen_recording_starting, "Starting…")
+            snapshot.state == ScreenRecorderContract.STATE_PAUSED -> text.notificationPausedTitle
+            else -> stringOrFallback(context, R.string.screen_recording_compact, "Recording..")
+        }
+        val expanded = when {
+            snapshot.state == ScreenRecorderContract.STATE_STARTING -> compact
+            snapshot.state == ScreenRecorderContract.STATE_PAUSED -> text.notificationPausedTitle
+            else -> stringOrFallback(context, R.string.screen_recording_active, "Recording screen..")
+        }
+        return ScreenRecordingTranslator(context).buildFocusExtras(
+            session = session,
+            compactText = compact,
+            expandedText = expanded,
+            picturePackage = IslandProtocol.APP_PACKAGE,
+            notifyId = "${ScreenRecorderContract.TARGET_PACKAGE}$RECORDING_NOTIFICATION_ID",
+            business = ScreenRecordingTranslator.BUSINESS,
+            enableFloat = false,
+            tickerIcon = screenRecorderTickerIcon(),
+            pauseIntent = pauseIntent,
+            stopIntent = stopIntent,
+        )
+    }
+
+    private fun recordingSessionFrom(snapshot: RecorderSnapshot): ScreenRecordingSession {
+        val startedAt = snapshot.startedAtWallClock.takeIf { it > 0L } ?: System.currentTimeMillis()
+        return ScreenRecordingSession(
+            logicalId = "screen-recording",
+            sourceKey = "screen-recording",
+            packageName = ScreenRecorderContract.TARGET_PACKAGE,
+            startedAt = startedAt,
+            capabilities = ScreenRecordingCapabilities(
+                canStop = true,
+                canPause = snapshot.state == ScreenRecorderContract.STATE_RECORDING ||
+                    snapshot.state == ScreenRecorderContract.STATE_PAUSED,
+                canResume = snapshot.state == ScreenRecorderContract.STATE_PAUSED,
+            ),
+            paused = snapshot.state == ScreenRecorderContract.STATE_PAUSED,
+            countdownRemaining = snapshot.countdownRemaining.takeIf {
+                snapshot.state == ScreenRecorderContract.STATE_STARTING
+            } ?: 0,
+        )
+    }
+
+    private fun screenRecorderTickerIcon(): Int =
+        if (HookConfig.screenRecorderIconStyle() == ScreenRecorderContract.ICON_VOICE_RECORDER) {
+            R.drawable.ic_focus_ticker_recorder
+        } else {
+            R.drawable.ic_screen_recording_ticker
+        }
+
+    private fun stringOrFallback(context: Context, resourceId: Int, fallback: String): String =
+        runCatching { context.getString(resourceId) }.getOrNull().orEmpty().ifBlank { fallback }
 
     private fun refreshRecordingNotification(snapshot: RecorderSnapshot, module: XposedModule) {
         if (
@@ -742,6 +868,7 @@ object ScreenRecorderHook {
                 }
             }
             ScreenRecorderContract.MSG_COMMAND_STOP -> {
+                cancelPendingConfirmedStart()
                 if (Application.getProcessName() == ScreenRecorderContract.TARGET_PACKAGE) {
                     requestRecorderStop(context)
                 }
@@ -780,6 +907,22 @@ object ScreenRecorderHook {
                 options.getBoolean(ScreenRecorderContract.API_EXTRA_MOTION_PHOTO, false),
             )
         }
+    }
+
+    private fun scheduleConfirmedStart(context: Context) {
+        cancelPendingConfirmedStart()
+        ScreenRecorderControlClient.reportStarting()
+        val start = Runnable {
+            pendingConfirmedStart = null
+            requestRecorderStart(context)
+        }
+        pendingConfirmedStart = start
+        mainHandler.postDelayed(start, ScreenRecorderContract.COUNTDOWN_SECONDS * ScreenRecorderContract.COUNTDOWN_TICK_MS)
+    }
+
+    private fun cancelPendingConfirmedStart() {
+        pendingConfirmedStart?.let(mainHandler::removeCallbacks)
+        pendingConfirmedStart = null
     }
 
     private fun requestRecorderStart(context: Context) {

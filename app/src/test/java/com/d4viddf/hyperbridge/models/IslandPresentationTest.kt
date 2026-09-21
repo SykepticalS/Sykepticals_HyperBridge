@@ -164,6 +164,49 @@ class IslandPresentationTest {
         assertFalse(notLive.contains("\"updatable\":true"))
     }
 
+    @Test fun textUpdateAnimationEnablesEveryCompactTextInfoOnly() {
+        val json = """{"param_v2":{"baseInfo":{"title":"Expanded"},"param_island":{"bigIslandArea":{"imageTextInfoLeft":{"textInfo":{"title":"Left"}},"imageTextInfoRight":{"textInfo":{"title":"Right","turnAnim":false}}},"smallIslandArea":{"picInfo":{"pic":"icon"}}}}}"""
+        val patched = IslandVisualMetadata.injectTextUpdateAnimation(json)
+        val root = com.google.gson.JsonParser.parseString(patched).asJsonObject
+        val paramV2 = root.getAsJsonObject("param_v2")
+        val big = paramV2.getAsJsonObject("param_island").getAsJsonObject("bigIslandArea")
+        assertTrue(big.getAsJsonObject("imageTextInfoLeft").getAsJsonObject("textInfo")["turnAnim"].asBoolean)
+        assertTrue(big.getAsJsonObject("imageTextInfoRight").getAsJsonObject("textInfo")["turnAnim"].asBoolean)
+        assertFalse(paramV2.getAsJsonObject("baseInfo").has("turnAnim"))
+    }
+
+    @Test fun textUpdateAnimationFailsOpenForMalformedOrMissingIslandPayload() {
+        assertEquals("not-json", IslandVisualMetadata.injectTextUpdateAnimation("not-json"))
+        val focusOnly = """{"param_v2":{"baseInfo":{"title":"Expanded"}}}"""
+        assertEquals(focusOnly, IslandVisualMetadata.injectTextUpdateAnimation(focusOnly))
+    }
+
+    @Test fun injectFloatingFlagsWritesEnableFloatFirstFloatAndReopen() {
+        val json = """{"param_v2":{"param_island":{},"enableFloat":true,"islandFirstFloat":true,"reopen":true}}"""
+        val patched = IslandVisualMetadata.injectFloatingFlags(json, enableFloat = false)
+        val paramV2 = com.google.gson.JsonParser.parseString(patched).asJsonObject.getAsJsonObject("param_v2")
+        assertFalse(paramV2["enableFloat"].asBoolean)
+        assertFalse(paramV2["islandFirstFloat"].asBoolean)
+        assertFalse(paramV2["reopen"].asBoolean)
+        val expanded = IslandVisualMetadata.injectFloatingFlags(json, enableFloat = true, islandFirstFloat = true, reopen = true)
+        val expandedV2 = com.google.gson.JsonParser.parseString(expanded).asJsonObject.getAsJsonObject("param_v2")
+        assertTrue(expandedV2["enableFloat"].asBoolean)
+        assertTrue(expandedV2["reopen"].asBoolean)
+    }
+
+    @Test fun glowIsolationNeverStartsFromADifferentIsland() {
+        assertTrue(IslandGlowIsolation.shouldStartGlow(currentOwned = true, currentRequestsGlow = true))
+        assertFalse(IslandGlowIsolation.shouldStartGlow(currentOwned = true, currentRequestsGlow = false))
+        assertFalse(IslandGlowIsolation.shouldStartGlow(currentOwned = false, currentRequestsGlow = true))
+        assertTrue(IslandGlowIsolation.shouldStopGlow(currentKnown = true, currentOwned = true, currentRequestsGlow = false))
+        assertTrue(IslandGlowIsolation.shouldStopGlow(currentKnown = true, currentOwned = false, currentRequestsGlow = false))
+        assertFalse(IslandGlowIsolation.shouldStopGlow(currentKnown = false, currentOwned = false, currentRequestsGlow = false))
+        assertFalse(IslandGlowIsolation.canReuseRecentTarget("island-a", "island-b", currentRequestsGlow = false))
+        assertTrue(IslandGlowIsolation.canReuseRecentTarget("island-a", "island-a", currentRequestsGlow = false))
+        assertTrue(IslandGlowIsolation.canReuseRecentTarget("island-b", "island-a", currentRequestsGlow = true))
+        assertFalse(IslandGlowIsolation.canReuseRecentTarget(null, "island-a", currentRequestsGlow = false))
+    }
+
     @Test fun appIconPalettePrefersNonWhiteAccentThenIcon() {
         assertEquals("#25D366", com.d4viddf.hyperbridge.service.visual.AppIconPalette.prefer("#FFFFFF", "#25D366"))
         assertEquals("#112233", com.d4viddf.hyperbridge.service.visual.AppIconPalette.prefer("#112233", "#25D366"))
@@ -205,5 +248,15 @@ class IslandPresentationTest {
         assertFalse(IslandGenerationGuard.isCurrent(expected = 1L, current = 2L, owned = true))
         assertFalse(IslandGenerationGuard.isCurrent(expected = 1L, current = 1L, owned = false))
         assertTrue(IslandGenerationGuard.isCurrent(expected = 9L, current = 9L, owned = true))
+    }
+
+    @Test fun textButtonActionIntentIsRewrittenToV3ActionKey() {
+        val json = """{"param_v2":{"textButton":[{"actionIntent":"miui.focus.action_1","actionIntentType":2,"title":"Reply"}]}}"""
+        val patched = IslandVisualMetadata.fixTextButtonJson(json)
+        val button = com.google.gson.JsonParser.parseString(patched).asJsonObject
+            .getAsJsonObject("param_v2").getAsJsonArray("textButton")[0].asJsonObject
+        assertEquals("miui.focus.action_1", button.get("action").asString)
+        assertFalse(button.has("actionIntent"))
+        assertFalse(button.has("actionIntentType"))
     }
 }

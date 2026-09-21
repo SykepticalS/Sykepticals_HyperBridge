@@ -11,6 +11,8 @@ import android.os.Parcel
 import android.os.ResultReceiver
 import android.os.SystemClock
 import android.util.Log
+import com.d4viddf.hyperbridge.models.IslandVisualMetadata
+import com.d4viddf.hyperbridge.processing.IIslandDispatcher
 import java.security.SecureRandom
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -18,6 +20,11 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 class SystemUiIslandBackend private constructor(private val context: Context) : IslandBackend {
+    @Volatile private var dispatcher: IIslandDispatcher? = null
+
+    fun attachDispatcher(value: IIslandDispatcher?) {
+        dispatcher = value
+    }
     private val nonce = SecureRandom().nextLong()
     private val lastHandshakeElapsed = AtomicLong(0L)
     private val lastXmsfHandshakeElapsed = AtomicLong(0L)
@@ -60,9 +67,27 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
             metadata.semanticType?.let { putString(IslandProtocol.EXTRA_SEMANTIC_TYPE, it) }
             putLong(IslandProtocol.EXTRA_GENERATION, metadata.generation)
             putInt(IslandProtocol.EXTRA_PROTOCOL, IslandProtocol.VERSION)
+            // All posts converge here, including VPN, widgets, and migration progress. Keep
+            // Xiaomi's native compact and expanded text transitions consistent on every owned
+            // island instead of relying on each producer to remember the hidden protocol flag.
+            putBoolean(IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION, true)
+            getString("miui.focus.param")?.let { json ->
+                putString(
+                    "miui.focus.param",
+                    IslandVisualMetadata.injectTextUpdateAnimation(json),
+                )
+            }
         }
         check(parcelSize(notification) <= IslandProtocol.MAX_PARCEL_BYTES) {
             "Island payload exceeds ${IslandProtocol.MAX_PARCEL_BYTES} byte IPC limit"
+        }
+        // The ingress service is bound by SystemUI. Return directly over that connection:
+        // a broadcast here races the source heads-up and queues behind unrelated broadcasts.
+        dispatcher?.let { target ->
+            check(target.post(IslandOwnership.tag(metadata.logicalToken), id, notification, metadata.generation)) {
+                "SystemUI rejected island post"
+            }
+            return@runCatching
         }
         val latch = CountDownLatch(1)
         val resultCode = AtomicReference<Int>()
@@ -138,6 +163,7 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
 
     private fun sendTo(packageName: String, intent: Intent) {
         intent.setPackage(packageName)
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         if (Build.VERSION.SDK_INT >= 34) {
             val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
             context.sendBroadcast(intent, null, options)

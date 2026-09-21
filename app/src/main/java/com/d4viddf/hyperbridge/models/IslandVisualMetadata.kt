@@ -70,9 +70,70 @@ object IslandVisualMetadata {
      */
     fun injectUpdatable(jsonParam: String, updatable: Boolean): String {
         return runCatching {
+            val json = fixTextButtonJson(jsonParam)
+            val root = JsonParser.parseString(json).asJsonObject
+            val paramV2 = root.getAsJsonObject("param_v2") ?: return json
+            paramV2.addProperty("updatable", updatable)
+            Gson().toJson(root)
+        }.getOrDefault(jsonParam)
+    }
+
+    /**
+     * HyperOS V3 text buttons read `action` (extras key). The kit still emits
+     * `actionIntent` + `actionIntentType`, which makes Reply taps no-ops.
+     */
+    fun fixTextButtonJson(jsonParam: String): String {
+        return runCatching {
             val root = JsonParser.parseString(jsonParam).asJsonObject
             val paramV2 = root.getAsJsonObject("param_v2") ?: return jsonParam
-            paramV2.addProperty("updatable", updatable)
+            val buttons = paramV2.getAsJsonArray("textButton") ?: return jsonParam
+            for (index in 0 until buttons.size()) {
+                val button = buttons[index].asJsonObject
+                val key = button.get("actionIntent")?.takeIf { it.isJsonPrimitive }?.asString
+                    ?.takeIf { it.isNotEmpty() } ?: continue
+                if (!button.has("action") || button.get("action").asString.isNullOrEmpty()) {
+                    button.addProperty("action", key)
+                }
+                button.remove("actionIntent")
+                button.remove("actionIntentType")
+            }
+            Gson().toJson(root)
+        }.getOrDefault(jsonParam)
+    }
+
+    /**
+     * Enables HyperOS' built-in TimerTextEffectView transition for every island TextInfo.
+     *
+     * Current Xiaomi builds deserialize the undocumented `turnAnim` member on compact
+     * `textInfo` objects. Their own holder then installs TextChangeHelper and performs the
+     * upward fade/translation transition when that text changes in place.
+     */
+    fun injectTextUpdateAnimation(jsonParam: String, enabled: Boolean = true): String {
+        return runCatching {
+            val root = JsonParser.parseString(jsonParam).asJsonObject
+            val paramV2 = root.getAsJsonObject("param_v2") ?: return jsonParam
+            val paramIsland = paramV2.getAsJsonObject("param_island") ?: return jsonParam
+            writeTextUpdateAnimation(paramIsland, enabled)
+            Gson().toJson(root)
+        }.getOrDefault(jsonParam)
+    }
+
+    /**
+     * HyperOS reads these from `param_v2`. Kit defaults and omitted-false values otherwise
+     * re-expand an already visible island on the next notify().
+     */
+    fun injectFloatingFlags(
+        jsonParam: String,
+        enableFloat: Boolean,
+        islandFirstFloat: Boolean = enableFloat,
+        reopen: Boolean = enableFloat,
+    ): String {
+        return runCatching {
+            val root = JsonParser.parseString(jsonParam).asJsonObject
+            val paramV2 = root.getAsJsonObject("param_v2") ?: return jsonParam
+            paramV2.addProperty("enableFloat", enableFloat)
+            paramV2.addProperty("islandFirstFloat", islandFirstFloat)
+            paramV2.addProperty("reopen", reopen)
             Gson().toJson(root)
         }.getOrDefault(jsonParam)
     }
@@ -98,6 +159,23 @@ object IslandVisualMetadata {
                 obj.entrySet().forEach { writeProgressColors(it.value, color) }
             }
             element.isJsonArray -> element.asJsonArray.forEach { writeProgressColors(it, color) }
+        }
+    }
+
+    private fun writeTextUpdateAnimation(element: com.google.gson.JsonElement, enabled: Boolean) {
+        when {
+            element.isJsonObject -> {
+                val obj = element.asJsonObject
+                obj.entrySet().toList().forEach { (name, value) ->
+                    if (name == "textInfo" && value.isJsonObject) {
+                        value.asJsonObject.addProperty("turnAnim", enabled)
+                    }
+                    writeTextUpdateAnimation(value, enabled)
+                }
+            }
+            element.isJsonArray -> element.asJsonArray.forEach {
+                writeTextUpdateAnimation(it, enabled)
+            }
         }
     }
 

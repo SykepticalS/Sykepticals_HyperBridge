@@ -71,7 +71,9 @@ object HeadsUpSuppressionHook {
         val sbn = runCatching { sbnField?.get(entry) as? StatusBarNotification }.getOrNull() ?: return null
         if (sbn.packageName == "com.android.systemui" || sbn.notification?.fullScreenIntent != null) return null
         if (!HookConfig.suppressSourceHeadsUp()) return null
-        if (!sbn.notification.extras.getBoolean(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP, false)) return null
+        if (!sbn.notification.extras.getBoolean(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP, false) &&
+            !SystemUiNotificationIngressHook.hasReplacedGroupChild(sbn)
+        ) return null
         return sbn
     }
 

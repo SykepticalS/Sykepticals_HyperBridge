@@ -20,7 +20,6 @@ object ScreenRecordingClassifier {
         signals.packageName == PACKAGE_NAME &&
                 signals.notificationId == ACTIVE_NOTIFICATION_ID &&
                 channelMatches(signals.channelId, ACTIVE_CHANNEL_ID) &&
-                signals.isOngoing &&
                 !signals.isGroupSummary
 
     fun isSavedScreenRecording(signals: ScreenRecordingSignals): Boolean =

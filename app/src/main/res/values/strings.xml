@@ -728,6 +728,7 @@
     <string name="screen_recording_title">Screen recording</string>
     <string name="screen_recording_active">Recording screen..</string>
     <string name="screen_recording_compact">Recording..</string>
+    <string name="screen_recording_starting">Starting…</string>
     <string name="screen_recording_done">Done recording.</string>
     <string name="screen_recording_stop">Stop</string>
     <string name="system_integrations">System</string>
@@ -884,8 +885,8 @@
     <string name="popup_control_diagnostic_probe">Channel API probe: %1$s</string>
     <string name="screen_recording_pause">Pause</string>
     <string name="screen_recording_resume">Resume</string>
-    <string name="screen_recording_replace_title">Replace floating window</string>
-    <string name="screen_recording_replace_summary">Hide Xiaomi\'s recorder overlay and show the recording on Super Island. Restart Screen Recorder after changing this.</string>
+    <string name="screen_recording_replace_title">Replace Control Center recorder</string>
+    <string name="screen_recording_replace_summary">Show HyperBridge\'s recorder menu in Control Center and Super Island. Turn this off to use Xiaomi\'s menu. Restart Screen Recorder after changing.</string>
     <string name="screen_recording_immediate_start_title">Record immediately</string>
     <string name="screen_recording_immediate_start_summary">Start recording from the Quick Settings tile without a confirmation dialog</string>
     <string name="screen_recording_icon_style_title">Island icon</string>

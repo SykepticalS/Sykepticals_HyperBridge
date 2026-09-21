@@ -9,19 +9,25 @@ import android.service.notification.StatusBarNotification
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import com.d4viddf.hyperbridge.processing.INotificationProcessingService
+import com.d4viddf.hyperbridge.processing.IIslandDispatcher
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Owns the notification semantics engine in HyperBridge's process, where its Room database,
  * preferences, themes, and application resources are valid. SystemUI remains the sole source
- * intake and dispatches here from a worker; the time-critical pre-snapshot suppression marker is
- * handled locally by SystemUiNotificationIngressHook.
+ * intake and calls here before Xiaomi snapshots the source. The attached return Binder posts
+ * directly as SystemUI; the Boolean result marks SystemUI's original SBN before it proceeds.
  */
 class NotificationProcessingService : Service() {
     private val activeSources = ConcurrentHashMap<String, StatusBarNotification>()
     private lateinit var engine: NotificationProcessingEngine
 
     private val binder = object : INotificationProcessingService.Stub() {
+        override fun attachDispatcher(dispatcher: IIslandDispatcher?) {
+            enforceSystemUiCaller()
+            SystemUiIslandBackend.get(this@NotificationProcessingService).attachDispatcher(dispatcher)
+        }
+
         override fun processPosted(request: Bundle?): Boolean {
             enforceSystemUiCaller()
             val sbn = request?.statusBarNotification() ?: return false

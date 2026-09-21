@@ -23,6 +23,7 @@ import com.d4viddf.hyperbridge.xposed.hooks.SystemUiNotificationIngressHook
 import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
 import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
 import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
+import com.d4viddf.hyperbridge.xposed.hooks.IslandTextUpdateAnimationHook
 import io.github.libxposed.api.XposedModule
 import java.util.concurrent.ConcurrentHashMap
 import java.lang.ref.WeakReference
@@ -136,11 +137,7 @@ object SystemUiDispatcher {
         val tag = intent.getStringExtra(IslandProtocol.EXTRA_TAG) ?: return
         val id = intent.getIntExtra(IslandProtocol.EXTRA_ID, Int.MIN_VALUE)
         val requested = intent.getLongExtra(IslandProtocol.EXTRA_GENERATION, Long.MAX_VALUE)
-        val key = OwnedKey(tag, id)
-        val current = generations[key] ?: findOwnedGeneration(context, tag, id) ?: return
-        if (!IslandOwnership.acceptsCancel(current, requested)) return
-        context.getSystemService(NotificationManager::class.java)?.cancel(tag, id)
-        generations.remove(key)
+        cancelOwned(context, tag, id, requested)
     }
 
     private fun cancelAll(context: Context) {
@@ -148,7 +145,10 @@ object SystemUiDispatcher {
         manager.activeNotifications.orEmpty().filter {
             it.tag?.startsWith("hyperbridge:") == true &&
                 it.notification.extras.getString(IslandProtocol.EXTRA_OWNER) == IslandProtocol.OWNER
-        }.forEach { manager.cancel(it.tag, it.id) }
+        }.forEach { sbn ->
+            manager.cancel(sbn.tag, sbn.id)
+            sbn.key?.let(ActiveIslandDismissHook::dismissKey)
+        }
         generations.clear()
     }
 
@@ -182,8 +182,14 @@ object SystemUiDispatcher {
         val key = OwnedKey(tag, id)
         val current = generations[key] ?: findOwnedGeneration(context, tag, id) ?: return@runCatching
         if (!IslandOwnership.acceptsCancel(current, requestedGeneration)) return@runCatching
-        context.getSystemService(NotificationManager::class.java)?.cancel(tag, id)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val islandKey = manager?.activeNotifications.orEmpty().firstOrNull {
+            it.tag == tag && it.id == id &&
+                it.notification.extras.getString(IslandProtocol.EXTRA_OWNER) == IslandProtocol.OWNER
+        }?.key
+        manager?.cancel(tag, id)
         generations.remove(key)
+        islandKey?.let(ActiveIslandDismissHook::dismissKey)
     }
 
     fun cancelAllOwned(context: Context): Result<Unit> = runCatching { cancelAll(context) }
@@ -220,12 +226,26 @@ object SystemUiDispatcher {
             val marquee = if (MarqueeHook.isActive()) IslandProtocol.CAP_MARQUEE else 0
             val dismiss = if (ActiveIslandDismissHook.isActive()) IslandProtocol.CAP_ISLAND_DISMISS else 0
             val glow = if (OuterGlowHook.isActive()) IslandProtocol.CAP_FULL_GLOW else 0
+            val textUpdate = if (IslandTextUpdateAnimationHook.isActive()) {
+                IslandProtocol.CAP_TEXT_UPDATE_ANIMATION
+            } else 0
             putExtra(IslandProtocol.EXTRA_CAPABILITIES,
                 IslandProtocol.CAP_POST or IslandProtocol.CAP_TAGGED_CANCEL or
-                    focus or headsUp or ingress or marquee or dismiss or glow)
+                    focus or headsUp or ingress or marquee or dismiss or glow or textUpdate)
         }
         val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
         context.sendBroadcast(reply, null, options)
+    }
+
+    fun notifyReplyComposer(open: Boolean) {
+        val context = systemUiContext.get() ?: return
+        val intent = Intent(IslandProtocol.ACTION_REPLY_COMPOSER).apply {
+            setPackage(IslandProtocol.APP_PACKAGE)
+            putExtra(IslandProtocol.EXTRA_PROTOCOL, IslandProtocol.VERSION)
+            putExtra(IslandProtocol.EXTRA_REPLY_COMPOSER_OPEN, open)
+        }
+        val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
+        context.sendBroadcast(intent, null, options)
     }
 
     private fun trustedSender(context: Context, uid: Int): Boolean {

@@ -31,11 +31,17 @@ class StandardTranslator(
 
         // --- CONFIGURATION ---
         builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
+        val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+            config.firstFloat ?: false,
+            config.floatOnUpdate ?: false,
+            isUpdate,
+        )
         builder.setIslandConfig(
             timeout = config.timeout,
-            dismissible = true,
+            // dismissible serializes to dismissIsland, which removes an existing island.
+            dismissible = false,
             highlightColor = highlightColor,
-            expandedTimeMs = if (isUpdate) null else config.floatTimeout,
+            expandedTimeMs = floatPresentation.expandedTimeMs(config.floatTimeout),
         )
         builder.setShowNotification(config.isShowShade ?: false)
 

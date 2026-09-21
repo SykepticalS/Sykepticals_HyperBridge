@@ -37,6 +37,7 @@ import com.d4viddf.hyperbridge.service.translators.NavTranslator
 import com.d4viddf.hyperbridge.service.translators.ProgressTranslator
 import com.d4viddf.hyperbridge.service.translators.DownloadTranslator
 import com.d4viddf.hyperbridge.service.translators.IslandCompactLayout
+import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentationPolicy
 import com.d4viddf.hyperbridge.service.translators.StandardTranslator
 import com.d4viddf.hyperbridge.service.translators.TimerTranslator
 import com.d4viddf.hyperbridge.service.translators.WidgetTranslator
@@ -52,6 +53,7 @@ import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSessionTracker
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSignals
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingTimeoutPolicy
 import com.d4viddf.hyperbridge.service.recording.XiaomiScreenRecordingControlBackend
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.island.backend.IslandBackend
 import com.d4viddf.hyperbridge.island.backend.IslandMetadata
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
@@ -118,10 +120,7 @@ class NotificationProcessingEngine private constructor(
         const val ACTION_RELOAD_THEME = "com.d4viddf.hyperbridge.ACTION_RELOAD_THEME"
         const val ACTION_PERFORM_MIGRATION = "com.d4viddf.hyperbridge.ACTION_PERFORM_MIGRATION"
         private val GMAIL_PACKAGES = setOf("com.google.android.gm")
-        private const val REASON_CLICK = 1
-        private const val REASON_CANCEL = 2
-        private const val REASON_CANCEL_ALL = 3
-        private const val REASON_APP_CANCEL = 8
+        private const val REASON_CLICK = NotificationLifecyclePolicy.REASON_CLICK
 
         fun create(
             appContext: Context,
@@ -220,6 +219,8 @@ class NotificationProcessingEngine private constructor(
 
     @Volatile
     private var isScreenOn = true
+    @Volatile
+    private var replyComposerHold = false
 
     private val systemReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -232,6 +233,13 @@ class NotificationProcessingEngine private constructor(
             } else if (intent.action == Intent.ACTION_SCREEN_OFF) {
                 isScreenOn = false
             }
+        }
+    }
+
+    private val replyComposerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != IslandProtocol.ACTION_REPLY_COMPOSER) return
+            replyComposerHold = intent.getBooleanExtra(IslandProtocol.EXTRA_REPLY_COMPOSER_OPEN, false)
         }
     }
 
@@ -252,6 +260,12 @@ class NotificationProcessingEngine private constructor(
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         registerReceiver(systemReceiver, filter)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            replyComposerReceiver,
+            IntentFilter(IslandProtocol.ACTION_REPLY_COMPOSER),
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
 
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -487,11 +501,11 @@ class NotificationProcessingEngine private constructor(
                 updatePermanentIsland()
             }
 
-            val isOurApp = it.packageName == packageName
+            val isOwnedBridge = isOwnedBridgeNotification(it)
             val notifId = it.id
             val notifKey = it.key
 
-            if (isOurApp) {
+            if (isOwnedBridge) {
                 val replacement = internalBridgeReplacements.consume(notifId, System.currentTimeMillis())
                 if (replacement != null) {
                     Log.d(
@@ -511,7 +525,7 @@ class NotificationProcessingEngine private constructor(
 
             messageFamilyTracker.removeSource(notifKey)?.let { removal ->
                 if (!removal.familyEnded) {
-                    if (reason != REASON_CLICK) {
+                    if (!NotificationLifecyclePolicy.isUserInitiatedRemoval(reason)) {
                         sourceToLogicalKeys.remove(notifKey, removal.logicalId)
                         removalJobs.remove(removal.logicalId)?.cancel()
                         Log.d(
@@ -522,28 +536,24 @@ class NotificationProcessingEngine private constructor(
                         )
                         return
                     }
-                    // A content tap is an explicit dismissal of the presented island, even when
-                    // other notification aliases from the same conversation family remain.
+                    // Shade swipe, clear-all, and content tap dismiss the presented island even
+                    // when hidden conversation aliases remain in the shade.
                 }
             }
 
-            if (isOurApp) {
+            if (isOwnedBridge) {
                 // A content click removes auto-cancel bridge notifications just like a shade
                 // dismissal. Programmatic replacement cancels are ignored.
                 val wasContentClick = reason == REASON_CLICK
-                if (!wasContentClick && reason != REASON_CANCEL && reason != REASON_CANCEL_ALL) {
+                if (!NotificationLifecyclePolicy.isUserInitiatedRemoval(reason)) {
                     return
                 }
                 val trackedKey = reverseTranslations[notifId]
                     ?: it.notification.extras.getString(EXTRA_ORIGINAL_KEY)
+                    ?: it.notification.extras.getString(IslandProtocol.EXTRA_SOURCE_KEY)
                 val currentIsland = trackedKey?.let(activeIslands::get)
-                if (!wasContentClick && reason == REASON_CANCEL && currentIsland != null) {
-                    if (currentIsland.id != notifId) return
-                    if (currentIsland.type == NotificationType.MESSAGE ||
-                        currentIsland.type == NotificationType.STANDARD
-                    ) {
-                        return
-                    }
+                if (!wasContentClick && currentIsland != null && currentIsland.id != notifId) {
+                    return
                 }
 
                 if (notifId >= WIDGET_ID_BASE) {
@@ -553,10 +563,16 @@ class NotificationProcessingEngine private constructor(
                     updatePermanentIsland()
                     return
                 }
+                if (notifId == PermanentIslandManager.PERMANENT_BRIDGE_ID ||
+                    notifId == VpnIslandController.NOTIFICATION_ID
+                ) {
+                    return
+                }
 
                 var originalKey = reverseTranslations[notifId]
                 if (originalKey == null) {
                     originalKey = it.notification.extras.getString(EXTRA_ORIGINAL_KEY)
+                        ?: it.notification.extras.getString(IslandProtocol.EXTRA_SOURCE_KEY)
                 }
 
                 if (originalKey != null) {
@@ -580,6 +596,13 @@ class NotificationProcessingEngine private constructor(
                             Log.e(TAG, "Error sending delete intent for original notification", e)
                         }
                     }
+                    val generation = it.notification.extras.getLong(
+                        IslandProtocol.EXTRA_GENERATION,
+                        Long.MAX_VALUE,
+                    )
+                    try {
+                        islandBackend.cancel(notifId, originalKey, generation)
+                    } catch (_: Exception) {}
                     cleanupCache(originalKey)
                 }
                 return
@@ -609,9 +632,7 @@ class NotificationProcessingEngine private constructor(
                     val globalConfig = preferences.getGlobalConfigSync()
                     val finalConfig = appConfig.mergeWith(globalConfig)
 
-                    val replacementCancel = reason == REASON_APP_CANCEL ||
-                        (reason == REASON_CANCEL &&
-                            (islandType == NotificationType.MESSAGE || islandType == NotificationType.STANDARD))
+                    val replacementCancel = NotificationLifecyclePolicy.isAppCancellationReason(reason)
                     val shouldDismiss = reason == REASON_CLICK ||
                         NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                             type = islandType,
@@ -782,7 +803,16 @@ class NotificationProcessingEngine private constructor(
 
             lateinit var job: Job
             job = serviceScope.launch {
-                delay(timeoutMs.milliseconds)
+                var remaining = timeoutMs
+                while (remaining > 0) {
+                    if (replyComposerHold) {
+                        delay(150.milliseconds)
+                        continue
+                    }
+                    val step = minOf(remaining, 250L)
+                    delay(step.milliseconds)
+                    remaining -= step
+                }
                 notificationLifecycleMutex.withLock {
                     val current = activeIslands[originalKey]
                     if (!IslandTimeoutPolicy.isCurrent(current?.generation, current?.id, generation, bridgeId)) return@withLock
@@ -1133,9 +1163,26 @@ class NotificationProcessingEngine private constructor(
             isGroupConversation = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false) ||
                 extractMessagingIsGroup(notification),
         )
+        val selfName = extras.getCharSequence(Notification.EXTRA_SELF_DISPLAY_NAME)?.toString()
+            ?: extractMessagingSelfName(notification)
         return base.copy(
             title = title.ifBlank { base.title },
             text = text.ifBlank { base.text },
+            latestMessageIsSelf = OutgoingReplyEchoDetector.isOutgoingEcho(
+                messages = messages,
+                selfName = selfName,
+                title = title.ifBlank { base.title },
+                text = text.ifBlank { base.text },
+                remoteInputHistory = extras.getCharSequenceArray(Notification.EXTRA_REMOTE_INPUT_HISTORY),
+                extras = listOf(
+                    rawTitle?.toString(),
+                    extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+                    extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+                    extras.getCharSequence(Notification.EXTRA_TITLE_BIG)?.toString(),
+                    notification.tickerText?.toString(),
+                    *textLines.map { it?.toString() }.toTypedArray(),
+                ),
+            ),
         )
     }
 
@@ -1180,13 +1227,20 @@ class NotificationProcessingEngine private constructor(
 
     private fun extractMessageContent(notification: Notification): List<MessageContentCandidate> {
         val fromStyle = try {
-            NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification)
-                ?.messages
+            val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification)
+            val selfName = style?.user?.name?.toString()?.trim()
+            val selfKey = style?.user?.key
+            style?.messages
                 ?.map { message ->
+                    val person = message.person
+                    val sender = person?.name?.toString()
+                    val isSelf = (!selfKey.isNullOrBlank() && person?.key == selfKey) ||
+                        (!selfName.isNullOrBlank() && sender?.trim().equals(selfName, ignoreCase = true))
                     MessageContentCandidate(
-                        sender = message.person?.name?.toString(),
+                        sender = sender,
                         text = message.text?.toString(),
-                        timestamp = message.timestamp
+                        timestamp = message.timestamp,
+                        isSelf = isSelf,
                     )
                 }
                 .orEmpty()
@@ -1194,16 +1248,19 @@ class NotificationProcessingEngine private constructor(
             emptyList()
         }
         if (fromStyle.isNotEmpty()) return fromStyle
+        val selfName = extractMessagingSelfName(notification)
         return notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
             ?.mapNotNull { parcelable ->
                 val bundle = parcelable as? Bundle ?: return@mapNotNull null
+                val sender = bundle.getCharSequence("sender")?.toString()
+                    ?: runCatching {
+                        bundle.getParcelable("sender_person", Person::class.java)?.name?.toString()
+                    }.getOrNull()
                 MessageContentCandidate(
-                    sender = bundle.getCharSequence("sender")?.toString()
-                        ?: runCatching {
-                            bundle.getParcelable("sender_person", Person::class.java)?.name?.toString()
-                        }.getOrNull(),
+                    sender = sender,
                     text = bundle.getCharSequence("text")?.toString(),
                     timestamp = bundle.getLong("time", 0L).takeIf { it > 0L },
+                    isSelf = !selfName.isNullOrBlank() && sender?.trim().equals(selfName, ignoreCase = true),
                 )
             }
             .orEmpty()
@@ -1348,6 +1405,10 @@ class NotificationProcessingEngine private constructor(
             if (effectiveTitle.isEmpty()) {
                 effectiveTitle = getCachedAppLabel(sbn.packageName)
             }
+            if (resolvedContent.latestMessageIsSelf) {
+                markSourceHeadsUpSuppressed(sbn)
+                return
+            }
 
             val activeTheme = themeRepository.activeTheme.value
             val ruleMatch = rulesEngine.match(sbn, effectiveTitle, effectiveText, activeTheme)
@@ -1387,6 +1448,14 @@ class NotificationProcessingEngine private constructor(
 
             if (isJunkNotification(sbn, resolvedContent)) {
                 DiagnosticsStore.record(typeBeforeRules.name, "ignored", sbn.packageName, "junk-or-empty")
+                return
+            }
+
+            if (
+                typeBeforeRules == NotificationType.SCREEN_RECORDING &&
+                HookConfigSync.replaceScreenRecorder(this)
+            ) {
+                markSourceHeadsUpSuppressed(sbn)
                 return
             }
 
@@ -1583,8 +1652,13 @@ class NotificationProcessingEngine private constructor(
                 return
             }
 
-            val isUpdate = previous != null
             val candidateBridgeId = previous?.id ?: effectiveKey.hashCode()
+            val postedBridgeId = if (isMessagingLifecycle) {
+                MessageBridgeIdPolicy.candidate(effectiveKey, processingGeneration, 0)
+            } else {
+                candidateBridgeId
+            }
+            val isUpdate = alreadyPostedIsland(effectiveKey, postedBridgeId, previous)
 
             if (isMessagingLifecycle && previous != null &&
                 previous.sourceKey == sbn.key && sbn.postTime < previous.sourcePostTime
@@ -1658,7 +1732,7 @@ class NotificationProcessingEngine private constructor(
                     logicalId = effectiveKey,
                     candidateBridgeId = presentationBridgeId,
                     contentHash = newContentHash,
-                    previous = previous?.let { PreviousIslandPresentation(it.logicalId, it.id, it.lastContentHash, it.messageEventFingerprint) },
+                    previous = previousIslandPresentation(previous, isUpdate, effectiveKey, presentationBridgeId),
                     notificationType = type,
                     isMessagingEvent = isMessagingLifecycle,
                     messageEventFingerprint = messageEventFingerprint
@@ -1686,13 +1760,24 @@ class NotificationProcessingEngine private constructor(
                     updatable = NotificationLifecyclePolicy.isProgressLifecycle(type),
                 )
                 IslandVisualExtras.apply(notification.extras, visualPlan)
+                val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+                    finalConfig.firstFloat ?: false,
+                    finalConfig.floatOnUpdate ?: false,
+                    isUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                )
                 if (decision.kind == IslandPresentationKind.UPDATE) {
                     notification.extras.putBoolean("miui.island.updateNoFloat", true)
                 }
+                notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
                 notification.extras.getString("miui.focus.param")?.let { json ->
                     notification.extras.putString(
                         "miui.focus.param",
-                        IslandVisualMetadata.injectUpdatable(json, visualPlan.updatable),
+                        IslandVisualMetadata.injectFloatingFlags(
+                            IslandVisualMetadata.injectUpdatable(json, visualPlan.updatable),
+                            floatPresentation.enableFloat,
+                            floatPresentation.islandFirstFloat,
+                            floatPresentation.reopen,
+                        ),
                     )
                 }
 
@@ -1810,7 +1895,7 @@ class NotificationProcessingEngine private constructor(
                 logicalId = effectiveKey,
                 candidateBridgeId = presentationBridgeId,
                 contentHash = newContentHash,
-                previous = previous?.let { PreviousIslandPresentation(it.logicalId, it.id, it.lastContentHash, it.messageEventFingerprint) },
+                previous = previousIslandPresentation(previous, isUpdate, effectiveKey, presentationBridgeId),
                 notificationType = type,
                 isMessagingEvent = isMessagingLifecycle,
                 messageEventFingerprint = messageEventFingerprint
@@ -2238,15 +2323,26 @@ class NotificationProcessingEngine private constructor(
             marqueeCapable = marqueeCapabilitiesReady(),
             updatable = updatable,
         )
+        val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+            config.firstFloat ?: false,
+            config.floatOnUpdate ?: false,
+            isUpdate = inPlaceUpdate,
+        )
         val notification = builder.build()
         notification.extras.putString(
             "miui.focus.param",
-            IslandVisualMetadata.injectUpdatable(
-                IslandVisualMetadata.injectGlowJson(data.jsonParam, glow),
-                updatable,
+            IslandVisualMetadata.injectFloatingFlags(
+                IslandVisualMetadata.injectUpdatable(
+                    IslandVisualMetadata.injectGlowJson(data.jsonParam, glow),
+                    updatable,
+                ),
+                floatPresentation.enableFloat,
+                floatPresentation.islandFirstFloat,
+                floatPresentation.reopen,
             ),
         )
         IslandVisualExtras.apply(notification.extras, visualPlan)
+        notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
         if (inPlaceUpdate) {
             notification.extras.putBoolean("miui.island.updateNoFloat", true)
         }
@@ -2405,7 +2501,10 @@ class NotificationProcessingEngine private constructor(
 
     private fun shouldIgnore(packageName: String): Boolean = packageName == this.packageName || packageName == "android" || packageName.contains("miui.notification")
     private fun isAppAllowed(packageName: String): Boolean =
-        preferences.isAppAllowedSync(packageName) || allowedPackageSet.contains(packageName)
+        preferences.isAppAllowedSync(packageName) ||
+            allowedPackageSet.contains(packageName) ||
+            (packageName == ScreenRecordingClassifier.PACKAGE_NAME &&
+                HookConfigSync.replaceScreenRecorder(this))
 
     private var syncJob: Job? = null
     fun onIngressConnected() {
@@ -2545,6 +2644,38 @@ class NotificationProcessingEngine private constructor(
         }
     }
 
+    private fun isOwnedBridgeNotification(sbn: StatusBarNotification): Boolean {
+        if (sbn.packageName == packageName) return true
+        return sbn.packageName == IslandProtocol.SYSTEM_UI_PACKAGE &&
+            sbn.notification.extras.getString(IslandProtocol.EXTRA_OWNER) == IslandProtocol.OWNER
+    }
+
+    private fun alreadyPostedIsland(logicalId: String, bridgeId: Int, previous: ActiveIsland?): Boolean {
+        if (previous != null) return true
+        if (activeIslands.containsKey(logicalId)) return true
+        if (activeTranslations.containsKey(logicalId)) return true
+        return reverseTranslations.containsKey(bridgeId)
+    }
+
+    private fun previousIslandPresentation(
+        previous: ActiveIsland?,
+        alreadyPosted: Boolean,
+        logicalId: String,
+        bridgeId: Int,
+    ): PreviousIslandPresentation? {
+        if (previous != null) {
+            return PreviousIslandPresentation(
+                previous.logicalId,
+                previous.id,
+                previous.lastContentHash,
+                previous.messageEventFingerprint,
+            )
+        }
+        if (!alreadyPosted) return null
+        val postedId = reverseTranslations.entries.firstOrNull { it.value == logicalId }?.key ?: bridgeId
+        return PreviousIslandPresentation(logicalId, postedId, Int.MIN_VALUE)
+    }
+
     private fun postIsland(
         id: Int,
         notification: Notification,
@@ -2580,6 +2711,7 @@ class NotificationProcessingEngine private constructor(
     fun shutdown() {
         if (::vpnIslandController.isInitialized) vpnIslandController.stop()
         unregisterReceiver(systemReceiver)
+        unregisterReceiver(replyComposerReceiver)
         unregisterReceiver(packageLifecycleReceiver)
         syncJob?.cancel()
         callSessionTracker.clear()

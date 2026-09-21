@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.models.MarqueeDismissMode
+import com.d4viddf.hyperbridge.models.MarqueeMotion
 import com.d4viddf.hyperbridge.models.MarqueeTimeoutPolicy
 import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.log
@@ -26,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object MarqueeHook {
     private const val CONTENT_VIEW = "miui.systemui.dynamicisland.window.content.DynamicIslandContentView"
+    private const val MIN_CONTENT_READY_FRAMES = 2
+    private const val MAX_CONTENT_READY_FRAMES = 60
     private val hookedLoaders = ConcurrentHashMap.newKeySet<Int>()
     private val controllers = WeakHashMap<TextView, Controller>()
     private val observed = WeakHashMap<TextView, Listeners>()
@@ -38,6 +41,7 @@ object MarqueeHook {
     private val originalEllipsize = WeakHashMap<TextView, TextUtils.TruncateAt?>()
     private val originalHorizontalScrolling = WeakHashMap<TextView, Boolean>()
     @Volatile private var active = false
+    @Volatile private var autoHideHeld = false
 
     private data class Listeners(
         val layout: View.OnLayoutChangeListener,
@@ -65,6 +69,16 @@ object MarqueeHook {
     }
 
     fun isActive(): Boolean = active
+
+    fun holdAutoHide() {
+        autoHideHeld = true
+        islandSessions.forEach { (island, session) -> cancelFallback(island, session) }
+    }
+
+    fun releaseAutoHide() {
+        autoHideHeld = false
+        islandSessions.forEach { (island, session) -> scheduleFallback(island, session) }
+    }
 
     private fun hook(module: XposedModule, loader: ClassLoader) {
         val id = System.identityHashCode(loader)
@@ -111,34 +125,85 @@ object MarqueeHook {
                     }
                     val originalTimeout = extras.getInt(IslandProtocol.EXTRA_ORIGINAL_TIMEOUT, 10)
                     val generation = snapshot.generation
-                    island.post {
-                        if (islandTokens[island] !== token) return@post
-                        val apply = {
-                            if (islandTokens[island] === token) {
-                                applyMarquee(
-                                    island = island,
-                                    enabled = true,
-                                    mode = mode,
-                                    originalTimeoutSecs = originalTimeout,
-                                    generation = generation,
-                                    ongoing = ongoing,
-                                    notification = sbn ?: islandNotifications[island],
-                                )
-                            }
-                        }
-                        // Progress interpolation stays on existing widgets. Never rewrite
-                        // subtitle TextViews — HyperIsland leaves those to Xiaomi.
-                        runCatching { IslandLiveVisual.play(island, visualBefore, apply) }
-                            .onFailure { apply() }
-                    }
+                    scheduleMarquee(
+                        island = island,
+                        token = token,
+                        enabled = userMarquee,
+                        mode = mode,
+                        originalTimeoutSecs = originalTimeout,
+                        generation = generation,
+                        ongoing = ongoing,
+                        notification = sbn ?: islandNotifications[island],
+                        visualBefore = visualBefore,
+                    )
                     result
                 }
             }
             active = true
-        }.onFailure {
+            module.log("HyperBridge: hooked native compact marquee loader=$id")
+        }.onFailure { error ->
             hookedLoaders.remove(id)
-            module.log("HyperBridge: marquee unavailable: ${it.message}")
+            if (error !is ClassNotFoundException) {
+                module.log("HyperBridge: marquee unavailable loader=$id: ${error.message}")
+            }
         }
+    }
+
+    /**
+     * Xiaomi's update methods are suspend functions. Their Java method can return before the
+     * compact holder has inflated and measured its text, so a single View.post races the real
+     * content and permanently misses every TextView. Follow animation frames until the current
+     * generation has usable compact text, then attach the controllers exactly once.
+     */
+    private fun scheduleMarquee(
+        island: ViewGroup,
+        token: Any,
+        enabled: Boolean,
+        mode: MarqueeDismissMode,
+        originalTimeoutSecs: Int,
+        generation: Long,
+        ongoing: Boolean,
+        notification: StatusBarNotification?,
+        visualBefore: IslandLiveVisual.Snapshot?,
+        attempt: Int = 0,
+    ) {
+        if (islandTokens[island] !== token) return
+        val contentReady = hasReadyCompactText(island)
+        val shouldWait = enabled &&
+            (attempt < MIN_CONTENT_READY_FRAMES || (!contentReady && attempt < MAX_CONTENT_READY_FRAMES))
+        if (shouldWait) {
+            island.postOnAnimation {
+                scheduleMarquee(
+                    island,
+                    token,
+                    enabled,
+                    mode,
+                    originalTimeoutSecs,
+                    generation,
+                    ongoing,
+                    notification,
+                    visualBefore,
+                    attempt + 1,
+                )
+            }
+            return
+        }
+        val apply = {
+            if (islandTokens[island] === token) {
+                applyMarquee(
+                    island = island,
+                    enabled = enabled,
+                    mode = mode,
+                    originalTimeoutSecs = originalTimeoutSecs,
+                    generation = generation,
+                    ongoing = ongoing,
+                    notification = notification,
+                )
+            }
+        }
+        // Progress interpolation stays on existing widgets. Never rewrite subtitle TextViews.
+        runCatching { IslandLiveVisual.play(island, visualBefore, apply) }
+            .onFailure { apply() }
     }
 
     private fun applyMarquee(
@@ -184,7 +249,7 @@ object MarqueeHook {
     }
 
     private fun scheduleFallback(island: ViewGroup, session: AutoHideSession) {
-        if (!session.mode.overridesTimeout || session.dismissed || session.scrollingViews.isNotEmpty() ||
+        if (autoHideHeld || IslandReplyComposer.shouldStayExpanded() || !session.mode.overridesTimeout || session.dismissed || session.scrollingViews.isNotEmpty() ||
             session.fallback != null || session.timeoutMs <= 0L
         ) return
         val elapsed = SystemClock.elapsedRealtime() - session.startedAtMs
@@ -235,13 +300,13 @@ object MarqueeHook {
         session.scrollingViews[view] = completed
         val loops = session.scrollingViews.values.toList()
         val minLoops = loops.minOrNull() ?: 0
-        if (MarqueeTimeoutPolicy.shouldDismiss(session.mode, minLoops, session.ongoing)) {
+        if (MarqueeTimeoutPolicy.shouldDismiss(session.mode, minLoops, session.ongoing) && !autoHideHeld) {
             dismissIsland(island, session)
         }
     }
 
     private fun dismissIsland(island: ViewGroup, session: AutoHideSession) {
-        if (session.dismissed || session.ongoing) return
+        if (session.dismissed || session.ongoing || autoHideHeld) return
         val notification = session.notification ?: islandNotifications[island] ?: return
         session.dismissed = true
         cancelFallback(island, session)
@@ -251,7 +316,7 @@ object MarqueeHook {
     private fun traverse(view: View, enabled: Boolean) {
         if (view is TextView) {
             if (isExpanded(view)) return
-            if (enabled) {
+            if (enabled && isUsableCompactText(view)) {
                 observe(view)
                 startMarquee(view)
             } else {
@@ -270,6 +335,15 @@ object MarqueeHook {
             stopMarquee(view)
             return
         }
+        if (full != clean) view.text = clean
+        val visible = visibleWidth(view)
+        if (visible <= 0) return
+        val available = visible - view.paddingLeft - view.paddingRight
+        val overflow = view.paint.measureText(clean) > available
+        if (!overflow) {
+            stopMarquee(view)
+            return
+        }
         if (view.maxLines != 1) {
             originalMaxLines.putIfAbsent(view, view.maxLines)
             view.setSingleLine(true)
@@ -279,18 +353,9 @@ object MarqueeHook {
         view.setHorizontallyScrolling(true)
         view.ellipsize = null
         view.isHorizontalFadingEdgeEnabled = true
-        if (full != clean) view.text = clean
-        val visible = visibleWidth(view)
-        if (visible <= 0) return
-        val available = visible - view.paddingLeft - view.paddingRight
-        val overflow = view.paint.measureText(clean) > available
-        if (overflow) {
-            val controller = controllers.getOrPut(view) { Controller(view, HookConfig.marqueeSpeed()) }
-            controller.speedPxPerSec = HookConfig.marqueeSpeed()
-            controller.start()
-        } else {
-            stopMarquee(view)
-        }
+        val controller = controllers.getOrPut(view) { Controller(view, HookConfig.marqueeSpeed()) }
+        controller.speedPxPerSec = HookConfig.marqueeSpeed()
+        controller.start()
     }
 
     private fun stopMarquee(view: TextView) {
@@ -367,12 +432,29 @@ object MarqueeHook {
     }
 
     private fun hasMarqueeText(view: View): Boolean {
-        if (view is TextView) return !isExpanded(view) && normalize(view.text?.toString().orEmpty()).isNotEmpty()
+        if (view is TextView) return isUsableCompactText(view)
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) if (hasMarqueeText(view.getChildAt(index))) return true
         }
         return false
     }
+
+    private fun hasReadyCompactText(view: View): Boolean {
+        if (view is TextView) {
+            return isUsableCompactText(view) && view.isAttachedToWindow && visibleWidth(view) > 0
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                if (hasReadyCompactText(view.getChildAt(index))) return true
+            }
+        }
+        return false
+    }
+
+    private fun isUsableCompactText(view: TextView): Boolean =
+        view.visibility == View.VISIBLE &&
+            !isExpanded(view) &&
+            normalize(view.text?.toString().orEmpty()).isNotEmpty()
 
     private fun isExpanded(view: View): Boolean {
         var current: View? = view
@@ -412,6 +494,7 @@ object MarqueeHook {
         private var state = 0
         private var text = ""
         private var completed = 0
+        private var returnDurationMs = 0L
 
         fun start() {
             val view = viewRef.get() ?: return
@@ -469,17 +552,27 @@ object MarqueeHook {
                     view.invalidate()
                 }
                 2 -> if (elapsedMs > 1000) {
-                    completed++
-                    onLoop(view, completed)
-                    val island = findIsland(view)
-                    if (island != null && islandSessions[island]?.dismissed == true) {
-                        stop()
-                        return
-                    }
-                    scrollX = 0f
-                    view.scrollTo(0, 0)
-                    state = 0
+                    state = 3
+                    returnDurationMs = MarqueeMotion.returnDurationMs(maxScroll, speedPxPerSec)
                     startNanos = frameTimeNanos
+                }
+                3 -> {
+                    scrollX = MarqueeMotion.returnOffset(maxScroll, elapsedMs, returnDurationMs)
+                    view.scrollTo(scrollX.toInt(), 0)
+                    view.invalidate()
+                    if (elapsedMs >= returnDurationMs) {
+                        completed++
+                        onLoop(view, completed)
+                        val island = findIsland(view)
+                        if (island != null && islandSessions[island]?.dismissed == true) {
+                            stop()
+                            return
+                        }
+                        scrollX = 0f
+                        view.scrollTo(0, 0)
+                        state = 0
+                        startNanos = frameTimeNanos
+                    }
                 }
             }
             lastNanos = frameTimeNanos

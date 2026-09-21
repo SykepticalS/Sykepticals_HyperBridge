@@ -87,7 +87,7 @@ object IslandUpdateResolver {
             isMessagingEvent && !sameKnownMessageEvent -> when (presentationReason) {
                 IslandPresentationReason.RECONCILE,
                 IslandPresentationReason.RESTORE -> presentationReason
-                else -> IslandPresentationReason.CONTENT_UPDATE
+                else -> IslandPresentationReason.NEW_EVENT
             }
             else -> presentationReason
         }
@@ -173,6 +173,14 @@ object PermanentIslandVisibilityPolicy {
 }
 
 object NotificationLifecyclePolicy {
+    const val REASON_CLICK = 1
+    const val REASON_CANCEL = 2
+    const val REASON_CANCEL_ALL = 3
+    const val REASON_APP_CANCEL = 8
+    const val REASON_APP_CANCEL_ALL = 9
+    const val REASON_LISTENER_CANCEL = 10
+    const val REASON_LISTENER_CANCEL_ALL = 11
+
     fun dismissesWithSource(type: NotificationType?): Boolean = when (type) {
         NotificationType.CALL,
         NotificationType.MEDIA,
@@ -209,17 +217,29 @@ object NotificationLifecyclePolicy {
         wasContentClick: Boolean
     ): Boolean = dismissSourceOnContentClick && wasContentClick
 
-    /** App-driven message regrouping is not a user dismissal and must not preempt auto-hide. */
+    fun isUserInitiatedRemoval(reason: Int): Boolean = when (reason) {
+        REASON_CLICK,
+        REASON_CANCEL,
+        REASON_CANCEL_ALL,
+        REASON_LISTENER_CANCEL,
+        REASON_LISTENER_CANCEL_ALL -> true
+        else -> false
+    }
+
+    fun isAppCancellationReason(reason: Int): Boolean =
+        reason == REASON_APP_CANCEL || reason == REASON_APP_CANCEL_ALL
+
+    /**
+     * Shade swipe/clear is a user dismissal. App cancel of a message/standard source is
+     * regrouping (WhatsApp follow-up) and must not preempt the posted island.
+     */
     fun shouldDismissIslandOnSourceRemoval(
         type: NotificationType?,
         dismissWithOriginal: Boolean,
         isAppCancellation: Boolean
     ): Boolean {
         if (type == NotificationType.MESSAGE || type == NotificationType.STANDARD) {
-            // WhatsApp cancels the previous SBN when posting a same-person follow-up.
-            // HyperIsland keeps that island because it is the source notification;
-            // our proxy must survive the same cancel so notify(same id) can update it.
-            return false
+            return dismissWithOriginal && !isAppCancellation
         }
         if (dismissesWithSource(type)) return true
         if (!dismissWithOriginal) return false
