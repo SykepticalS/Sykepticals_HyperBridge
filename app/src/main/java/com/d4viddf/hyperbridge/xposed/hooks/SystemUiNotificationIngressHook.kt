@@ -23,6 +23,12 @@ object SystemUiNotificationIngressHook {
     private const val LISTENER = "com.android.systemui.statusbar.notification.MiuiNotificationListener"
     private const val MIUI_NOTIF_UTIL = "com.miui.systemui.notification.MiuiBaseNotifUtil"
     private val activeSources = ConcurrentHashMap<String, StatusBarNotification>()
+    /**
+     * Notifications can arrive before the cross-process service binding completes.  Dropping
+     * that first callback means there is nothing to post until the source app happens to update
+     * it again.  Keep only the newest SBN per key and drain it as soon as Binder is ready.
+     */
+    private val pendingPosts = ConcurrentHashMap<String, StatusBarNotification>()
     private val processingExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "HyperBridge-NotificationProcessing").apply { isDaemon = true }
     }
@@ -38,7 +44,10 @@ object SystemUiNotificationIngressHook {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             processor = INotificationProcessingService.Stub.asInterface(service)
             binding = false
-            reconcileRemote()
+            processingExecutor.execute {
+                drainPendingPosts()
+                reconcileRemote()
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -105,11 +114,11 @@ object SystemUiNotificationIngressHook {
                 result
             }
 
-            val posted = listenerClass.getDeclaredMethod(
-                "onNotificationPosted",
-                StatusBarNotification::class.java,
-                rankingMap,
-            )
+            val posted = listenerClass.declaredMethods.first {
+                it.name == "onNotificationPosted" &&
+                    it.parameterTypes.firstOrNull() == StatusBarNotification::class.java &&
+                    it.parameterTypes.getOrNull(1) == rankingMap
+            }
             module.hook(posted).intercept { chain ->
                 listener = WeakReference(chain.thisObject)
                 (chain.args.firstOrNull() as? StatusBarNotification)?.let { sbn ->
@@ -121,17 +130,17 @@ object SystemUiNotificationIngressHook {
                 chain.proceed()
             }
 
-            val removed = listenerClass.getDeclaredMethod(
-                "onNotificationRemoved",
-                StatusBarNotification::class.java,
-                rankingMap,
-                Int::class.javaPrimitiveType!!,
-            )
+            val removed = listenerClass.declaredMethods.first {
+                it.name == "onNotificationRemoved" &&
+                    it.parameterTypes.firstOrNull() == StatusBarNotification::class.java &&
+                    it.parameterTypes.lastOrNull() == Int::class.javaPrimitiveType
+            }
             module.hook(removed).intercept { chain ->
                 listener = WeakReference(chain.thisObject)
                 val result = chain.proceed()
                 val sbn = chain.args[0] as? StatusBarNotification
                 if (sbn != null) {
+                    pendingPosts.remove(sbn.key)
                     activeSources.computeIfPresent(sbn.key) { _, current ->
                         current.takeUnless { sameGeneration(it, sbn) }
                     }
@@ -177,6 +186,7 @@ object SystemUiNotificationIngressHook {
 
     private fun processPosted(sbn: StatusBarNotification, module: XposedModule) {
         val remote = processor ?: run {
+            pendingPosts[sbn.key] = sbn
             connectFromCurrentContext(module)
             return
         }
@@ -185,7 +195,26 @@ object SystemUiNotificationIngressHook {
                 putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
             })
         }.onFailure {
+            pendingPosts[sbn.key] = sbn
             module.log("HyperBridge: notification processing failed open: ${it.message}")
+            processor = null
+            connectFromCurrentContext(module)
+        }
+    }
+
+    private fun drainPendingPosts() {
+        val remote = processor ?: return
+        pendingPosts.entries.toList().forEach { (key, sbn) ->
+            runCatching {
+                remote.processPosted(Bundle().apply {
+                    putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
+                })
+            }.onSuccess {
+                pendingPosts.remove(key, sbn)
+            }.onFailure {
+                logger.get()?.log("HyperBridge: queued notification processing failed: ${it.message}")
+                return
+            }
         }
     }
 
