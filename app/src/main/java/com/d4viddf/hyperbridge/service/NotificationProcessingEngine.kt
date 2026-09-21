@@ -2200,11 +2200,12 @@ class NotificationProcessingEngine private constructor(
             .setContentTitle(title.ifBlank { getCachedAppLabel(sbn.packageName) })
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            // Mirror the source lifecycle for ordinary events so a tap can auto-cancel.
-            // Call/media/nav/recording islands stay posted even when the source omitted
-            // FLAG_ONGOING_EVENT, which is common for outgoing "calling" notifications.
-            .setOngoing(keepPosted)
-            .setAutoCancel(!keepPosted)
+            // This is a SystemUI-owned transport notification, not the source notification.
+            // Keep it stable until our lifecycle code explicitly removes it.  Making message
+            // proxies auto-cancelable lets SystemUI retire the Focus entry while a same-key
+            // notify update is being applied, which instantly kills an active WhatsApp island.
+            .setOngoing(true)
+            .setAutoCancel(false)
             .setOnlyAlertOnce(shouldAlertOnce)
 
         val extras = Bundle()
