@@ -1,0 +1,147 @@
+name: Announce Stable Release to Telegram
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 正式版 Tag（例如 1937-7.1）
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: announce-stable-release
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    name: Send Stable APK to Telegram
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 解析 Release Tag Resolve Release Tag
+        id: release
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          EVENT_URL: ${{ github.event.release.html_url }}
+          INPUT_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [[ -z "$TAG" ]]; then
+            echo '::error::无法确定 Release Tag'
+            exit 1
+          fi
+
+          URL="${EVENT_URL:-https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}}"
+
+          {
+            echo "tag=$TAG"
+            echo "url=$URL"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 拉取发布版本文件 Checkout Release Files
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: 下载已发布的 APK Download Release APK
+        id: assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir release-assets \
+            --pattern 'HyperLyric-*.apk' \
+            --clobber
+
+          find_one_apk() {
+            local pattern="$1"
+            local label="$2"
+            local files=()
+
+            mapfile -t files < <(find release-assets -maxdepth 1 -type f -name "$pattern" -print | sort)
+            if [[ "${#files[@]}" -ne 1 ]]; then
+              echo "::error::$label APK 数量不是 1，实际为 ${#files[@]}"
+              printf '%s\n' "${files[@]}"
+              exit 1
+            fi
+
+            printf '%s' "${files[0]}"
+          }
+
+          APK="$(find_one_apk 'HyperLyric-*.apk' HyperLyric)"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: 保存正式版 Release 说明 Save Published Release Notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json body \
+            --jq '.body' > release-body.md
+
+      - name: 检查 Xposed 仓库令牌 Check Xposed Repository Token
+        env:
+          XPOSED_REPO_TOKEN: ${{ secrets.XPOSED_REPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${XPOSED_REPO_TOKEN:-}" ]]; then
+            echo '::error::缺少 XPOSED_REPO_TOKEN secret'
+            exit 1
+          fi
+
+      - name: 同步正式版到 Xposed 仓库 Sync Stable Release to Xposed Repo
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: Xposed-Modules-Repo/com.lidesheng.hyperlyric
+          token: ${{ secrets.XPOSED_REPO_TOKEN }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.tag }}
+          body_path: release-body.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/HyperLyric-*.apk
+
+      - name: 清理 Release 正文 Clean Release Body
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed \
+            -e '/^[[:space:]]*<!--.*-->[[:space:]]*$/d' \
+            -e '/^[[:space:]]*<!--[[:space:]]*$/,/^[[:space:]]*-->[[:space:]]*$/d' \
+            release-body.md > release-notes-zh.md
+
+      - name: 发送到 Telegram Send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          RELEASE_NOTES_ZH_FILE: release-notes-zh.md
+          APK: ${{ steps.assets.outputs.apk }}
+        shell: bash
+        run: bash .github/scripts/send-telegram-release.sh

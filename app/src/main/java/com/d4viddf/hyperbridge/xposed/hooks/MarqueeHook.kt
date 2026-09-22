@@ -436,7 +436,7 @@ object MarqueeHook {
         val available = availableTextWidth(view)
         if (available <= 0) return
         val overflow = MarqueeMotion.overflowDistance(
-            textWidthPx = view.paint.measureText(clean),
+            textWidthPx = scrollingTextWidth(view, clean),
             availableWidthPx = available,
             tolerancePx = overflowTolerancePx(view),
         ) > 0f
@@ -675,26 +675,39 @@ object MarqueeHook {
 
     private fun availableTextWidth(view: TextView): Int {
         if (view.width <= 0) return 0
+        val viewLocation = IntArray(2)
+        view.getLocationInWindow(viewLocation)
+        val textOrigin = viewLocation[0] + view.compoundPaddingLeft
+        val viewRight = viewLocation[0] + view.width
+        val drawableInset = (view.compoundPaddingRight - view.paddingRight).coerceAtLeast(0)
         compactArea(view)?.let { area ->
             if (area.width <= 0) return 0
-            val viewLocation = IntArray(2)
             val areaLocation = IntArray(2)
-            view.getLocationInWindow(viewLocation)
             area.getLocationInWindow(areaLocation)
-            val textStart = viewLocation[0] + view.compoundPaddingLeft
-            val textEnd = viewLocation[0] + view.width - view.compoundPaddingRight
-            val slotStart = areaLocation[0] + area.paddingLeft
-            val slotEnd = areaLocation[0] + area.width - area.paddingRight
-            return (minOf(textEnd, slotEnd) - maxOf(textStart, slotStart)).coerceAtLeast(0)
+            val clipLeft = areaLocation[0] + if (area.clipToPadding) area.paddingLeft else 0
+            val clipRight = areaLocation[0] + area.width -
+                if (area.clipToPadding) area.paddingRight else 0
+            return MarqueeMotion.visibleSlotWidth(
+                textOrigin = textOrigin,
+                viewRight = viewRight,
+                rightDrawableInset = drawableInset,
+                clipLeft = clipLeft,
+                clipRight = clipRight,
+            )
         }
         val visible = Rect()
-        val clippedWidth = if (view.getLocalVisibleRect(visible) && visible.width() > 0) {
-            minOf(view.width, visible.width())
+        val clippedRight = if (view.getLocalVisibleRect(visible) && visible.width() > 0) {
+            viewLocation[0] + minOf(view.width, visible.right)
         } else {
-            view.width
+            viewRight
         }
-        return (clippedWidth - view.compoundPaddingLeft - view.compoundPaddingRight)
-            .coerceAtLeast(0)
+        return MarqueeMotion.visibleSlotWidth(
+            textOrigin = textOrigin,
+            viewRight = viewRight,
+            rightDrawableInset = drawableInset,
+            clipLeft = textOrigin,
+            clipRight = clippedRight,
+        )
     }
 
     private fun compactArea(view: TextView): ViewGroup? {
@@ -728,6 +741,18 @@ object MarqueeHook {
 
     private fun overflowTolerancePx(view: TextView): Float =
         maxOf(1f, view.resources.displayMetrics.density * 0.5f)
+
+    private fun scrollingTextWidth(view: TextView, text: String): Float {
+        val advance = laidOutTextWidth(view, text)
+        if (text.isEmpty()) return advance
+        val bounds = Rect()
+        view.paint.getTextBounds(text, 0, text.length, bounds)
+        return MarqueeMotion.visibleTextWidth(
+            advanceWidthPx = advance,
+            inkRightPx = bounds.right.toFloat(),
+            maxTrimPx = view.resources.displayMetrics.density * 16f,
+        )
+    }
 
     private fun laidOutTextWidth(view: TextView, fallbackText: String): Float {
         val layout = view.layout
@@ -795,7 +820,7 @@ object MarqueeHook {
                 lastNanos = frameTimeNanos
             }
             val maxScroll = MarqueeMotion.overflowDistance(
-                textWidthPx = laidOutTextWidth(view, text),
+                textWidthPx = scrollingTextWidth(view, text),
                 availableWidthPx = availableTextWidth(view),
                 tolerancePx = overflowTolerancePx(view),
             )

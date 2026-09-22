@@ -50,7 +50,9 @@ data class MessageSourceRemoval(
     val logicalId: String,
     val familyEnded: Boolean,
     val removedPrimary: Boolean,
-    val fallbackSourceKey: String? = null
+    val fallbackSourceKey: String? = null,
+    /** A non-summary source is still posted, so the conversation is still visible in the shade. */
+    val visibleSourceRemains: Boolean = false,
 )
 
 /**
@@ -149,7 +151,8 @@ class MessagePresentationFamilyTracker {
             logicalId = logicalId,
             familyEnded = false,
             removedPrimary = removedPrimary,
-            fallbackSourceKey = family.primarySourceKey
+            fallbackSourceKey = family.primarySourceKey,
+            visibleSourceRemains = family.sources.values.any { !it.isGroupSummary },
         )
     }
 

@@ -1,0 +1,497 @@
+package com.lidesheng.hyperlyric.ui.page.hooksettings.media.island
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.lidesheng.hyperlyric.R
+import com.lidesheng.hyperlyric.common.RootConstants
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlin.math.roundToInt
+
+fun LazyListScope.islandExpandedMediaElementSection(
+    coverStyle: Int,
+    onCoverStyleChange: (Int) -> Unit,
+    hideCoverSource: Boolean,
+    onHideCoverSourceChange: (Boolean) -> Unit,
+    disableCoverFlip: Boolean,
+    onDisableCoverFlipChange: (Boolean) -> Unit,
+    hideDeviceSwitch: Boolean,
+    onHideDeviceSwitchChange: (Boolean) -> Unit,
+    hideCustomActions: Boolean,
+    onHideCustomActionsChange: (Boolean) -> Unit,
+    hideTime: Boolean,
+    onHideTimeChange: (Boolean) -> Unit,
+    progressStyle: Int,
+    onProgressStyleChange: (Int) -> Unit,
+    progressHeadGlow: Boolean,
+    onProgressHeadGlowChange: (Boolean) -> Unit,
+    thumbStyle: Int,
+    onThumbStyleChange: (Int) -> Unit
+) {
+    item(key = "island_expanded_media_card_elements") {
+        Column {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                val coverStyleValues = listOf(
+                    RootConstants.ISLAND_EXPANDED_MEDIA_COVER_STYLE_DEFAULT,
+                    RootConstants.ISLAND_EXPANDED_MEDIA_COVER_STYLE_CIRCLE,
+                    RootConstants.ISLAND_EXPANDED_MEDIA_COVER_STYLE_ROTATING_CIRCLE,
+                    RootConstants.ISLAND_EXPANDED_MEDIA_COVER_STYLE_HIDDEN
+                )
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.title_audio_cover_style),
+                    items = listOf(
+                        stringResource(R.string.option_audio_cover_style_default),
+                        stringResource(R.string.option_audio_cover_style_circle),
+                        stringResource(R.string.option_audio_cover_style_rotating_circle),
+                        stringResource(R.string.option_audio_cover_style_hidden)
+                    ),
+                    selectedIndex = coverStyleValues.indexOf(coverStyle).coerceAtLeast(0),
+                    onSelectedIndexChange = { index ->
+                        onCoverStyleChange(coverStyleValues[index])
+                    }
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.title_hide_audio_cover_source),
+                    checked = hideCoverSource,
+                    onCheckedChange = onHideCoverSourceChange
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.title_disable_media_cover_flip),
+                    checked = disableCoverFlip,
+                    onCheckedChange = onDisableCoverFlipChange
+                )
+            }
+
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                SwitchPreference(
+                    title = stringResource(R.string.title_hide_media_device_switch),
+                    checked = hideDeviceSwitch,
+                    onCheckedChange = onHideDeviceSwitchChange
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.title_hide_media_custom_actions),
+                    checked = hideCustomActions,
+                    onCheckedChange = onHideCustomActionsChange
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.title_hide_media_time),
+                    checked = hideTime,
+                    onCheckedChange = onHideTimeChange
+                )
+            }
+
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                val progressStyleValues = listOf(
+                    RootConstants.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_DEFAULT,
+                    RootConstants.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE
+                )
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.title_media_progress_style),
+                    items = listOf(
+                        stringResource(R.string.option_media_progress_style_default),
+                        stringResource(R.string.option_media_progress_style_wave)
+                    ),
+                    selectedIndex = progressStyleValues.indexOf(progressStyle).coerceAtLeast(0),
+                    onSelectedIndexChange = { index ->
+                        onProgressStyleChange(progressStyleValues[index])
+                    }
+                )
+
+                AnimatedVisibility(
+                    visible = progressStyle == RootConstants.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_DEFAULT
+                ) {
+                    Column {
+                        SwitchPreference(
+                            title = stringResource(R.string.title_media_progress_head_glow),
+                            checked = progressHeadGlow,
+                            onCheckedChange = onProgressHeadGlowChange
+                        )
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = progressStyle == RootConstants.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE
+                ) {
+                    Column {
+                        val thumbStyleValues = listOf(
+                            RootConstants.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_DEFAULT,
+                            RootConstants.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_VERTICAL,
+                            RootConstants.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_HIDDEN
+                        )
+                        OverlayDropdownPreference(
+                            title = stringResource(R.string.title_media_thumb_style),
+                            items = listOf(
+                                stringResource(R.string.option_media_thumb_style_default),
+                                stringResource(R.string.option_media_thumb_style_vertical),
+                                stringResource(R.string.option_media_thumb_style_hidden)
+                            ),
+                            selectedIndex = thumbStyleValues.indexOf(thumbStyle).coerceAtLeast(0),
+                            onSelectedIndexChange = { index ->
+                                onThumbStyleChange(thumbStyleValues[index])
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun LazyListScope.islandExpandedMediaBackgroundSection(
+    cardTheme: Int,
+    onCardThemeChange: (Int) -> Unit,
+    backgroundStyle: Int,
+    onBackgroundStyleChange: (Int) -> Unit,
+    backgroundColorAnimation: Boolean,
+    onBackgroundColorAnimationChange: (Boolean) -> Unit,
+    backgroundBlur: Int,
+    onBackgroundBlurChange: (Int) -> Unit,
+    backgroundAutoInvert: Boolean,
+    onBackgroundAutoInvertChange: (Boolean) -> Unit,
+    softCoverTone: Int,
+    onSoftCoverToneChange: (Int) -> Unit,
+    ambientFlowMode: Int,
+    onAmbientFlowModeChange: (Int) -> Unit
+) {
+    item(key = "island_expanded_media_card_background") {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+                .fillMaxWidth()
+        ) {
+            val backgroundStyleValues = listOf(
+                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_DEFAULT,
+                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_COVER_ART,
+                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_BLURRED_COVER,
+                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_RADIAL_GRADIENT,
+                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_LINEAR_GRADIENT,
+                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_SOFT_COVER
+            )
+            OverlayDropdownPreference(
+                title = stringResource(R.string.title_notification_media_background_style),
+                items = listOf(
+                    stringResource(R.string.option_notification_media_background_default),
+                    stringResource(R.string.option_notification_media_background_cover_art),
+                    stringResource(R.string.option_notification_media_background_blurred_cover),
+                    stringResource(R.string.option_notification_media_background_radial_gradient),
+                    stringResource(R.string.option_notification_media_background_linear_gradient),
+                    stringResource(R.string.option_notification_media_background_soft_cover)
+                ),
+                selectedIndex = backgroundStyleValues.indexOf(backgroundStyle).coerceAtLeast(0),
+                onSelectedIndexChange = { index ->
+                    onBackgroundStyleChange(backgroundStyleValues[index])
+                }
+            )
+            val customBackground = backgroundStyle !=
+                    RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_DEFAULT
+            AnimatedVisibility(visible = !customBackground) {
+                Column {
+                    val themeValues = listOf(
+                        RootConstants.MEDIA_CARD_THEME_FOLLOW_SYSTEM,
+                        RootConstants.MEDIA_CARD_THEME_ALWAYS_LIGHT,
+                        RootConstants.MEDIA_CARD_THEME_ALWAYS_DARK
+                    )
+                    OverlayDropdownPreference(
+                        title = stringResource(R.string.title_media_card_background_theme),
+                        items = listOf(
+                            stringResource(R.string.option_media_card_theme_follow_system),
+                            stringResource(R.string.option_media_card_theme_always_light),
+                            stringResource(R.string.option_media_card_theme_always_dark_default)
+                        ),
+                        selectedIndex = themeValues.indexOf(cardTheme).coerceAtLeast(0),
+                        onSelectedIndexChange = { index ->
+                            onCardThemeChange(themeValues[index])
+                        }
+                    )
+                    val modeValues = listOf(
+                        RootConstants.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_DEFAULT,
+                        RootConstants.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR,
+                        RootConstants.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL,
+                        RootConstants.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_DISABLED
+                    )
+                    OverlayDropdownPreference(
+                        title = stringResource(R.string.title_island_media_ambient_flow_mode),
+                        items = listOf(
+                            stringResource(R.string.option_island_media_ambient_flow_default),
+                            stringResource(R.string.option_island_media_ambient_flow_cover_color),
+                            stringResource(R.string.option_media_ambient_flow_custom_full),
+                            stringResource(R.string.option_island_media_ambient_flow_disabled)
+                        ),
+                        selectedIndex = modeValues.indexOf(ambientFlowMode).coerceAtLeast(0),
+                        onSelectedIndexChange = { index ->
+                            onAmbientFlowModeChange(modeValues[index])
+                        }
+                    )
+                }
+            }
+            AnimatedVisibility(visible = customBackground) {
+                Column {
+                    AnimatedVisibility(
+                        visible = backgroundStyle ==
+                                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_SOFT_COVER
+                    ) {
+                        Column {
+                            val toneValues = listOf(
+                                RootConstants.MEDIA_SOFT_COVER_TONE_FOLLOW_SYSTEM,
+                                RootConstants.MEDIA_SOFT_COVER_TONE_LIGHT,
+                                RootConstants.MEDIA_SOFT_COVER_TONE_DARK
+                            )
+                            OverlayDropdownPreference(
+                                title = stringResource(R.string.title_media_soft_cover_tone),
+                                items = listOf(
+                                    stringResource(
+                                        R.string.option_media_soft_cover_tone_follow_system
+                                    ),
+                                    stringResource(R.string.option_media_soft_cover_tone_light),
+                                    stringResource(R.string.option_media_soft_cover_tone_dark)
+                                ),
+                                selectedIndex = toneValues.indexOf(softCoverTone).coerceAtLeast(0),
+                                onSelectedIndexChange = { index ->
+                                    onSoftCoverToneChange(toneValues[index])
+                                }
+                            )
+                        }
+                    }
+                    SwitchPreference(
+                        title = stringResource(
+                            R.string.title_notification_media_background_color_animation
+                        ),
+                        checked = backgroundColorAnimation,
+                        onCheckedChange = onBackgroundColorAnimationChange
+                    )
+                    AnimatedVisibility(
+                        visible = backgroundStyle ==
+                                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_BLURRED_COVER
+                    ) {
+                        Column {
+                            var sliderValue by remember(backgroundBlur) {
+                                mutableIntStateOf(backgroundBlur)
+                            }
+                            BasicComponent(
+                                title = stringResource(
+                                    R.string.title_notification_media_background_blur
+                                ),
+                                endActions = {
+                                    Text(
+                                        text = sliderValue.toString(),
+                                        fontSize = MiuixTheme.textStyles.body2.fontSize,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantActions
+                                    )
+                                },
+                                bottomAction = {
+                                    Slider(
+                                        value = sliderValue.toFloat(),
+                                        onValueChange = {
+                                            sliderValue = it.roundToInt().coerceIn(1, 20)
+                                        },
+                                        onValueChangeFinished = {
+                                            onBackgroundBlurChange(sliderValue)
+                                        },
+                                        valueRange = 1f..20f,
+                                        steps = 18
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = backgroundStyle ==
+                                RootConstants.ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE_LINEAR_GRADIENT
+                    ) {
+                        Column {
+                            SwitchPreference(
+                                title = stringResource(
+                                    R.string.title_notification_media_background_auto_invert
+                                ),
+                                checked = backgroundAutoInvert,
+                                onCheckedChange = onBackgroundAutoInvertChange
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun LazyListScope.islandExpandedMediaLayoutSection(
+    layoutStyle: Int,
+    onLayoutStyleChange: (Int) -> Unit,
+    layoutPromptDismissed: Boolean,
+    onLayoutPromptDismissed: () -> Unit,
+    actionAlignLeft: Boolean,
+    onActionAlignLeftChange: (Boolean) -> Unit,
+    actionOrder: Int,
+    onActionOrderChange: (Int) -> Unit
+) {
+    item(key = "island_expanded_media_layout_style") {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+                .fillMaxWidth()
+        ) {
+            OverlayDropdownPreference(
+                title = stringResource(R.string.title_notification_media_layout_style),
+                items = listOf(
+                    stringResource(R.string.option_notification_media_layout_system),
+                    stringResource(R.string.option_notification_media_layout_ios),
+                    stringResource(R.string.option_notification_media_layout_coloros),
+                    stringResource(R.string.option_notification_media_layout_oneui),
+                    stringResource(R.string.option_notification_media_layout_miui),
+                    stringResource(R.string.option_notification_media_layout_pixelos)
+                ),
+                selectedIndex = islandExpandedMediaLayoutStyles.indexOf(layoutStyle)
+                    .coerceAtLeast(0),
+                onSelectedIndexChange = { index ->
+                    onLayoutStyleChange(islandExpandedMediaLayoutStyles[index])
+                }
+            )
+        }
+    }
+
+    item(key = "island_expanded_media_layout_prompt") {
+        AnimatedVisibility(
+            visible = !layoutPromptDismissed,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp)
+                    .fillMaxWidth(),
+                colors = CardDefaults.defaultColors(
+                    color = MiuixTheme.colorScheme.tertiaryContainer,
+                    contentColor = MiuixTheme.colorScheme.onTertiaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 12.dp,
+                            bottom = 12.dp
+                        )
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.prompt_media_layout_style
+                        ),
+                        color = MiuixTheme.colorScheme.onTertiaryContainer,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp)
+                    )
+                    IconButton(
+                        onClick = onLayoutPromptDismissed,
+                        minWidth = 16.dp,
+                        minHeight = 16.dp
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Demibold.Close,
+                            contentDescription = stringResource(R.string.close),
+                            tint = MiuixTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    item(key = "island_expanded_media_card_layout") {
+        Column {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp)
+                    .fillMaxWidth()
+            ) {
+
+                SwitchPreference(
+                    title = stringResource(R.string.title_media_action_align_left),
+                    checked = actionAlignLeft,
+                    onCheckedChange = onActionAlignLeftChange
+                )
+
+                val actionOrderValues = listOf(
+                    RootConstants.ISLAND_EXPANDED_MEDIA_ACTION_ORDER_DEFAULT,
+                    RootConstants.ISLAND_EXPANDED_MEDIA_ACTION_ORDER_CUSTOM_RIGHT,
+                    RootConstants.ISLAND_EXPANDED_MEDIA_ACTION_ORDER_PLAY_LEFT
+                )
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.title_media_action_order),
+                    items = listOf(
+                        stringResource(R.string.option_media_action_order_default),
+                        stringResource(R.string.option_media_action_order_custom_right),
+                        stringResource(R.string.option_media_action_order_play_left)
+                    ),
+                    selectedIndex = actionOrderValues.indexOf(actionOrder).coerceAtLeast(0),
+                    onSelectedIndexChange = { index ->
+                        onActionOrderChange(actionOrderValues[index])
+                    }
+                )
+            }
+        }
+    }
+}
+
+internal val islandExpandedMediaLayoutStyles = listOf(
+    RootConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_SYSTEM,
+    RootConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_IOS,
+    RootConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_COLOROS,
+    RootConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_ONEUI,
+    RootConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_MIUI,
+    RootConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_PIXEL
+)

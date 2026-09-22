@@ -1,0 +1,538 @@
+package com.lidesheng.hyperlyric.root.island.hooks
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
+import android.media.session.MediaController
+import android.media.session.PlaybackState
+import android.view.View
+import android.view.ViewGroup
+import com.lidesheng.hyperlyric.common.RootConstants
+import com.lidesheng.hyperlyric.root.HookEntry
+import com.lidesheng.hyperlyric.root.managedHook
+import com.lidesheng.hyperlyric.root.island.content.IslandMetadataContentAssembler
+import com.lidesheng.hyperlyric.root.island.policy.IslandModificationTargetPolicy
+import com.lidesheng.hyperlyric.root.utils.HookLogger
+import io.github.libxposed.api.XposedInterface.Chain
+import io.github.libxposed.api.XposedInterface.Hooker
+import io.github.libxposed.api.XposedModule
+import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory
+import java.io.ByteArrayOutputStream
+import java.lang.reflect.Field
+import java.lang.reflect.Method
+
+/**
+ * Handles the configurable long-press action only for the current lyric island. Xiaomi still
+ * owns the drag card, Intent and ClipData creation; drag-share mode only supplies missing
+ * template data for the current long-press invocation.
+ */
+internal object IslandLyricShareHooker {
+    private const val TAG = "IslandLongPressHooker"
+    private const val CONTROLLER_CLASS =
+        "miui.systemui.dynamicisland.window.content.DynamicIslandBaseContentViewController"
+    private const val BASE_CONTENT_VIEW_CLASS =
+        "miui.systemui.dynamicisland.window.content.DynamicIslandBaseContentView"
+    private const val DATA_CLASS =
+        "com.android.systemui.plugins.miui.dynamicisland.DynamicIslandData"
+    private const val SHARE_DATA_CLASS =
+        "miui.systemui.dynamicisland.model.ShareData"
+
+    fun hook(module: XposedModule, cl: ClassLoader) {
+        val controllerClass = cl.loadClass(CONTROLLER_CLASS)
+        val method = controllerClass.declaredMethods.firstOrNull {
+            it.name == "onLongPressed" &&
+                    it.parameterTypes.size == 3 &&
+                    it.parameterTypes[0].name == BASE_CONTENT_VIEW_CLASS &&
+                    it.parameterTypes[1].name == DATA_CLASS &&
+                    it.parameterTypes[2] == Float::class.javaPrimitiveType
+        }
+        if (method == null) {
+            HookLogger.w(TAG, "未找到长按回调，跳过超级岛长按 Hook")
+            return
+        }
+
+        method.isAccessible = true
+        module.managedHook(
+            executable = method,
+            capability = "island.long_press",
+            hooker = LongPressedHook(),
+        )
+        HookLogger.d(TAG, "超级岛长按 Hook 已初始化")
+    }
+
+    internal class LongPressedHook : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val view = chain.args.getOrNull(0) ?: return chain.proceed()
+            val data = chain.args.getOrNull(1)
+            val behavior = readBehavior()
+            if (behavior == RootConstants.ISLAND_LONG_PRESS_BEHAVIOR_DEFAULT) {
+                return chain.proceed()
+            }
+            val systemUiView = view as? View ?: return chain.proceed()
+            val shouldHandle = runCatching {
+                IslandModificationTargetPolicy.allowsCurrentScope(
+                    data = data,
+                    hostRoot = systemUiView as? ViewGroup
+                )
+            }.onFailure { error ->
+                HookLogger.w(TAG, "判断超级岛长按目标失败，保留原生行为", error)
+            }.getOrDefault(false)
+            if (!shouldHandle) {
+                return chain.proceed()
+            }
+
+            val targetPackageName = IslandModificationTargetPolicy
+                .resolve(data, systemUiView as? ViewGroup)
+                .mediaInfo
+                ?.packageName
+            return when (behavior) {
+                RootConstants.ISLAND_LONG_PRESS_BEHAVIOR_LYRIC_SHARE ->
+                    handleDragShare(chain, systemUiView, targetPackageName)
+
+                RootConstants.ISLAND_LONG_PRESS_BEHAVIOR_TOGGLE_PLAYBACK ->
+                    handlePlaybackToggle(
+                        chain,
+                        systemUiView,
+                        data,
+                        systemUiView as? ViewGroup
+                    )
+
+                else -> chain.proceed()
+            }
+        }
+
+        private fun handleDragShare(
+            chain: Chain,
+            systemUiView: View,
+            targetPackageName: String?
+        ): Any? {
+            val payload = IslandLyricSharePayloadBuilder.build(
+                view = systemUiView,
+                prefs = HookEntry.instance?.prefs ?: return chain.proceed(),
+                targetPackageName = targetPackageName
+            )
+                ?: return chain.proceed()
+            val replacement = runCatching {
+                TemplateShareDataAdapter.apply(systemUiView, payload)
+            }.onFailure { error ->
+                HookLogger.w(TAG, "准备拖拽分享数据失败", error)
+            }.getOrNull() ?: return chain.proceed()
+
+            HookLogger.d(
+                TAG,
+                "长按补充拖拽分享: title=${payload.title.hashCode()}, " +
+                        "contentLength=${payload.shareContent.length}, " +
+                        "cover=${payload.albumArt != null}"
+            )
+            val artworkReplacement = NativeShareArtworkAdapter.apply(
+                controller = chain.thisObject,
+                view = systemUiView,
+                bitmap = payload.albumArt
+            )
+            return try {
+                chain.proceed()
+            } finally {
+                artworkReplacement?.restore()
+                replacement.restore()
+            }
+        }
+
+        private fun handlePlaybackToggle(
+            chain: Chain,
+            systemUiView: View,
+            data: Any?,
+            hostRoot: ViewGroup?
+        ): Any? {
+            // Keep Xiaomi's own state/lock-screen/Control Center guards. If the host shape is
+            // not the verified collapsed island, its original long-press path remains intact.
+            if (!NativeLongPressSupport.canIntercept(systemUiView)) return chain.proceed()
+
+            val controller = runCatching {
+                IslandPlaybackControllerResolver.resolve(
+                    context = systemUiView.context,
+                    data = data,
+                    hostRoot = hostRoot
+                )
+            }.onFailure { error ->
+                HookLogger.w(TAG, "解析当前超级岛媒体会话失败，保留原生行为", error)
+            }.getOrNull() ?: return chain.proceed()
+
+            if (!PlaybackToggle.perform(controller)) return chain.proceed()
+
+            NativeLongPressSupport.dispatchLongPressedEvent(systemUiView)
+            // Do not proceed: Xiaomi's original implementation would start drag-and-drop here.
+            return null
+        }
+
+        private fun readBehavior(): Int {
+            return runCatching {
+                HookEntry.instance?.prefs?.getInt(
+                    RootConstants.KEY_HOOK_ISLAND_LONG_PRESS_BEHAVIOR,
+                    RootConstants.DEFAULT_HOOK_ISLAND_LONG_PRESS_BEHAVIOR
+                ) ?: RootConstants.DEFAULT_HOOK_ISLAND_LONG_PRESS_BEHAVIOR
+            }.getOrDefault(RootConstants.DEFAULT_HOOK_ISLAND_LONG_PRESS_BEHAVIOR)
+                .takeIf {
+                    it == RootConstants.ISLAND_LONG_PRESS_BEHAVIOR_DEFAULT ||
+                            it == RootConstants.ISLAND_LONG_PRESS_BEHAVIOR_LYRIC_SHARE ||
+                            it == RootConstants.ISLAND_LONG_PRESS_BEHAVIOR_TOGGLE_PLAYBACK
+                }
+                ?: RootConstants.DEFAULT_HOOK_ISLAND_LONG_PRESS_BEHAVIOR
+        }
+    }
+
+    private object PlaybackToggle {
+        fun perform(controller: MediaController): Boolean {
+            val state = runCatching { controller.playbackState }
+                .onFailure { error ->
+                    HookLogger.w(TAG, "读取播放状态失败", error)
+                }.getOrNull()
+                ?: return false
+            val shouldPause = when (state.state) {
+                PlaybackState.STATE_PLAYING,
+                PlaybackState.STATE_BUFFERING -> true
+
+                PlaybackState.STATE_PAUSED,
+                PlaybackState.STATE_STOPPED,
+                PlaybackState.STATE_NONE -> false
+
+                else -> return false
+            }
+
+            val command = if (shouldPause) "pause" else "play"
+            return try {
+                if (shouldPause) {
+                    controller.transportControls.pause()
+                } else {
+                    controller.transportControls.play()
+                }
+                HookLogger.d(TAG, "长按播放命令已调用: command=$command")
+                true
+            } catch (error: Throwable) {
+                HookLogger.w(
+                    TAG,
+                    "长按播放命令抛异常: command=$command",
+                    error
+                )
+                false
+            }
+        }
+    }
+
+    private object NativeLongPressSupport {
+        private const val LONG_PRESSED_EVENT_CLASS =
+            "miui.systemui.dynamicisland.event.DynamicIslandEvent\$IslandLongPressed"
+
+        fun canIntercept(view: Any): Boolean {
+            if (callNoArg(view, "getTemplate") == null) return false
+
+            val viewModel = callNoArg(view, "getViewModel") ?: return false
+            val stateFlow = callNoArg(viewModel, "getState") ?: return false
+            val state = callNoArg(stateFlow, "getValue") ?: return false
+            if (state.javaClass.name.endsWith("DynamicIslandState\$Expanded") ||
+                state.javaClass.simpleName == "Expanded"
+            ) {
+                return false
+            }
+
+            val eventCoordinator = callNoArg(view, "getDynamicIslandEventCoordinator")
+                ?: return false
+            val windowView = callNoArg(eventCoordinator, "getWindowView")
+                ?: return false
+            val windowController = callNoArg(windowView, "getWindowViewController")
+                ?: return false
+            val windowState = callNoArg(windowController, "getWindowState")
+                ?: return false
+            val miPlayShowState = callNoArg(windowState, "getMiPlayShow")
+                ?: return false
+            val miPlayShow = callNoArg(miPlayShowState, "getValue") as? Boolean
+                ?: return false
+            return !miPlayShow
+        }
+
+        fun dispatchLongPressedEvent(view: Any) {
+            try {
+                val eventCoordinator = callNoArg(view, "getDynamicIslandEventCoordinator")
+                    ?: return
+                val eventClass = Class.forName(
+                    LONG_PRESSED_EVENT_CLASS,
+                    true,
+                    view.javaClass.classLoader ?: ClassLoader.getSystemClassLoader()
+                )
+                val event = eventClass.getDeclaredField("INSTANCE").apply {
+                    isAccessible = true
+                }.get(null)
+                val dispatchMethod = eventCoordinator.javaClass.methods.firstOrNull {
+                    it.name == "dispatchEvent" && it.parameterTypes.size == 2
+                }
+                    ?: return
+                dispatchMethod.isAccessible = true
+                dispatchMethod.invoke(eventCoordinator, event, null)
+            } catch (error: Throwable) {
+                HookLogger.w(TAG, "同步小米长按事件失败", error)
+            }
+        }
+
+        private fun callNoArg(receiver: Any?, name: String): Any? {
+            val target = receiver ?: return null
+            val method = target.javaClass.methods.firstOrNull {
+                it.name == name && it.parameterTypes.isEmpty()
+            } ?: return null
+            method.isAccessible = true
+            return runCatching { method.invoke(target) }.getOrNull()
+        }
+    }
+
+    private object NativeShareArtworkAdapter {
+        private const val SHARE_UTILS_CLASS =
+            "miui.systemui.dynamicisland.DynamicIslandShareUtils"
+        private const val DIMEN_CLASS = "miui.systemui.dynamicisland.R\$dimen"
+        private const val SHARE_PIC_RADIUS = "island_share_pic_radius"
+        private const val SHARE_CARD_DRAWABLE_FIELD = "shareCardDrawable"
+        private const val SHARE_ICON_BYTES_FIELD = "shareIconToByteArray"
+
+        fun apply(controller: Any?, view: View, bitmap: Bitmap?): AppliedArtwork? {
+            if (controller == null || bitmap == null || bitmap.isRecycled) return null
+
+            return runCatching {
+                val drawableField = findField(
+                    controller,
+                    SHARE_CARD_DRAWABLE_FIELD,
+                    Drawable::class.java
+                ) ?: throw NoSuchFieldException(SHARE_CARD_DRAWABLE_FIELD)
+                val bytesField = findField(
+                    controller,
+                    SHARE_ICON_BYTES_FIELD,
+                    ByteArray::class.java
+                ) ?: throw NoSuchFieldException(SHARE_ICON_BYTES_FIELD)
+                val artwork = createArtwork(view, bitmap)
+
+                drawableField.isAccessible = true
+                bytesField.isAccessible = true
+                val originalDrawable = drawableField.get(controller)
+                val originalBytes = bytesField.get(controller)
+                drawableField.set(controller, artwork.drawable)
+                bytesField.set(controller, artwork.bytes)
+                AppliedArtwork(
+                    controller = controller,
+                    drawableField = drawableField,
+                    originalDrawable = originalDrawable,
+                    bytesField = bytesField,
+                    originalBytes = originalBytes
+                )
+            }.onFailure { error ->
+                HookLogger.w(TAG, "准备拖拽分享封面失败，保留原生封面", error)
+            }.getOrNull()
+        }
+
+        private fun createArtwork(view: View, bitmap: Bitmap): PreparedArtwork {
+            return runCatching {
+                createXiaomiArtwork(view, bitmap)
+            }.onFailure { error ->
+                HookLogger.d(
+                    TAG,
+                    "小米原生拖拽分享封面处理不可用，使用兼容处理: " +
+                            error.javaClass.simpleName
+                )
+            }.getOrElse {
+                createFallbackArtwork(view, bitmap)
+            }
+        }
+
+        private fun createXiaomiArtwork(view: View, bitmap: Bitmap): PreparedArtwork {
+            val classLoader = view.javaClass.classLoader
+                ?: throw ClassNotFoundException(SHARE_UTILS_CLASS)
+            val context = view.context
+            val utilsClass = Class.forName(SHARE_UTILS_CLASS, true, classLoader)
+            val utils = utilsClass.getDeclaredField("INSTANCE").apply {
+                isAccessible = true
+            }.get(null)
+            val icon = Icon.createWithBitmap(bitmap)
+            val drawable = icon.loadDrawable(context)
+                ?: throw IllegalStateException("Icon.loadDrawable 返回为空")
+            val radius = resolveSharePicRadius(context, classLoader)
+            val roundedDrawable = utilsClass.getMethod(
+                "drawableAddRounded",
+                Context::class.java,
+                Drawable::class.java,
+                Int::class.javaPrimitiveType
+            ).invoke(utils, context, drawable, radius) as? Drawable
+                ?: throw IllegalStateException("drawableAddRounded 返回为空")
+            val iconBytes = utilsClass.getMethod(
+                "iconToByteArrayAndCompress",
+                Icon::class.java,
+                Context::class.java
+            ).invoke(utils, icon, context) as? ByteArray
+                ?: throw IllegalStateException("iconToByteArrayAndCompress 返回为空")
+            return PreparedArtwork(roundedDrawable, iconBytes)
+        }
+
+        private fun resolveSharePicRadius(context: Context, classLoader: ClassLoader): Int {
+            val dimenClass = Class.forName(DIMEN_CLASS, true, classLoader)
+            val resourceId = dimenClass.getDeclaredField(SHARE_PIC_RADIUS).apply {
+                isAccessible = true
+            }.getInt(null)
+            return context.resources.getDimensionPixelSize(resourceId)
+        }
+
+        private fun createFallbackArtwork(view: View, bitmap: Bitmap): PreparedArtwork {
+            val radiusPx = resolveFallbackRadius(view)
+            val roundedDrawable = RoundedBitmapDrawableFactory.create(view.resources, bitmap).apply {
+                cornerRadius = radiusPx * 2f
+                setAntiAlias(true)
+            }
+            val iconBytes = bitmap.toPngBytes()
+                ?: throw IllegalStateException("封面图片压缩失败")
+            return PreparedArtwork(roundedDrawable, iconBytes)
+        }
+
+        private fun resolveFallbackRadius(view: View): Float {
+            val resourceId = view.resources.getIdentifier(
+                SHARE_PIC_RADIUS,
+                "dimen",
+                view.context.packageName
+            )
+            val radius = if (resourceId != 0) {
+                view.resources.getDimensionPixelSize(resourceId).toFloat()
+            } else {
+                10f * view.resources.displayMetrics.density
+            }
+            return radius
+        }
+
+        private fun findField(controller: Any, name: String, type: Class<*>): Field? {
+            var currentClass: Class<*>? = controller.javaClass
+            while (currentClass != null) {
+                currentClass.declaredFields.firstOrNull { field ->
+                    field.name == name && type.isAssignableFrom(field.type)
+                }?.let { return it }
+                currentClass = currentClass.superclass
+            }
+            return null
+        }
+
+        private fun Bitmap.toPngBytes(): ByteArray? {
+            return ByteArrayOutputStream().use { output ->
+                if (!compress(Bitmap.CompressFormat.PNG, 100, output)) return null
+                output.toByteArray()
+            }
+        }
+
+        private data class PreparedArtwork(
+            val drawable: Drawable,
+            val bytes: ByteArray
+        )
+
+        class AppliedArtwork(
+            private val controller: Any,
+            private val drawableField: Field,
+            private val originalDrawable: Any?,
+            private val bytesField: Field,
+            private val originalBytes: Any?
+        ) {
+            fun restore() {
+                runCatching {
+                    drawableField.set(controller, originalDrawable)
+                    bytesField.set(controller, originalBytes)
+                }.onFailure { error ->
+                    HookLogger.w(TAG, "恢复原生拖拽分享封面失败", error)
+                }
+            }
+        }
+    }
+
+    private object TemplateShareDataAdapter {
+        private const val COPY_PARAMETER_COUNT = 14
+
+        fun apply(view: Any, payload: IslandLyricSharePayload): AppliedTemplate? {
+            val template = invokeGetter(view, "getTemplate") ?: return null
+            val existingShareData = invokeGetter(template, "getShareData")
+            val existingShareContent = invokeGetter(existingShareData, "getShareContent") as? String
+            if (!existingShareContent.isNullOrBlank()) return null
+
+            val shareDataClass = Class.forName(
+                SHARE_DATA_CLASS,
+                true,
+                view.javaClass.classLoader
+            )
+            val shareData = shareDataClass.getDeclaredConstructor().apply {
+                isAccessible = true
+            }.newInstance()
+            setString(shareData, "setTitle", payload.title)
+            setString(shareData, "setContent", payload.content)
+            setString(shareData, "setShareContent", payload.shareContent)
+
+            val copyMethod = template.javaClass.methods.firstOrNull {
+                it.name == "copy" &&
+                        it.parameterTypes.size == COPY_PARAMETER_COUNT &&
+                        it.parameterTypes[2].name == SHARE_DATA_CLASS
+            } ?: return null
+            copyMethod.isAccessible = true
+            val copiedTemplate = copyMethod.invoke(
+                template,
+                invokeGetter(template, "getBigIslandArea"),
+                invokeGetter(template, "getSmallIslandArea"),
+                shareData,
+                invokeGetter(template, "getBusiness"),
+                invokeRequiredGetter(template, "getDismissIsland"),
+                invokeRequiredGetter(template, "getIslandTimeout"),
+                invokeGetter(template, "getHighlightColor"),
+                invokeGetter(template, "getIslandProperty"),
+                invokeGetter(template, "getIslandPriority"),
+                invokeRequiredGetter(template, "getIslandOrder"),
+                invokeGetter(template, "getNeedCloseAnimation"),
+                invokeRequiredGetter(template, "getExpandedTime"),
+                invokeGetter(template, "getMaxSize"),
+                invokeGetter(template, "getAppContentDescription")
+            ) ?: return null
+
+            val setTemplate = view.javaClass.methods.firstOrNull {
+                it.name == "setTemplate" &&
+                        it.parameterTypes.size == 1 &&
+                        it.parameterTypes[0].name == template.javaClass.name
+            } ?: return null
+            setTemplate.isAccessible = true
+            setTemplate.invoke(view, copiedTemplate)
+            return AppliedTemplate(view, setTemplate, template)
+        }
+
+        private fun invokeGetter(receiver: Any?, name: String): Any? {
+            receiver ?: return null
+            val method = receiver.javaClass.methods.firstOrNull {
+                it.name == name && it.parameterTypes.isEmpty()
+            } ?: return null
+            method.isAccessible = true
+            return method.invoke(receiver)
+        }
+
+        private fun invokeRequiredGetter(receiver: Any, name: String): Any {
+            return invokeGetter(receiver, name)
+                ?: throw NoSuchMethodException("$name on ${receiver.javaClass.name}")
+        }
+
+        private fun setString(receiver: Any, name: String, value: String) {
+            val method = receiver.javaClass.methods.firstOrNull {
+                it.name == name &&
+                        it.parameterTypes.size == 1 &&
+                        it.parameterTypes[0] == String::class.java
+            } ?: throw NoSuchMethodException("$name on ${receiver.javaClass.name}")
+            method.isAccessible = true
+            method.invoke(receiver, value)
+        }
+
+        class AppliedTemplate(
+            private val view: Any,
+            private val setTemplate: Method,
+            private val originalTemplate: Any
+        ) {
+            fun restore() {
+                runCatching {
+                    setTemplate.invoke(view, originalTemplate)
+                }.onFailure { error ->
+                    HookLogger.w(TAG, "恢复原生超级岛模板失败", error)
+                }
+            }
+        }
+    }
+
+}

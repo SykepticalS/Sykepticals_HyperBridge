@@ -377,37 +377,60 @@ class IslandUpdateResolverTest {
     }
 
     @Test
-    fun appCancelDoesNotDismissInProgressDownloadIsland() {
-        assertFalse(
+    fun appCancelDismissesDownloadIslandWhenTheSourceStaysGone() {
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.DOWNLOAD,
                 dismissWithOriginal = true,
                 isAppCancellation = true
             )
         )
-        assertFalse(
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.PROGRESS,
                 dismissWithOriginal = true,
                 isAppCancellation = true
             )
         )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.DOWNLOAD,
+                dismissWithOriginal = false,
+                isAppCancellation = true
+            )
+        )
     }
 
     @Test
-    fun messageReplacementCancelDoesNotDismissTheIsland() {
-        assertFalse(
+    fun appCancelDismissesMessageAndStandardIslandsWhenTheSourceStaysGone() {
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.MESSAGE,
                 dismissWithOriginal = true,
                 isAppCancellation = true
             )
         )
-        assertFalse(
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.STANDARD,
                 dismissWithOriginal = true,
                 isAppCancellation = true
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.STANDARD,
+                dismissWithOriginal = true,
+                isAppCancellation = true,
+                regroupingProtected = false,
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
+                type = NotificationType.STANDARD,
+                dismissWithOriginal = false,
+                isAppCancellation = true,
+                regroupingProtected = false,
             )
         )
         assertTrue(
@@ -422,6 +445,36 @@ class IslandUpdateResolverTest {
                 type = NotificationType.MESSAGE,
                 dismissWithOriginal = false,
                 isAppCancellation = false
+            )
+        )
+    }
+
+    @Test
+    fun bulkClearAndRecentsCleanupKeepActiveIslands() {
+        assertTrue(NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_CANCEL_ALL))
+        assertTrue(
+            NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_LISTENER_CANCEL_ALL)
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_PACKAGE_CHANGED)
+        )
+        assertFalse(NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_CANCEL))
+        assertFalse(NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_CLICK))
+        assertFalse(NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_APP_CANCEL))
+        assertFalse(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.CALL,
+                removeOriginalNotification = false,
+                dismissWithOriginal = true,
+                retainedWithoutSource = true
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.CALL,
+                removeOriginalNotification = false,
+                dismissWithOriginal = true,
+                retainedWithoutSource = false
             )
         )
     }

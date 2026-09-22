@@ -49,6 +49,7 @@ object IslandProtocol {
     const val EXTRA_FORCE_FOCUS_GLOW = "hyperbridge.glow.force_focus"
     const val EXTRA_UPDATABLE = "hyperbridge.updatable"
     const val EXTRA_TEXT_UPDATE_ANIMATION = "hyperbridge.text_update_animation"
+    const val EXTRA_AUTO_EXPAND_ENTRANCE = "hyperbridge.auto_expand_entrance"
     const val EXTRA_REPLY_COMPOSER_OPEN = "hyperbridge.reply_composer_open"
     const val MIUI_SBN = "miui.sbn"
     const val MIUI_BIG_ISLAND_EFFECT = "miui.bigIsland.effect.src"

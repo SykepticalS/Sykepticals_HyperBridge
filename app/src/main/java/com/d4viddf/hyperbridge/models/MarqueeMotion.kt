@@ -18,6 +18,36 @@ object MarqueeMotion {
         return overflow.takeIf { it > tolerancePx.coerceAtLeast(0f) } ?: 0f
     }
 
+    /**
+     * Advance width includes the empty tail after the last glyph (right side bearing and
+     * letter spacing). Scrolling to that tail leaves a blank strip and nudges text that
+     * already fits. A much smaller ink measurement is ignored so a bad bounds result cannot
+     * hide the end of the string.
+     */
+    fun visibleTextWidth(advanceWidthPx: Float, inkRightPx: Float, maxTrimPx: Float): Float {
+        if (advanceWidthPx <= 0f) return 0f
+        if (inkRightPx <= 0f || inkRightPx >= advanceWidthPx) return advanceWidthPx
+        if (advanceWidthPx - inkRightPx > maxTrimPx.coerceAtLeast(0f)) return advanceWidthPx
+        return inkRightPx
+    }
+
+    /**
+     * Room from the first glyph to the clip's right edge. End padding is part of that room;
+     * a right compound drawable is not, because the glyph must stop before the icon.
+     */
+    fun visibleSlotWidth(
+        textOrigin: Int,
+        viewRight: Int,
+        rightDrawableInset: Int,
+        clipLeft: Int,
+        clipRight: Int,
+    ): Int {
+        if (viewRight <= textOrigin || clipRight <= clipLeft) return 0
+        val start = maxOf(textOrigin, clipLeft)
+        val end = minOf(viewRight - rightDrawableInset.coerceAtLeast(0), clipRight)
+        return (end - start).coerceAtLeast(0)
+    }
+
     /** Tracks consecutive identical viewport samples while Xiaomi's carousel spring settles. */
     fun nextStableFrames(
         previousSignature: Int?,

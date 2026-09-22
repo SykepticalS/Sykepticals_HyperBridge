@@ -14,6 +14,51 @@ class MarqueeMotionTest {
         assertEquals(2f, MarqueeMotion.overflowDistance(202f, 200, tolerancePx = 1f), 0.001f)
     }
 
+    @Test fun trailingInkGapDoesNotScrollTextThatAlreadyFits() {
+        assertEquals(200f, MarqueeMotion.visibleTextWidth(208f, 200f, maxTrimPx = 48f), 0.001f)
+        assertEquals(208f, MarqueeMotion.visibleTextWidth(208f, 40f, maxTrimPx = 48f), 0.001f)
+        assertEquals(
+            0f,
+            MarqueeMotion.overflowDistance(
+                textWidthPx = MarqueeMotion.visibleTextWidth(208f, 200f, maxTrimPx = 48f),
+                availableWidthPx = 200,
+                tolerancePx = 1f,
+            ),
+            0.001f,
+        )
+        assertEquals(
+            40f,
+            MarqueeMotion.overflowDistance(
+                textWidthPx = MarqueeMotion.visibleTextWidth(260f, 240f, maxTrimPx = 48f),
+                availableWidthPx = 200,
+            ),
+            0.001f,
+        )
+    }
+
+    @Test fun endPaddingIsVisibleRoomNotABlankStop() {
+        assertEquals(
+            200,
+            MarqueeMotion.visibleSlotWidth(
+                textOrigin = 12,
+                viewRight = 212,
+                rightDrawableInset = 0,
+                clipLeft = 0,
+                clipRight = 212,
+            ),
+        )
+        assertEquals(
+            184,
+            MarqueeMotion.visibleSlotWidth(
+                textOrigin = 12,
+                viewRight = 212,
+                rightDrawableInset = 16,
+                clipLeft = 0,
+                clipRight = 212,
+            ),
+        )
+    }
+
     @Test fun carouselGeometryMustRemainStableBeforeMarqueeStarts() {
         var signature: Int? = null
         var stableFrames = 0

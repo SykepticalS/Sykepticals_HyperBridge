@@ -45,6 +45,47 @@ class CallSessionTrackerTest {
     }
 
     @Test
+    fun chronometerAlreadyRunningOnFirstSightIsAnInProgressCall() {
+        val session = CallSessionTracker().resolve(
+            input(
+                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                now = 40_000L,
+                showsChronometer = true,
+                base = 10_000L
+            )
+        )
+
+        assertEquals(CallState.ACTIVE, session.state)
+        assertEquals(10_000L, session.connectedAt)
+        assertEquals(ConnectedAtSource.SOURCE_CHRONOMETER, session.connectedAtSource)
+        assertEquals(10_000L, CallTimerPolicy.connectedAtForTimer(session))
+    }
+
+    @Test
+    fun liveDialingChronometerDoesNotBecomeActiveJustBecauseTimePasses() {
+        val tracker = CallSessionTracker()
+        tracker.resolve(
+            input(
+                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                now = 10_000L,
+                showsChronometer = true,
+                base = 9_500L
+            )
+        )
+        val later = tracker.resolve(
+            input(
+                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                now = 40_000L,
+                showsChronometer = true,
+                base = 9_500L
+            )
+        )
+
+        assertEquals(CallState.OUTGOING_CALLING, later.state)
+        assertNull(later.connectedAt)
+    }
+
+    @Test
     fun repeatedIdenticalDialingChronometerDoesNotBecomeActive() {
         val tracker = CallSessionTracker()
         tracker.resolve(

@@ -1,0 +1,32 @@
+# This configuration is reserved for workflows that intentionally enable
+# GitHub-generated release notes, such as the upcoming Preview workflow.
+# manual-stable-release.yml deliberately creates a draft with manual notes.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+      - renovate
+  categories:
+    - title: "🚀 新功能"
+      labels:
+        - feature
+        - enhancement
+    - title: "🐛 问题修复"
+      labels:
+        - bug
+        - fix
+    - title: "⚡ 优化与兼容性"
+      labels:
+        - performance
+        - compatibility
+        - refactor
+    - title: "📦 依赖与构建"
+      labels:
+        - dependencies
+        - build
+        - ci
+    - title: "📝 其他变更"
+      labels:
+        - "*"

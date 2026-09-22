@@ -15,8 +15,9 @@ class IslandFloatingPresentationPolicyTest {
         )
 
         assertTrue(presentation.enableFloat)
-        assertTrue(presentation.islandFirstFloat)
-        assertTrue(presentation.reopen)
+        assertFalse(presentation.islandFirstFloat)
+        assertFalse(presentation.reopen)
+        assertTrue(presentation.stageAutoExpand)
     }
 
     @Test
@@ -30,6 +31,7 @@ class IslandFloatingPresentationPolicyTest {
         assertFalse(presentation.enableFloat)
         assertFalse(presentation.islandFirstFloat)
         assertFalse(presentation.reopen)
+        assertFalse(presentation.stageAutoExpand)
         assertEquals(0, presentation.expandedTimeMs(2_000))
     }
 
@@ -44,14 +46,16 @@ class IslandFloatingPresentationPolicyTest {
         assertFalse(presentation.enableFloat)
         assertFalse(presentation.islandFirstFloat)
         assertFalse(presentation.reopen)
+        assertFalse(presentation.stageAutoExpand)
     }
 
     @Test
     fun updateMayFloatWhenExplicitlyEnabled() {
         val presentation = IslandFloatingPresentationPolicy.resolve(true, true, isUpdate = true)
         assertTrue(presentation.enableFloat)
-        assertTrue(presentation.islandFirstFloat)
-        assertTrue(presentation.reopen)
+        assertFalse(presentation.islandFirstFloat)
+        assertFalse(presentation.reopen)
+        assertTrue(presentation.stageAutoExpand)
     }
 
     @Test
@@ -64,5 +68,16 @@ class IslandFloatingPresentationPolicyTest {
         assertFalse(presentation.enableFloat)
         assertFalse(presentation.islandFirstFloat)
         assertFalse(presentation.reopen)
+        assertFalse(presentation.stageAutoExpand)
+    }
+
+    @Test
+    fun countdownPresentationDoesNotStageAutoExpand() {
+        val presentation = IslandFloatingPresentation(
+            enableFloat = true,
+            islandFirstFloat = false,
+            reopen = false,
+        )
+        assertFalse(presentation.stageAutoExpand)
     }
 }

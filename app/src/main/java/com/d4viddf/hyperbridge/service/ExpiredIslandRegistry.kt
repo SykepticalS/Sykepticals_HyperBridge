@@ -16,6 +16,13 @@ enum class ExpiredSourceDecision {
     NEW_GENERATION
 }
 
+/** Recovery is a snapshot of notifications already on screen, not a new user event. */
+enum class RecoveryExpiry {
+    ABSENT,
+    SAME_EVENT,
+    NEW_EVENT
+}
+
 /** Bounded memory of ephemeral source generations that have intentionally reached their TTL. */
 class ExpiredIslandRegistry(
     private val maxEntries: Int = 256,
@@ -51,6 +58,26 @@ class ExpiredIslandRegistry(
             return ExpiredSourceDecision.SUPPRESS_IDENTICAL
         }
         return ExpiredSourceDecision.NEW_GENERATION
+    }
+
+    /**
+     * A shade refresh often rewrites postTime and the rendered fingerprint of an island that
+     * already expired. That drift is not a new message. A different message event is.
+     */
+    @Synchronized
+    fun recoveryExpiry(
+        sourceKey: String,
+        now: Long,
+        messageEventFingerprint: MessageEventFingerprint? = null,
+        logicalId: String? = null
+    ): RecoveryExpiry {
+        prune(now)
+        val record = findRecord(sourceKey, logicalId) ?: return RecoveryExpiry.ABSENT
+        val recorded = record.messageEventFingerprint
+        if (recorded != null && messageEventFingerprint != null && recorded != messageEventFingerprint) {
+            return RecoveryExpiry.NEW_EVENT
+        }
+        return RecoveryExpiry.SAME_EVENT
     }
 
     /** Clear only after the changed source generation was successfully posted. */

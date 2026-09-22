@@ -1,0 +1,150 @@
+package com.lidesheng.hyperlyric.root.island.hooks
+
+import com.lidesheng.hyperlyric.root.utils.HookLogger
+import com.lidesheng.hyperlyric.root.managedHook
+import com.lidesheng.hyperlyric.root.island.host.IslandTextHookerSupport
+import io.github.libxposed.api.XposedModule
+
+/**
+ * Super Island hook installer.
+ *
+ * Behavior lives in small hooker groups so the verified real-island, fake-view,
+ * adapter/module, and width paths can be reviewed independently. The adapter
+ * lifecycle covers both the real and fake module trees.
+ */
+internal object IslandTextHooker {
+
+    private const val TAG = IslandTextHookerSupport.TAG
+    private const val CONTENT_VIEW_CLASS =
+        "miui.systemui.dynamicisland.window.content.DynamicIslandContentView"
+    private const val FAKE_CONTENT_VIEW_CLASS =
+        "miui.systemui.dynamicisland.window.content.DynamicIslandContentFakeView"
+    private const val BASE_CONTENT_VIEW_CLASS =
+        "miui.systemui.dynamicisland.window.content.DynamicIslandBaseContentView"
+    private const val EXPANDED_VIEW_CLASS =
+        "miui.systemui.dynamicisland.view.DynamicIslandExpandedView"
+    private const val ANIMATION_DELEGATE_CLASS =
+        "miui.systemui.dynamicisland.anim.DynamicIslandAnimationDelegate"
+    private const val EVENT_COORDINATOR_CLASS =
+        "miui.systemui.dynamicisland.event.DynamicIslandEventCoordinator"
+    private const val ADAPTER_CLASS =
+        "miui.systemui.dynamicisland.module.IslandModuleViewHolderAdapter"
+
+    fun hook(module: XposedModule, cl: ClassLoader) {
+        installFeature("超级岛长按行为") {
+            IslandLyricShareHooker.hook(module, cl)
+        }
+
+        installFeature("解除超级岛长度限制") {
+            IslandWidthLimitHooker.hook(module, cl)
+        }
+
+        installFeature("真实岛") {
+            val contentViewClass = cl.loadClass(CONTENT_VIEW_CLASS)
+
+            contentViewClass.methods.filter { it.name == "updateBigIslandView" }.forEach { method ->
+                module.managedHook(
+                    executable = method,
+                    capability = "island.real.update_big_island_view",
+                    hooker = RealIslandHooker.UpdateBigIslandViewHook(),
+                )
+            }
+        }
+
+        installFeature("fake view 过渡") {
+            val fakeViewClass = cl.loadClass(FAKE_CONTENT_VIEW_CLASS)
+            fakeViewClass.methods
+                .filter {
+                    it.name == "setVisibility" &&
+                            it.parameterTypes.size == 1 &&
+                            it.declaringClass.name == FAKE_CONTENT_VIEW_CLASS
+                }
+                .forEach { method ->
+                    module.managedHook(
+                        executable = method,
+                        capability = "island.fake.visibility",
+                        hooker = FakeIslandTransitionHooker.VisibilityHook(),
+                    )
+                }
+
+        }
+
+        installFeature("应用返回 fake view") {
+            val animationDelegateClass = cl.loadClass(ANIMATION_DELEGATE_CLASS)
+            animationDelegateClass.declaredMethods
+                .filter {
+                    it.name == "fakeViewToExpanded" &&
+                            it.parameterTypes.size == 2 &&
+                            it.parameterTypes[0].name == CONTENT_VIEW_CLASS &&
+                            it.parameterTypes[1] == Boolean::class.javaPrimitiveType
+                }
+                .forEach { method ->
+                    method.isAccessible = true
+                    module.managedHook(
+                        executable = method,
+                        capability = "island.fake.expanded_transition",
+                        hooker = FakeIslandTransitionHooker.ExpandedViewTransitionHook(),
+                    )
+                }
+
+            cl.loadClass(EVENT_COORDINATOR_CLASS).declaredMethods
+                .filter {
+                    it.name == "updateFreeformFakeView" &&
+                            it.parameterTypes.size == 3 &&
+                            it.parameterTypes[0].name == FAKE_CONTENT_VIEW_CLASS &&
+                            it.parameterTypes[1].name == CONTENT_VIEW_CLASS
+                }
+                .forEach { method ->
+                    method.isAccessible = true
+                    module.managedHook(
+                        executable = method,
+                        capability = "island.fake.freeform_callback",
+                        hooker = FakeIslandTransitionHooker.FreeformFakeViewCallbackHook(),
+                    )
+                }
+
+        }
+
+        installFeature("模块首次绑定（真实岛/Fake）") {
+            val adapterClass = cl.loadClass(ADAPTER_CLASS)
+
+            adapterClass.declaredMethods
+                .filter {
+                    it.name == "bindData" &&
+                            it.parameterTypes.size == 2 &&
+                            it.parameterTypes[0] == String::class.java
+                }
+                .forEach { method ->
+                    method.isAccessible = true
+                    module.managedHook(
+                        executable = method,
+                        capability = "island.adapter.bind_data",
+                        hooker = IslandModuleRestoreHooker.AdapterBindDataHook(),
+                    )
+                }
+        }
+
+        installFeature("模块更新（真实岛/Fake）") {
+            cl.loadClass(ADAPTER_CLASS).declaredMethods
+                .filter { it.name == "updateView" && it.parameterTypes.size == 3 }
+                .forEach { method ->
+                    method.isAccessible = true
+                    module.managedHook(
+                        executable = method,
+                        capability = "island.adapter.update_view",
+                        hooker = IslandModuleRestoreHooker.AdapterUpdateViewHook(),
+                    )
+                }
+        }
+    }
+
+    private inline fun installFeature(name: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: ClassNotFoundException) {
+            HookLogger.w(TAG, "跳过不支持的 $name Hook: reason=${e.message}")
+        } catch (e: Exception) {
+            HookLogger.e(TAG, "安装 $name Hook 失败", e)
+        }
+    }
+}

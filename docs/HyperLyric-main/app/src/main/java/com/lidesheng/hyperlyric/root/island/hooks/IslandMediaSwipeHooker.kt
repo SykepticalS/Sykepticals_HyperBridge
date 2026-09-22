@@ -1,0 +1,581 @@
+package com.lidesheng.hyperlyric.root.island.hooks
+
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
+import android.view.ViewGroup
+import com.lidesheng.hyperlyric.common.RootConstants
+import com.lidesheng.hyperlyric.root.HookEntry
+import com.lidesheng.hyperlyric.root.managedHook
+import com.lidesheng.hyperlyric.root.island.host.IslandProbeUtils
+import com.lidesheng.hyperlyric.root.island.policy.IslandModificationTargetPolicy
+import com.lidesheng.hyperlyric.root.utils.HookLogger
+import io.github.libxposed.api.XposedInterface.Chain
+import io.github.libxposed.api.XposedInterface.Hooker
+import io.github.libxposed.api.XposedModule
+import java.lang.ref.WeakReference
+import java.lang.reflect.Field
+import java.lang.reflect.InvocationHandler
+import java.lang.reflect.Method
+import java.lang.reflect.Proxy
+import java.util.WeakHashMap
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/**
+ * Adds previous/next track gestures to the currently visible media island.
+ *
+ * Xiaomi still owns hit testing, direction detection and the follow animation. We remember which
+ * summary big island was touched and add a track-switch command only for a short gesture below
+ * Xiaomi's native swipe threshold. A long swipe remains fully native.
+ */
+internal object IslandMediaSwipeHooker {
+    private const val TAG = "IslandMediaSwipeHooker"
+
+    // Xiaomi's 17.1.4.x resource is 50dp. Read the live StateFlow when possible, and use this
+    // value only as a compatibility fallback for a SystemUI variant with a different field shape.
+    private const val FALLBACK_SWIPE_THRESHOLD_DP = 50f
+
+    private const val TOUCH_INTERACTOR_CLASS =
+        "miui.systemui.dynamicisland.touch.domain.interactor.DynamicIslandTouchInteractor"
+    private const val TOUCH_CONSTANTS_REPOSITORY_CLASS =
+        "miui.systemui.dynamicisland.touch.data.repository.DynamicIslandTouchConstantsRepository"
+    private val gestures = WeakHashMap<Any, GestureState>()
+    private val overriddenThresholdFlows = WeakHashMap<Any, Any>()
+    private val activeSwipeThresholdOverride = ThreadLocal<Int>()
+
+    @Volatile
+    private var nativeThresholdOverrideInstalled = false
+
+    fun prepareForHotReload() {
+        synchronized(gestures) { gestures.clear() }
+        synchronized(overriddenThresholdFlows) { overriddenThresholdFlows.clear() }
+        activeSwipeThresholdOverride.remove()
+        nativeThresholdOverrideInstalled = false
+    }
+
+    fun hook(module: XposedModule, cl: ClassLoader) {
+        try {
+            val touchInteractorClass = cl.loadClass(TOUCH_INTERACTOR_CLASS)
+
+            nativeThresholdOverrideInstalled = hookNativeSwipeThreshold(
+                module = module,
+                classLoader = touchInteractorClass.classLoader ?: cl
+            )
+
+            val onInterceptTouchEvent = touchInteractorClass.declaredMethods.firstOrNull {
+                it.name == "onInterceptTouchEvent" &&
+                        it.parameterTypes.contentEquals(
+                            arrayOf(MotionEvent::class.java, String::class.java)
+                        ) &&
+                        it.returnType == Boolean::class.javaObjectType
+            } ?: throw NoSuchMethodException("$TOUCH_INTERACTOR_CLASS.onInterceptTouchEvent")
+
+            val onTouchEvent = touchInteractorClass.declaredMethods.firstOrNull {
+                it.name == "onTouchEvent" &&
+                        it.parameterTypes.contentEquals(
+                            arrayOf(MotionEvent::class.java, String::class.java)
+                        ) &&
+                        it.returnType == Boolean::class.javaObjectType
+            } ?: throw NoSuchMethodException("$TOUCH_INTERACTOR_CLASS.onTouchEvent")
+
+            listOf(onInterceptTouchEvent, onTouchEvent).forEach { method ->
+                method.isAccessible = true
+            }
+            module.managedHook(
+                executable = onInterceptTouchEvent,
+                capability = "island.swipe.intercept_touch",
+                hooker = InterceptTouchHook(),
+            )
+            module.managedHook(
+                executable = onTouchEvent,
+                capability = "island.swipe.touch",
+                hooker = TouchEventHook(),
+            )
+
+            HookLogger.d(
+                TAG,
+                "媒体超级岛横滑切歌 Hook 已初始化: " +
+                        "nativeThresholdOverride=$nativeThresholdOverrideInstalled"
+            )
+        } catch (e: ClassNotFoundException) {
+            HookLogger.w(TAG, "未找到媒体超级岛横滑依赖，跳过切歌 Hook: reason=${e.message}")
+        } catch (e: NoSuchMethodException) {
+            HookLogger.w(TAG, "未找到媒体超级岛横滑方法，跳过切歌 Hook: reason=${e.message}")
+        } catch (e: Exception) {
+            HookLogger.e(TAG, "安装媒体超级岛横滑切歌 Hook 失败", e)
+        }
+    }
+
+    private fun hookNativeSwipeThreshold(
+        module: XposedModule,
+        classLoader: ClassLoader
+    ): Boolean {
+        return try {
+            val repositoryClass = classLoader.loadClass(TOUCH_CONSTANTS_REPOSITORY_CLASS)
+            val getSwipeThreshold = repositoryClass.declaredMethods.firstOrNull {
+                it.name == "getSwipeThreshold" &&
+                        it.parameterTypes.isEmpty() &&
+                        it.returnType.isInterface
+            } ?: throw NoSuchMethodException(
+                "$TOUCH_CONSTANTS_REPOSITORY_CLASS.getSwipeThreshold"
+            )
+
+            getSwipeThreshold.isAccessible = true
+            module.managedHook(
+                executable = getSwipeThreshold,
+                capability = "island.swipe.threshold",
+                hooker = SwipeThresholdHook(getSwipeThreshold.returnType),
+            )
+            true
+        } catch (e: ClassNotFoundException) {
+            HookLogger.w(TAG, "未找到原生超级岛滑动阈值仓库，使用原生阈值: reason=${e.message}")
+            false
+        } catch (e: NoSuchMethodException) {
+            HookLogger.w(TAG, "未找到原生超级岛滑动阈值方法，使用原生阈值: reason=${e.message}")
+            false
+        } catch (e: Exception) {
+            HookLogger.w(TAG, "覆盖原生超级岛滑动阈值失败，使用原生阈值", e)
+            false
+        }
+    }
+
+    private class SwipeThresholdHook(
+        private val returnType: Class<*>
+    ) : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val original = chain.proceed() ?: return null
+            val overridePx = activeSwipeThresholdOverride.get() ?: return original
+            return createThresholdFlowOverride(
+                original = original,
+                returnType = returnType
+            ) ?: original
+        }
+    }
+
+    private class InterceptTouchHook : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val interactor = chain.thisObject
+            val event = chain.args.getOrNull(0) as? MotionEvent
+            val action = event?.actionMasked
+            val result = chain.proceed()
+
+            if (interactor == null || event == null) return result
+            when (action) {
+                MotionEvent.ACTION_DOWN ->
+                    GestureTracker.begin(
+                        interactor = interactor,
+                        downX = event.getX(),
+                        downY = event.getY()
+                    )
+
+                MotionEvent.ACTION_CANCEL -> {
+                    GestureTracker.clear(interactor)
+                }
+            }
+            return result
+        }
+    }
+
+    private class TouchEventHook : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val interactor = chain.thisObject
+            val event = chain.args.getOrNull(0) as? MotionEvent
+            val action = event?.actionMasked
+
+            if (interactor == null || event == null) {
+                return chain.proceed()
+            }
+
+            if (action == MotionEvent.ACTION_UP) {
+                GestureTracker.markUp(
+                    interactor = interactor,
+                    x = event.getX(),
+                    y = event.getY()
+                )
+            }
+
+            val previousThresholdOverride = activeSwipeThresholdOverride.get()
+            val thresholdOverride = GestureTracker.nativeThresholdOverride(interactor)
+            thresholdOverride?.let {
+                activeSwipeThresholdOverride.set(it)
+            }
+            return try {
+                val result = chain.proceed()
+                if (action == MotionEvent.ACTION_UP) {
+                    val gesture = GestureTracker.takeForCustomSwipe(interactor)
+                    if (gesture != null) {
+                        performShortSwipe(gesture)
+                    }
+                }
+                result
+            } finally {
+                if (previousThresholdOverride == null) {
+                    activeSwipeThresholdOverride.remove()
+                } else {
+                    activeSwipeThresholdOverride.set(previousThresholdOverride)
+                }
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    GestureTracker.clear(interactor)
+                }
+            }
+        }
+    }
+
+    private object GestureTracker {
+        fun begin(interactor: Any, downX: Float, downY: Float) {
+            val state = buildGestureState(interactor, downX, downY) ?: return
+            synchronized(gestures) {
+                gestures[interactor] = state
+            }
+        }
+
+        fun markUp(interactor: Any, x: Float, y: Float) {
+            synchronized(gestures) {
+                val state = gestures[interactor]
+                if (state == null) {
+                    return
+                }
+                val longClickReceived = runCatching {
+                    readBoolean(interactor, "longClickReceived")
+                }.getOrNull()
+                if (longClickReceived != false) {
+                    // A long press owns this gesture. Do not let a later native ACTION_UP
+                    // accidentally become a track-switch command.
+                    gestures.remove(interactor)
+                    return
+                }
+                state.finalDx = x - state.downX
+                state.finalDy = y - state.downY
+            }
+        }
+
+        fun takeForCustomSwipe(interactor: Any): GestureState? {
+            synchronized(gestures) {
+                val state = gestures.remove(interactor)
+                if (state == null) {
+                    return null
+                }
+                val dx = state.finalDx
+                val dy = state.finalDy
+                if (!dx.isFinite() || !dy.isFinite() || dx == 0f) {
+                    return null
+                }
+
+                val absDx = abs(dx)
+                if (absDx <= abs(dy)) {
+                    return null
+                }
+                if (absDx <= state.nativeTouchSlop) {
+                    return null
+                }
+
+                // Xiaomi's final hide/promote event starts at this threshold. Only gestures below
+                // it belong to the custom track-switch action.
+                if (!state.nativeSwipeThreshold.isFinite() ||
+                    absDx >= state.nativeSwipeThreshold
+                ) {
+                    return null
+                }
+                return state
+            }
+        }
+
+        fun nativeThresholdOverride(interactor: Any): Int? {
+            synchronized(gestures) {
+                val threshold = gestures[interactor]?.nativeSwipeThreshold ?: return null
+                return threshold.takeIf { it.isFinite() && it > 0f }?.roundToInt()
+            }
+        }
+
+        fun clear(interactor: Any) {
+            synchronized(gestures) {
+                gestures.remove(interactor)
+            }
+        }
+    }
+
+    private class GestureState(
+        val windowView: Any,
+        val targetData: Any,
+        val nativeTouchSlop: Float,
+        val nativeSwipeThreshold: Float,
+        val downX: Float,
+        val downY: Float
+    ) {
+        var finalDx: Float = Float.NaN
+        var finalDy: Float = Float.NaN
+    }
+
+    private fun buildGestureState(
+        interactor: Any,
+        downX: Float,
+        downY: Float
+    ): GestureState? {
+        val windowView = readField(interactor, "windowView")
+        if (windowView == null) return null
+        val targetData = findMediaTouchTarget(interactor, windowView) ?: return null
+        val touchSlop = resolveTouchSlop(interactor, windowView)
+        val nativeThreshold = if (nativeThresholdOverrideInstalled) {
+            resolveConfiguredSwipeThreshold(windowView)
+        } else {
+            resolveSwipeThreshold(interactor, windowView)
+        }
+
+        return GestureState(
+            windowView = windowView,
+            targetData = targetData,
+            nativeTouchSlop = touchSlop,
+            nativeSwipeThreshold = nativeThreshold,
+            downX = downX,
+            downY = downY
+        )
+    }
+
+    private fun performShortSwipe(gesture: GestureState) {
+        try {
+            val dx = gesture.finalDx
+            val absDx = abs(dx)
+            val context = (gesture.windowView as? View)?.context
+            if (context == null) return
+            val currentBigIsland = callNoArg(
+                gesture.windowView,
+                "getCurrentBigIslandState"
+            )
+            val controller = IslandPlaybackControllerResolver.resolveForSwipe(
+                context = context,
+                data = gesture.targetData,
+                hostRoot = currentBigIsland as? ViewGroup
+            )
+            val swipeBehavior = readSwipeBehavior()
+            if (swipeBehavior == RootConstants.ISLAND_SWIPE_BEHAVIOR_DEFAULT) {
+                return
+            }
+            val isNext = when (swipeBehavior) {
+                RootConstants.ISLAND_SWIPE_BEHAVIOR_TRACK_SWITCH_REVERSED -> dx > 0f
+                else -> dx < 0f
+            }
+            val commandName = if (isNext) "skipToNext" else "skipToPrevious"
+            if (controller == null) {
+                HookLogger.d(
+                    TAG,
+                    "媒体岛短距离横滑切歌: direction=${if (isNext) "下一首" else "上一首"}, " +
+                            "command=false, distance=${absDx.toInt()}, " +
+                            "nativeThreshold=${gesture.nativeSwipeThreshold.toInt()}"
+                )
+                return
+            }
+            try {
+                if (isNext) {
+                    controller.transportControls.skipToNext()
+                } else {
+                    controller.transportControls.skipToPrevious()
+                }
+                HookLogger.d(
+                    TAG,
+                    "媒体岛短距离横滑切歌: direction=${if (isNext) "下一首" else "上一首"}, " +
+                            "command=true, distance=${absDx.toInt()}, " +
+                            "nativeThreshold=${gesture.nativeSwipeThreshold.toInt()}"
+                )
+            } catch (error: Throwable) {
+                HookLogger.w(
+                    TAG,
+                    "媒体岛短距离横滑命令失败: command=$commandName, distance=${absDx.toInt()}",
+                    error
+                )
+            }
+        } catch (error: Throwable) {
+            HookLogger.w(
+                TAG,
+                "媒体岛短距离横滑处理失败",
+                error
+            )
+        }
+    }
+
+    private fun findMediaTouchTarget(
+        interactor: Any,
+        windowView: Any
+    ): Any? {
+        if (readSwipeBehavior() == RootConstants.ISLAND_SWIPE_BEHAVIOR_DEFAULT) return null
+
+        // Keep native media-button, seek-bar, freeform-animation and long-press gestures intact.
+        val downInSeekBar = readBoolean(interactor, "downInSeekBar")
+        val downInMedia = readBoolean(interactor, "downInMedia")
+        val downInFreeformAnim = readBoolean(interactor, "downInFreeformAnim")
+        val longClickReceived = readBoolean(interactor, "longClickReceived")
+        if (downInSeekBar != false ||
+            downInMedia != false ||
+            downInFreeformAnim != false ||
+            longClickReceived != false
+        ) {
+            return null
+        }
+
+        // The feature belongs only to Xiaomi's summary big island. Small/expanded/show-once
+        // targets remain fully native, which is important when another island is promoted after
+        // the media island is expanded.
+        val downInBigIsland = readBoolean(interactor, "downInBigIsland")
+        if (downInBigIsland != true) return null
+
+        val view = callNoArg(windowView, "getCurrentBigIslandState") ?: return null
+        val data = IslandProbeUtils.getCurrentIslandData(view) ?: return null
+        return data.takeIf {
+            IslandModificationTargetPolicy.allowsCurrentScope(
+                data = it,
+                hostRoot = view as? ViewGroup
+            )
+        }
+    }
+
+    private fun readSwipeBehavior(): Int {
+        return runCatching {
+            HookEntry.instance?.prefs?.getInt(
+                RootConstants.KEY_HOOK_ISLAND_SWIPE_BEHAVIOR,
+                RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_BEHAVIOR
+            ) ?: RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_BEHAVIOR
+        }.getOrDefault(RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_BEHAVIOR).takeIf {
+            it == RootConstants.ISLAND_SWIPE_BEHAVIOR_DEFAULT ||
+                    it == RootConstants.ISLAND_SWIPE_BEHAVIOR_TRACK_SWITCH ||
+                    it == RootConstants.ISLAND_SWIPE_BEHAVIOR_TRACK_SWITCH_REVERSED
+        } ?: RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_BEHAVIOR
+    }
+
+    private fun resolveTouchSlop(
+        interactor: Any,
+        windowView: Any
+    ): Float {
+        val touchConstants = readField(interactor, "touchConstants")
+        val touchSlop = (callNoArg(callNoArg(touchConstants, "getTouchSlop"), "getValue") as? Number)
+            ?.toFloat()
+            ?.takeIf { it.isFinite() && it > 0f }
+        if (touchSlop != null) return touchSlop
+
+        val context = (windowView as? View)?.context
+        return context?.let { ViewConfiguration.get(it).scaledTouchSlop.toFloat() }
+            ?: Float.POSITIVE_INFINITY
+    }
+
+    private fun resolveSwipeThreshold(
+        interactor: Any,
+        windowView: Any
+    ): Float {
+        val touchConstants = readField(interactor, "touchConstants")
+        val threshold = (callNoArg(callNoArg(touchConstants, "getSwipeThreshold"), "getValue") as? Number)
+            ?.toFloat()
+            ?.takeIf { it.isFinite() && it > 0f }
+        if (threshold != null) return threshold
+
+        val density = (windowView as? View)?.resources?.displayMetrics?.density
+            ?.takeIf { it.isFinite() && it > 0f }
+            ?: 1f
+        return FALLBACK_SWIPE_THRESHOLD_DP * density
+    }
+
+    private fun resolveConfiguredSwipeThreshold(windowView: Any): Float {
+        val thresholdDp = runCatching {
+            HookEntry.instance?.prefs?.getInt(
+                RootConstants.KEY_HOOK_ISLAND_SWIPE_THRESHOLD_DP,
+                RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_THRESHOLD_DP
+            ) ?: RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_THRESHOLD_DP
+        }.getOrDefault(RootConstants.DEFAULT_HOOK_ISLAND_SWIPE_THRESHOLD_DP).coerceIn(
+            RootConstants.MIN_HOOK_ISLAND_SWIPE_THRESHOLD_DP,
+            RootConstants.MAX_HOOK_ISLAND_SWIPE_THRESHOLD_DP
+        )
+        val density = (windowView as? View)?.resources?.displayMetrics?.density
+            ?.takeIf { it.isFinite() && it > 0f }
+            ?: 1f
+        return thresholdDp * density
+    }
+
+    private fun createThresholdFlowOverride(
+        original: Any,
+        returnType: Class<*>
+    ): Any? {
+        if (!returnType.isInterface) return null
+
+        return runCatching {
+            synchronized(overriddenThresholdFlows) {
+                val cached = overriddenThresholdFlows[original]
+                if (cached != null) {
+                    cached
+                } else {
+                    val originalReference = WeakReference(original)
+                    val handler = InvocationHandler { _, method, args ->
+                        val overrideValue = if (
+                            method.name == "getValue" && method.parameterTypes.isEmpty()
+                        ) {
+                            activeSwipeThresholdOverride.get()
+                        } else {
+                            null
+                        }
+                        if (overrideValue != null) {
+                            overrideValue
+                        } else {
+                            val target = originalReference.get()
+                            if (target == null) {
+                                defaultValue(method.returnType)
+                            } else {
+                                runCatching {
+                                    method.invoke(target, *(args ?: emptyArray()))
+                                }.getOrElse { defaultValue(method.returnType) }
+                            }
+                        }
+                    }
+                    val proxy = Proxy.newProxyInstance(
+                        returnType.classLoader ?: original.javaClass.classLoader,
+                        arrayOf(returnType),
+                        handler
+                    )
+                    overriddenThresholdFlows[original] = proxy
+                    proxy
+                }
+            }
+        }.onFailure {
+            HookLogger.w(TAG, "创建原生滑动阈值 Flow 代理失败，保留原生阈值", it)
+        }.getOrNull()
+    }
+
+    private fun defaultValue(type: Class<*>): Any? {
+        return when (type) {
+            Boolean::class.javaPrimitiveType -> false
+            Byte::class.javaPrimitiveType -> 0.toByte()
+            Short::class.javaPrimitiveType -> 0.toShort()
+            Int::class.javaPrimitiveType -> 0
+            Long::class.javaPrimitiveType -> 0L
+            Float::class.javaPrimitiveType -> 0f
+            Double::class.javaPrimitiveType -> 0.0
+            Char::class.javaPrimitiveType -> '\u0000'
+            else -> null
+        }
+    }
+
+    private fun readBoolean(receiver: Any, fieldName: String): Boolean? {
+        return readField(receiver, fieldName) as? Boolean
+    }
+
+    private fun readField(receiver: Any, fieldName: String): Any? {
+        val field = findField(receiver.javaClass, fieldName) ?: return null
+        field.isAccessible = true
+        return field.get(receiver)
+    }
+
+    private fun findField(clazz: Class<*>, fieldName: String): Field? {
+        var current: Class<*>? = clazz
+        while (current != null) {
+            current.declaredFields.firstOrNull { it.name == fieldName }?.let { return it }
+            current = current.superclass
+        }
+        return null
+    }
+
+    private fun callNoArg(receiver: Any?, name: String): Any? {
+        val target = receiver ?: return null
+        val method: Method = target.javaClass.methods.firstOrNull {
+            it.name == name && it.parameterTypes.isEmpty()
+        } ?: return null
+        method.isAccessible = true
+        return method.invoke(target)
+    }
+
+}

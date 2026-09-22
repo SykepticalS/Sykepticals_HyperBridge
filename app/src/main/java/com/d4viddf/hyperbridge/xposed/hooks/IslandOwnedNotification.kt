@@ -25,6 +25,10 @@ internal data class OwnedIslandSnapshot(
             ?: sbn?.notification?.extras?.getLong(IslandProtocol.EXTRA_GENERATION, Long.MIN_VALUE)
             ?: Long.MIN_VALUE
     val marqueeEnabled: Boolean get() = extras.getBoolean(IslandProtocol.EXTRA_MARQUEE_ENABLED, false)
+    val autoExpandEntrance: Boolean
+        get() = extras.getBoolean(IslandProtocol.EXTRA_AUTO_EXPAND_ENTRANCE, false)
+    val suppressesAppearAnimation: Boolean
+        get() = extras.getBoolean("miui.island.updateNoFloat", false)
     val islandGlowMode: GlowMode get() = GlowMode.parse(extras.getString(IslandProtocol.EXTRA_GLOW_ISLAND_MODE)) ?: GlowMode.OFF
     val focusGlowMode: GlowMode get() = GlowMode.parse(extras.getString(IslandProtocol.EXTRA_GLOW_FOCUS_MODE)) ?: GlowMode.OFF
     val forceIsland: Boolean get() = extras.getBoolean(IslandProtocol.EXTRA_FORCE_ISLAND_GLOW, false)

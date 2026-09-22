@@ -15,6 +15,9 @@ import com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig
 import com.d4viddf.hyperbridge.models.ScreenRecordingLeftDesign
 import com.d4viddf.hyperbridge.models.ScreenRecordingRightDesign
 import com.d4viddf.hyperbridge.receiver.ScreenRecordingActionReceiver
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingSession
 import io.github.d4viddf.hyperisland_kit.HyperAction
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
@@ -40,15 +43,15 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         pauseIntent: PendingIntent? = null,
         stopIntent: PendingIntent? = null,
     ): HyperIslandData {
-        val compact = compactText ?: if (session.countdownRemaining > 0) {
-            context.getString(R.string.screen_recording_starting)
-        } else {
-            context.getString(R.string.screen_recording_compact)
+        val compact = compactText ?: when {
+            session.countdownRemaining > 0 -> context.getString(R.string.screen_recording_starting)
+            session.paused -> context.getString(R.string.screen_recording_paused)
+            else -> context.getString(R.string.screen_recording_compact)
         }
-        val expanded = expandedText ?: if (session.countdownRemaining > 0) {
-            context.getString(R.string.screen_recording_starting)
-        } else {
-            context.getString(R.string.screen_recording_active)
+        val expanded = expandedText ?: when {
+            session.countdownRemaining > 0 -> context.getString(R.string.screen_recording_starting)
+            session.paused -> context.getString(R.string.screen_recording_paused)
+            else -> context.getString(R.string.screen_recording_active)
         }
         val builder = HyperIslandNotification.Builder(context, COUNTDOWN_BUSINESS, compact)
         val floatPresentation = IslandFloatingPresentationPolicy.resolve(
@@ -70,7 +73,6 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
 
         val ticker = getColoredPicture(PIC_TICKER, tickerIcon(), HIGHLIGHT_COLOR)
         builder.addPicture(ticker)
-        builder.addPicture(getTransparentPicture(PIC_HIDDEN))
         builder.addPicture(getColoredPicture(PIC_APP_BADGE, R.drawable.ic_screen_recording_app_badge_blank, "#FFFFFF"))
 
         val pausePending = pauseIntent ?: actionIntent(
@@ -129,7 +131,9 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         )
         builder.setChatInfo(
             title = expanded,
-            content = "",
+            // The first countdown post opens expanded. An empty body makes that card disappear.
+            // Recording keeps an empty subtitle so the expanded island only says "Recording..".
+            content = if (session.countdownRemaining > 0) compact else "",
             pictureKey = PIC_TICKER,
             appPkg = PIC_APP_BADGE,
             actionKeys = actionKeys,
@@ -141,8 +145,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
                 left = countdownLeft(design, compact),
                 right = ImageTextInfoRight(
                     type = 2,
-                    picInfo = PicInfo(type = 1, pic = PIC_HIDDEN),
-                    textInfo = TextInfo(title = session.countdownRemaining.toString(), content = ""),
+                    textInfo = TextInfo(title = session.countdownRemaining.toString(), content = null),
                 ),
             )
             design.right == ScreenRecordingRightDesign.TIMER -> builder.setBigIslandCountUp(session.timerStartedAt, PIC_TICKER)
@@ -150,14 +153,15 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         }
         builder.setSmallIsland(PIC_TICKER)
 
+        val json = builder.buildJsonParam(
+            HyperIslandProtocolOptions(
+                islandProperty = 2,
+                timerSystemCurrentMillis = now.takeIf { session.countdownRemaining <= 0 },
+            )
+        )
         return HyperIslandData(
             builder.buildResourceBundle(),
-            builder.buildJsonParam(
-                HyperIslandProtocolOptions(
-                    islandProperty = 2,
-                    timerSystemCurrentMillis = now.takeIf { session.countdownRemaining <= 0 },
-                )
-            ),
+            if (session.paused) withLeftTitle(json, compact) else json,
             HIGHLIGHT_COLOR,
         )
     }
@@ -261,6 +265,20 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         }
     }
 
+    private fun withLeftTitle(jsonParam: String, title: String): String = runCatching {
+        val root = JsonParser.parseString(jsonParam).asJsonObject
+        val left = root.getAsJsonObject("param_v2")
+            ?.getAsJsonObject("param_island")
+            ?.getAsJsonObject("bigIslandArea")
+            ?.getAsJsonObject("imageTextInfoLeft")
+            ?: return jsonParam
+        left.add("textInfo", JsonObject().apply {
+            addProperty("title", title)
+            addProperty("content", "")
+        })
+        Gson().toJson(root)
+    }.getOrDefault(jsonParam)
+
     private fun countdownLeft(design: ScreenRecordingDesignConfig, compact: String): ImageTextInfoLeft =
         when (design.left) {
             ScreenRecordingLeftDesign.ICON_ONLY -> ImageTextInfoLeft(
@@ -310,7 +328,6 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         const val ACTION_PAUSE = "miui.focus.action_1"
         const val ACTION_STOP = "miui.focus.action_2"
         const val PIC_TICKER = "miui.focus.pic_ticker"
-        const val PIC_HIDDEN = "miui.focus.pic_hidden"
         const val PIC_APP_BADGE = "miui.focus.pic_recorder_app_badge"
         const val PIC_STOP = "miui.focus.pic_stop"
         const val PIC_STOP_DARK = "miui.focus.pic_stop_dark"
@@ -360,7 +377,11 @@ internal object ScreenRecordingPayloadFactory {
                     type = 1,
                     pic = ScreenRecordingTranslator.PIC_TICKER
                 ),
-                textInfo = null
+                textInfo = if (session.paused) {
+                    RecorderTextInfo(title = compactText, content = "")
+                } else {
+                    null
+                }
             )
             ScreenRecordingLeftDesign.ICON_AND_TEXT -> RecorderImageTextInfo(
                 type = 1,

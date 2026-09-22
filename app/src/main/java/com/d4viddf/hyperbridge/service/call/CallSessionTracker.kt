@@ -295,6 +295,26 @@ class CallSessionTracker(
             return ResolvedState(CallState.ACTIVE, connectedAt, source, transitionEvidence, reason)
         }
 
+        val elapsed = plausibleBase?.let { input.observedAt - it }
+        if (previous == null &&
+            classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
+            classification.state != CallState.INCOMING_RINGING &&
+            !classification.hasAnswer &&
+            elapsed != null &&
+            elapsed >= RECOVERED_ACTIVE_ELAPSED_MS
+        ) {
+            // Process restart has no prior observation, so the answer transition is invisible.
+            // A chronometer that is already well underway is an in-progress call. A chronometer
+            // that starts with the first callback is still only dialing.
+            return ResolvedState(
+                CallState.ACTIVE,
+                plausibleBase,
+                ConnectedAtSource.SOURCE_CHRONOMETER,
+                CallActiveEvidence.CHRONOMETER_PRESENT,
+                "recovered-running-chronometer"
+            )
+        }
+
         if (previous == null && classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT) {
             // Some VoIP apps expose a chronometer from call initiation. A first observation with
             // only Hang Up is not enough evidence that the remote party answered.
@@ -380,5 +400,8 @@ class CallSessionTracker(
 
     private companion object {
         const val MATERIAL_BASE_CHANGE_MS = 1_000L
+
+        /** First sight of a chronometer younger than this is still dialing, not a restarted call. */
+        const val RECOVERED_ACTIVE_ELAPSED_MS = 3_000L
     }
 }

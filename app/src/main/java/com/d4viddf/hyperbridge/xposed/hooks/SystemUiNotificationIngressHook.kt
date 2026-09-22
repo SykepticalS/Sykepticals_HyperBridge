@@ -184,7 +184,10 @@ object SystemUiNotificationIngressHook {
                     activeSources.computeIfPresent(sbn.key) { _, current ->
                         current.takeUnless { sameGeneration(it, sbn) }
                     }
-                    if (isOwnedProxy(sbn) && NotificationLifecyclePolicy.isUserInitiatedRemoval(reason)) {
+                    if (isOwnedProxy(sbn) &&
+                        NotificationLifecyclePolicy.isUserInitiatedRemoval(reason) &&
+                        !NotificationLifecyclePolicy.preservesActiveIsland(reason)
+                    ) {
                         ActiveIslandDismissHook.dismissKey(sbn.key)
                     }
                     processingExecutor.execute {

@@ -59,7 +59,7 @@ class ScreenRecordingSavedTranslator(
     }
 }
 
-internal object ScreenRecordingSavedPayloadFactory {
+object ScreenRecordingSavedPayloadFactory {
     private val json = Json {
         encodeDefaults = true
         explicitNulls = false
@@ -72,23 +72,25 @@ internal object ScreenRecordingSavedPayloadFactory {
         sourceIconKey: String,
         showNotification: Boolean,
         timeout: Int?,
-        highlightColor: String
+        highlightColor: String,
+        enableFloat: Boolean = false,
+        expandedTime: Int = 0,
     ): String = json.encodeToString(
         HyperIslandPayload(
             paramV2 = ParamV2(
                 protocol = 3,
                 business = business,
                 ticker = compactTitle,
-                enableFloat = false,
+                enableFloat = enableFloat,
                 isShowNotification = showNotification,
-                islandFirstFloat = false,
+                islandFirstFloat = enableFloat,
                 reopen = false,
                 paramIsland = ParamIsland(
                     islandProperty = 1,
                     islandPriority = 2,
                     islandTimeout = timeout,
                     dismissIsland = true,
-                    expandedTime = 0,
+                    expandedTime = expandedTime,
                     highlightColor = highlightColor,
                     // Keep the proven Permanent Island big-area anchor, but populate its two
                     // visual slots. With no content intent and no expanded content this remains

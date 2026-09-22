@@ -133,6 +133,7 @@ class MessagePresentationFamilyTrackerTest {
 
         assertFalse(removal.familyEnded)
         assertFalse(removal.removedPrimary)
+        assertTrue(removal.visibleSourceRemains)
         assertEquals("child", removal.fallbackSourceKey)
         assertEquals(1, tracker.sourceCount(logicalId))
     }
@@ -146,6 +147,7 @@ class MessagePresentationFamilyTrackerTest {
 
         assertFalse(removal.familyEnded)
         assertTrue(removal.removedPrimary)
+        assertFalse(removal.visibleSourceRemains)
         assertEquals("summary", removal.fallbackSourceKey)
         assertEquals(logicalId, tracker.logicalIdForSource("summary"))
     }

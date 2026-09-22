@@ -11,6 +11,7 @@ import android.os.Parcel
 import android.os.ResultReceiver
 import android.os.SystemClock
 import android.util.Log
+import com.d4viddf.hyperbridge.debug.AgentDebugLog
 import com.d4viddf.hyperbridge.models.IslandVisualMetadata
 import com.d4viddf.hyperbridge.processing.IIslandDispatcher
 import java.security.SecureRandom
@@ -112,7 +113,19 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
         })
         check(latch.await(3, TimeUnit.SECONDS)) { "SystemUI island post acknowledgement timed out" }
         check(resultCode.get() == IslandProtocol.RESULT_POSTED) { "SystemUI rejected island post" }
-    }.onFailure { Log.e(TAG, "post rejected id=$id", it) }
+    }.onFailure {
+        Log.e(TAG, "post rejected id=$id", it)
+        // #region agent log
+        if (metadata.semanticType == "SCREEN_RECORDING") {
+            AgentDebugLog.log(
+                "B",
+                "SystemUiIslandBackend.post",
+                "post rejected",
+                "{\"id\":$id,\"dispatcher\":${dispatcher != null},\"error\":\"${it.javaClass.simpleName}:${it.message?.replace("\"", "'")}\"}",
+            )
+        }
+        // #endregion
+    }
 
     override fun cancel(id: Int, logicalToken: String, generation: Long): Result<Unit> = runCatching {
         send(Intent(IslandProtocol.ACTION_CANCEL).apply {

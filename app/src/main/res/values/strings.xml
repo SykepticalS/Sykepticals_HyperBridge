@@ -728,6 +728,7 @@
     <string name="screen_recording_title">Screen recording</string>
     <string name="screen_recording_active">Recording..</string>
     <string name="screen_recording_compact">Recording..</string>
+    <string name="screen_recording_paused">Paused.</string>
     <string name="screen_recording_starting">Starting…</string>
     <string name="screen_recording_done">Done recording.</string>
     <string name="screen_recording_stop">Stop</string>

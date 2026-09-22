@@ -114,6 +114,32 @@ class ExpiredIslandRegistryTest {
     }
 
     @Test
+    fun recoveryTreatsPostTimeDriftAsTheSameExpiredEvent() {
+        val registry = ExpiredIslandRegistry(retentionMs = 1_000)
+        registry.record(ExpiredIslandRecord("conversation", "source", 7, expiredAt = 100))
+
+        assertEquals(RecoveryExpiry.SAME_EVENT, registry.recoveryExpiry("source", now = 200))
+        assertEquals(
+            RecoveryExpiry.SAME_EVENT,
+            registry.recoveryExpiry("source", now = 200, messageEventFingerprint = messageEvent(100L))
+        )
+    }
+
+    @Test
+    fun recoveryAllowsAGenuinelyNewMessageEvent() {
+        val registry = ExpiredIslandRegistry(retentionMs = 1_000)
+        registry.record(
+            ExpiredIslandRecord("conversation", "source", 7, 100, messageEvent(100L))
+        )
+
+        assertEquals(
+            RecoveryExpiry.NEW_EVENT,
+            registry.recoveryExpiry("source", now = 200, messageEventFingerprint = messageEvent(200L))
+        )
+        assertEquals(RecoveryExpiry.ABSENT, registry.recoveryExpiry("other-source", now = 200))
+    }
+
+    @Test
     fun tombstonesExpireAndRemainBounded() {
         val registry = ExpiredIslandRegistry(maxEntries = 1, retentionMs = 100)
         registry.record(ExpiredIslandRecord("one", "source-one", 1, expiredAt = 0))

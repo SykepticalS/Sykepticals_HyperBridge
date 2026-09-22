@@ -795,12 +795,14 @@ object ScreenRecorderHook {
         val compact = when {
             snapshot.state == ScreenRecorderContract.STATE_STARTING ->
                 stringOrFallback(context, R.string.screen_recording_starting, "Starting…")
-            snapshot.state == ScreenRecorderContract.STATE_PAUSED -> text.notificationPausedTitle
+            snapshot.state == ScreenRecorderContract.STATE_PAUSED ->
+                stringOrFallback(context, R.string.screen_recording_paused, "Paused.")
             else -> stringOrFallback(context, R.string.screen_recording_compact, "Recording..")
         }
         val expanded = when {
             snapshot.state == ScreenRecorderContract.STATE_STARTING -> compact
-            snapshot.state == ScreenRecorderContract.STATE_PAUSED -> text.notificationPausedTitle
+            snapshot.state == ScreenRecorderContract.STATE_PAUSED ->
+                stringOrFallback(context, R.string.screen_recording_paused, "Paused.")
             else -> stringOrFallback(context, R.string.screen_recording_compact, "Recording..")
         }
         return ScreenRecordingTranslator(context).buildFocusExtras(

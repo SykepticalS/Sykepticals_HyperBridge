@@ -176,6 +176,7 @@ object NotificationLifecyclePolicy {
     const val REASON_CLICK = 1
     const val REASON_CANCEL = 2
     const val REASON_CANCEL_ALL = 3
+    const val REASON_PACKAGE_CHANGED = 5
     const val REASON_APP_CANCEL = 8
     const val REASON_APP_CANCEL_ALL = 9
     const val REASON_LISTENER_CANCEL = 10
@@ -230,28 +231,43 @@ object NotificationLifecyclePolicy {
         reason == REASON_APP_CANCEL || reason == REASON_APP_CANCEL_ALL
 
     /**
-     * Shade swipe/clear is a user dismissal. App cancel of a message/standard source is
-     * regrouping (WhatsApp follow-up) and must not preempt the posted island.
+     * Shade "clear all" and the recents overview "clear all" remove notifications in bulk.
+     * Neither one is the user dismissing an island. Recents cleanup force-stops apps and
+     * cancels their notifications with [REASON_PACKAGE_CHANGED].
+     */
+    fun preservesActiveIsland(reason: Int): Boolean = when (reason) {
+        REASON_CANCEL_ALL,
+        REASON_PACKAGE_CHANGED,
+        REASON_LISTENER_CANCEL_ALL -> true
+        else -> false
+    }
+
+    /**
+     * Shade swipe/clear is a user dismissal. An app that clears its own notification ends
+     * the island too, once that source does not come back. [isAppCancellation] does not
+     * change the answer: the caller waits out the replacement window and drops the
+     * dismissal if a follow-up is posted. A still-visible conversation alias is handled
+     * before this check and must not reach it. [regroupingProtected] records that case.
      */
     fun shouldDismissIslandOnSourceRemoval(
         type: NotificationType?,
         dismissWithOriginal: Boolean,
-        isAppCancellation: Boolean
+        @Suppress("UNUSED_PARAMETER") isAppCancellation: Boolean,
+        @Suppress("UNUSED_PARAMETER") regroupingProtected: Boolean =
+            type == NotificationType.MESSAGE || type == NotificationType.STANDARD,
     ): Boolean {
-        if (type == NotificationType.MESSAGE || type == NotificationType.STANDARD) {
-            return dismissWithOriginal && !isAppCancellation
-        }
         if (dismissesWithSource(type)) return true
-        if (!dismissWithOriginal) return false
-        return !(isAppCancellation && isProgressLifecycle(type))
+        return dismissWithOriginal
     }
 
     /** A periodic snapshot cannot distinguish app regrouping from a user dismissal. */
     fun shouldReapMissingSource(
         type: NotificationType?,
         removeOriginalNotification: Boolean,
-        dismissWithOriginal: Boolean
+        dismissWithOriginal: Boolean,
+        retainedWithoutSource: Boolean = false
     ): Boolean {
+        if (retainedWithoutSource) return false
         if (type == NotificationType.MESSAGE ||
             type == NotificationType.STANDARD ||
             isProgressLifecycle(type)
