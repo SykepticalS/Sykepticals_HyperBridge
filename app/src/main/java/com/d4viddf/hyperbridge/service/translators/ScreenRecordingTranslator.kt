@@ -68,7 +68,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
             highlightColor = HIGHLIGHT_COLOR,
         )
 
-        val ticker = getColoredPicture(PIC_TICKER, tickerIcon(), "#FFFFFF")
+        val ticker = getColoredPicture(PIC_TICKER, tickerIcon(), HIGHLIGHT_COLOR)
         builder.addPicture(ticker)
         builder.addPicture(getTransparentPicture(PIC_HIDDEN))
         builder.addPicture(getColoredPicture(PIC_APP_BADGE, R.drawable.ic_screen_recording_app_badge_blank, "#FFFFFF"))
@@ -84,7 +84,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
             val pausePicture = getColoredPicture(
                 if (session.paused) PIC_RESUME else PIC_PAUSE,
                 if (session.paused) R.drawable.ic_focus_resume_light else R.drawable.ic_focus_pause_light,
-                "#FFFFFF",
+                HIGHLIGHT_COLOR,
             )
             builder.addPicture(pausePicture)
             builder.addAction(
@@ -103,7 +103,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
             actionKeys += ACTION_PAUSE
         }
         if (session.capabilities.canStop) {
-            val stopPicture = getColoredPicture(PIC_STOP, R.drawable.ic_screen_recording_stop_light, "#FFFFFF")
+            val stopPicture = getColoredPicture(PIC_STOP, R.drawable.ic_screen_recording_stop_light, HIGHLIGHT_COLOR)
             builder.addPicture(stopPicture)
             builder.addAction(
                 HyperAction(
@@ -124,8 +124,8 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         val timerType = if (session.paused) TIMER_TYPE_PAUSED else TIMER_TYPE_COUNT_UP
         val timer = TimerInfo(
             timerType = timerType,
-            timerWhen = session.startedAt,
-            timerTotal = session.startedAt,
+            timerWhen = session.timerStartedAt,
+            timerTotal = session.timerStartedAt,
             timerSystemCurrent = now,
         )
         builder.setChatInfo(
@@ -146,7 +146,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
                     textInfo = TextInfo(title = session.countdownRemaining.toString(), content = ""),
                 ),
             )
-            design.right == ScreenRecordingRightDesign.TIMER -> builder.setBigIslandCountUp(session.startedAt, PIC_TICKER)
+            design.right == ScreenRecordingRightDesign.TIMER -> builder.setBigIslandCountUp(session.timerStartedAt, PIC_TICKER)
             else -> builder.setBigIslandInfo(left = countdownLeft(design, compact))
         }
         builder.setSmallIsland(PIC_TICKER)
@@ -200,20 +200,20 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         val canStop = session.capabilities.canStop
         val canPause = session.capabilities.canPause
         val pictures = Bundle().apply {
-            putParcelable(PIC_TICKER, Icon.createWithResource(picturePackage, tickerIcon))
+            putParcelable(PIC_TICKER, getColoredPicture(PIC_TICKER, tickerIcon, HIGHLIGHT_COLOR).icon)
             putParcelable(
                 PIC_APP_BADGE,
                 Icon.createWithResource(picturePackage, R.drawable.ic_screen_recording_app_badge_blank),
             )
             if (canPause) {
-                putParcelable(PIC_PAUSE, Icon.createWithResource(picturePackage, R.drawable.ic_focus_pause_light))
-                putParcelable(PIC_PAUSE_DARK, Icon.createWithResource(picturePackage, R.drawable.ic_focus_pause))
-                putParcelable(PIC_RESUME, Icon.createWithResource(picturePackage, R.drawable.ic_focus_resume_light))
-                putParcelable(PIC_RESUME_DARK, Icon.createWithResource(picturePackage, R.drawable.ic_focus_resume))
+                putParcelable(PIC_PAUSE, getColoredPicture(PIC_PAUSE, R.drawable.ic_focus_pause_light, HIGHLIGHT_COLOR).icon)
+                putParcelable(PIC_PAUSE_DARK, getColoredPicture(PIC_PAUSE_DARK, R.drawable.ic_focus_pause, HIGHLIGHT_COLOR).icon)
+                putParcelable(PIC_RESUME, getColoredPicture(PIC_RESUME, R.drawable.ic_focus_resume_light, HIGHLIGHT_COLOR).icon)
+                putParcelable(PIC_RESUME_DARK, getColoredPicture(PIC_RESUME_DARK, R.drawable.ic_focus_resume, HIGHLIGHT_COLOR).icon)
             }
             if (canStop) {
-                putParcelable(PIC_STOP, Icon.createWithResource(picturePackage, R.drawable.ic_screen_recording_stop_light))
-                putParcelable(PIC_STOP_DARK, Icon.createWithResource(picturePackage, R.drawable.ic_screen_recording_stop_dark))
+                putParcelable(PIC_STOP, getColoredPicture(PIC_STOP, R.drawable.ic_screen_recording_stop_light, HIGHLIGHT_COLOR).icon)
+                putParcelable(PIC_STOP_DARK, getColoredPicture(PIC_STOP_DARK, R.drawable.ic_screen_recording_stop_dark, HIGHLIGHT_COLOR).icon)
             }
         }
         return Bundle().apply {
@@ -344,14 +344,14 @@ internal object ScreenRecordingPayloadFactory {
             ScreenRecordingTranslator.TIMER_TYPE_COUNT_UP
         }
         val timerInfo = RecorderTimerInfo(
-            timerWhen = session.startedAt,
+            timerWhen = session.timerStartedAt,
             timerType = timerType,
             timerSystemCurrent = now
         )
         val chatTimerInfo = RecorderChatTimerInfo(
-            timerWhen = session.startedAt,
+            timerWhen = session.timerStartedAt,
             timerType = timerType,
-            timerTotal = session.startedAt,
+            timerTotal = session.timerStartedAt,
             timerSystemCurrent = now
         )
         val imageTextInfoLeft = when (design.left) {

@@ -105,6 +105,17 @@ object ScreenRecorderHook {
     }
 
     private fun onRecorderContextReady(context: Context, classLoader: ClassLoader, module: XposedModule) {
+        initializeControlClient(context, module)
+        runCatching { discoverAndHookComponents(context, classLoader, module) }
+            .onFailure { module.log("screen recorder component discovery failed: ${it.message}") }
+    }
+
+    /**
+     * Package-loaded callbacks can run after Application.attach/onCreate on some recorder builds.
+     * RecorderService is the authoritative lifecycle point, so initializing there as well prevents
+     * an active recording from being left without a state-service connection and fallback island.
+     */
+    private fun initializeControlClient(context: Context, module: XposedModule) {
         ScreenRecorderControlClient.initialize(context) { command, extras ->
             handleControlCommand(context, command, extras, module)
         }
@@ -115,8 +126,6 @@ object ScreenRecorderHook {
                 refreshRecordingNotification(snapshot, module)
             }
         }
-        runCatching { discoverAndHookComponents(context, classLoader, module) }
-            .onFailure { module.log("screen recorder component discovery failed: ${it.message}") }
     }
 
     @Suppress("DEPRECATION")
@@ -527,7 +536,10 @@ object ScreenRecorderHook {
             module.hook(onCreate).intercept { chain ->
                 val result = chain.proceed()
                 val service = chain.thisObject as? Service
-                if (service != null) hookRuntimeRecorderValidation(module, serviceClass, service)
+                if (service != null) {
+                    initializeControlClient(service, module)
+                    hookRuntimeRecorderValidation(module, serviceClass, service)
+                }
                 result
             }
         }
@@ -536,6 +548,7 @@ object ScreenRecorderHook {
                 onStartCommand.isAccessible = true
                 module.hook(onStartCommand).intercept { chain ->
                     val service = chain.thisObject as? Service ?: return@intercept chain.proceed()
+                    initializeControlClient(service, module)
                     val intent = chain.args.getOrNull(0) as? Intent ?: return@intercept chain.proceed()
                     if (intent.getBooleanExtra(ScreenRecorderContract.EXTRA_TOGGLE_PAUSE, false)) {
                         if (ScreenRecorderControlClient.snapshot.state == ScreenRecorderContract.STATE_PAUSED) {
@@ -768,12 +781,15 @@ object ScreenRecorderHook {
         )
 
     private fun buildFocusExtras(
-        context: Context,
+        recorderContext: Context,
         snapshot: RecorderSnapshot,
         text: ScreenRecorderUiText,
         pauseIntent: PendingIntent,
         stopIntent: PendingIntent,
     ): Bundle {
+        // These R values belong to HyperBridge. Resolving them through the recorder package
+        // throws NotFoundException and causes Xiaomi's entire focus payload to be discarded.
+        val context = screenRecorderContentContext(recorderContext)
         val session = recordingSessionFrom(snapshot)
         val compact = when {
             snapshot.state == ScreenRecorderContract.STATE_STARTING ->

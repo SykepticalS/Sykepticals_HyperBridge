@@ -185,10 +185,33 @@ class ScreenRecordingPayloadFactoryTest {
         assertFalse(param.has("animTextInfo"))
     }
 
+    @Test
+    fun pausedTimerUsesAccumulatedActiveDurationOrigin() {
+        val root = JsonParser.parseString(
+            payload(
+                canStop = true,
+                paused = true,
+                timerStartedAt = 6_500L,
+            )
+        ).asJsonObject
+        val param = root.getAsJsonObject("param_v2")
+        val timer = param.getAsJsonObject("param_island")
+            .getAsJsonObject("bigIslandArea")
+            .getAsJsonObject("sameWidthDigitInfo")
+            .getAsJsonObject("timerInfo")
+
+        assertEquals(6_500L, timer["timerWhen"].asLong)
+        assertEquals(2, timer["timerType"].asInt)
+        assertEquals(6_500L, param.getAsJsonObject("chatInfo")
+            .getAsJsonObject("timerInfo")["timerTotal"].asLong)
+    }
+
     private fun payload(
         canStop: Boolean,
         design: com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig = com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig(),
         countdownRemaining: Int = 0,
+        paused: Boolean = false,
+        timerStartedAt: Long = 1_000L,
         compactText: String = "Recording..",
         expandedText: String = "Recording screen..",
     ) = ScreenRecordingPayloadFactory.build(
@@ -198,7 +221,9 @@ class ScreenRecordingPayloadFactoryTest {
             packageName = "com.miui.screenrecorder",
             startedAt = 1_000L,
             capabilities = ScreenRecordingCapabilities(canStop = canStop),
+            paused = paused,
             countdownRemaining = countdownRemaining,
+            timerStartedAt = timerStartedAt,
         ),
         now = 9_000L,
         compactText = compactText,

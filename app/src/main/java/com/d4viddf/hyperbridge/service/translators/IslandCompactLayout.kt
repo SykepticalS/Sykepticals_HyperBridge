@@ -11,21 +11,20 @@ internal object IslandCompactLayout {
     /** Picture/business keys must stay on the logical conversation, not the changing bridge id. */
     fun pictureKey(logicalId: String): String = "pic_${logicalId.hashCode()}"
 
-    /** Left text longer than this scrolls instead of clipping. Count includes spaces. */
+    /** Left text at this length can already overflow the measured compact slot. */
     const val LEFT_MARQUEE_AFTER = 14
     /**
-     * Visible left/title cap, including a trailing ellipsis when truncated.
-     * Count includes spaces. Longer titles are truncated, not omitted.
+     * Source-character cap for the compact left/title slot. The ellipsis is appended after
+     * these 15 characters, so it does not consume part of the user-visible title allowance.
      */
-    const val LEFT_MAX_VISIBLE = 20
+    const val LEFT_MAX_CHARACTERS = 15
     private const val ELLIPSIS = "..."
 
     fun text(value: String): TextInfo = TextInfo(title = value, content = null)
 
     fun compactLeftText(value: String): String {
-        if (value.length <= LEFT_MAX_VISIBLE) return value
-        val keep = (LEFT_MAX_VISIBLE - ELLIPSIS.length).coerceAtLeast(0)
-        return value.take(keep) + ELLIPSIS
+        if (value.length <= LEFT_MAX_CHARACTERS) return value
+        return value.take(LEFT_MAX_CHARACTERS) + ELLIPSIS
     }
 
     fun leftShouldMarquee(value: String): Boolean {

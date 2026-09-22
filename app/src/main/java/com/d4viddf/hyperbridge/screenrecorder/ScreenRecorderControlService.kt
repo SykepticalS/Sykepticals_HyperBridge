@@ -47,8 +47,10 @@ class ScreenRecorderControlService : Service() {
                 broadcastSnapshot()
                 handler.postDelayed(this, ScreenRecorderContract.COUNTDOWN_TICK_MS)
             } else {
-                countdownRemaining = 0
-                broadcastSnapshot()
+                // Keep "1" visible until the recorder confirms MediaMuxer.start(). Emitting a
+                // synthetic starting/0 frame races that confirmation and makes Xiaomi remove the
+                // countdown island just before replacing it with the recording state.
+                countdownRemaining = 1
             }
         }
     }

@@ -1,12 +1,15 @@
 package com.d4viddf.hyperbridge.xposed.hooks
 
 import android.app.Notification
+import android.graphics.Rect
 import android.os.SystemClock
 import android.service.notification.StatusBarNotification
 import android.text.TextUtils
+import android.util.Log
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.TextView
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.models.MarqueeDismissMode
@@ -27,8 +30,12 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object MarqueeHook {
     private const val CONTENT_VIEW = "miui.systemui.dynamicisland.window.content.DynamicIslandContentView"
-    private const val MIN_CONTENT_READY_FRAMES = 2
-    private const val MAX_CONTENT_READY_FRAMES = 60
+    private const val MIN_CONTENT_READY_FRAMES = 8
+    private const val MAX_CONTENT_READY_FRAMES = 90
+    private const val REQUIRED_STABLE_GEOMETRY_FRAMES = 3
+    // TimerTextEffectView posts its native stop runnable at 600 ms. Keep our TextWatchers and
+    // scroll controller away until that transition has committed its final Spannable.
+    private const val NATIVE_TEXT_EFFECT_SETTLE_MS = 650L
     private val hookedLoaders = ConcurrentHashMap.newKeySet<Int>()
     private val controllers = WeakHashMap<TextView, Controller>()
     private val observed = WeakHashMap<TextView, Listeners>()
@@ -40,6 +47,8 @@ object MarqueeHook {
     private val originalMaxLines = WeakHashMap<TextView, Int>()
     private val originalEllipsize = WeakHashMap<TextView, TextUtils.TruncateAt?>()
     private val originalHorizontalScrolling = WeakHashMap<TextView, Boolean>()
+    private val compactAreas = WeakHashMap<TextView, WeakReference<ViewGroup>>()
+    private val visibilityRetries = WeakHashMap<ViewGroup, ViewTreeObserver.OnPreDrawListener>()
     @Volatile private var active = false
     @Volatile private var autoHideHeld = false
 
@@ -95,14 +104,22 @@ object MarqueeHook {
                     val island = chain.thisObject as? ViewGroup
                     val token = Any()
                     val visualBefore = island?.let(IslandLiveVisual::capture)
+                    val incoming = IslandOwnedNotification.fromIslandData(chain.args.firstOrNull())
+                    val nativeTextUpdate = incoming?.owned == true &&
+                        incoming.extras.getBoolean("miui.island.updateNoFloat", false) &&
+                        incoming.extras.getBoolean(
+                            IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION,
+                            false,
+                        )
                     if (island != null) {
                         islandTokens[island] = token
-                        resetIsland(island)
+                        if (nativeTextUpdate) pauseIsland(island) else resetIsland(island)
                         islandKeys[island]?.let(ActiveIslandDismissHook::invalidate)
                     }
                     val result = chain.proceed()
                     if (island == null || islandTokens[island] !== token) return@intercept result
                     val snapshot = IslandOwnedNotification.fromIslandData(chain.args.firstOrNull())
+                        ?: incoming
                     val sbn = snapshot?.sbn
                     if (sbn != null) islandNotifications[island] = sbn
                     val islandKey = runCatching {
@@ -125,6 +142,12 @@ object MarqueeHook {
                     }
                     val originalTimeout = extras.getInt(IslandProtocol.EXTRA_ORIGINAL_TIMEOUT, 10)
                     val generation = snapshot.generation
+                    if (nativeTextUpdate) {
+                        module.log(
+                            "HyperBridge: native compact text update protected " +
+                                "key=${snapshot.islandKey.orEmpty()} generation=$generation",
+                        )
+                    }
                     scheduleMarquee(
                         island = island,
                         token = token,
@@ -135,6 +158,11 @@ object MarqueeHook {
                         ongoing = ongoing,
                         notification = sbn ?: islandNotifications[island],
                         visualBefore = visualBefore,
+                        settleUntilMs = if (nativeTextUpdate) {
+                            SystemClock.uptimeMillis() + NATIVE_TEXT_EFFECT_SETTLE_MS
+                        } else {
+                            0L
+                        },
                     )
                     result
                 }
@@ -165,12 +193,67 @@ object MarqueeHook {
         ongoing: Boolean,
         notification: StatusBarNotification?,
         visualBefore: IslandLiveVisual.Snapshot?,
+        settleUntilMs: Long,
         attempt: Int = 0,
+        previousGeometrySignature: Int? = null,
+        stableGeometryFrames: Int = 0,
     ) {
         if (islandTokens[island] !== token) return
-        val contentReady = hasReadyCompactText(island)
-        val shouldWait = enabled &&
-            (attempt < MIN_CONTENT_READY_FRAMES || (!contentReady && attempt < MAX_CONTENT_READY_FRAMES))
+        val settleRemainingMs = settleUntilMs - SystemClock.uptimeMillis()
+        if (settleRemainingMs > 0L) {
+            island.postDelayed(
+                {
+                    scheduleMarquee(
+                        island,
+                        token,
+                        enabled,
+                        mode,
+                        originalTimeoutSecs,
+                        generation,
+                        ongoing,
+                        notification,
+                        visualBefore,
+                        settleUntilMs,
+                        attempt,
+                        previousGeometrySignature,
+                        stableGeometryFrames,
+                    )
+                },
+                settleRemainingMs,
+            )
+            return
+        }
+        val compactText = compactTextViews(island)
+        val contentReady = compactText.isNotEmpty() && compactText.all {
+            it.isAttachedToWindow && availableTextWidth(it) > 0
+        }
+        val geometrySignature = compactText.takeIf { contentReady }?.let(::geometrySignature)
+        val nextStableGeometryFrames = MarqueeMotion.nextStableFrames(
+            previousSignature = previousGeometrySignature,
+            currentSignature = geometrySignature,
+            previousStableFrames = stableGeometryFrames,
+        )
+        val geometryReady = MarqueeMotion.geometryReady(
+            attempt = attempt,
+            contentReady = contentReady,
+            stableFrames = nextStableGeometryFrames,
+            minimumFrames = MIN_CONTENT_READY_FRAMES,
+            maximumFrames = MAX_CONTENT_READY_FRAMES,
+            requiredStableFrames = REQUIRED_STABLE_GEOMETRY_FRAMES,
+        )
+        if (enabled && attempt >= MAX_CONTENT_READY_FRAMES && !contentReady) {
+            armVisibilityRetry(
+                island = island,
+                token = token,
+                mode = mode,
+                originalTimeoutSecs = originalTimeoutSecs,
+                generation = generation,
+                ongoing = ongoing,
+                notification = notification,
+            )
+            return
+        }
+        val shouldWait = enabled && !geometryReady
         if (shouldWait) {
             island.postOnAnimation {
                 scheduleMarquee(
@@ -183,10 +266,23 @@ object MarqueeHook {
                     ongoing,
                     notification,
                     visualBefore,
+                    settleUntilMs,
                     attempt + 1,
+                    geometrySignature,
+                    nextStableGeometryFrames,
                 )
             }
             return
+        }
+        if (enabled) {
+            val viewports = compactText.joinToString(",") { view ->
+                "${compactAreaName(view)}:${availableTextWidth(view)}/${laidOutTextWidth(view, view.text?.toString().orEmpty()).toInt()}"
+            }
+            Log.i(
+                "HyperBridge",
+                "HyperBridge: compact marquee geometry settled " +
+                    "key=${islandKeys[island].orEmpty()} attempt=$attempt views=[$viewports]",
+            )
         }
         val apply = {
             if (islandTokens[island] === token) {
@@ -215,6 +311,7 @@ object MarqueeHook {
         ongoing: Boolean = false,
         notification: StatusBarNotification? = null,
     ) {
+        removeVisibilityRetry(island)
         islandEnabled[island] = enabled
         val loops = if (enabled) mode.loops else 0
         val overrideTimeout = enabled && mode.overridesTimeout && loops > 0
@@ -336,10 +433,13 @@ object MarqueeHook {
             return
         }
         if (full != clean) view.text = clean
-        val visible = visibleWidth(view)
-        if (visible <= 0) return
-        val available = visible - view.paddingLeft - view.paddingRight
-        val overflow = view.paint.measureText(clean) > available
+        val available = availableTextWidth(view)
+        if (available <= 0) return
+        val overflow = MarqueeMotion.overflowDistance(
+            textWidthPx = view.paint.measureText(clean),
+            availableWidthPx = available,
+            tolerancePx = overflowTolerancePx(view),
+        ) > 0f
         if (!overflow) {
             stopMarquee(view)
             return
@@ -418,8 +518,101 @@ object MarqueeHook {
     }
 
     private fun resetIsland(island: ViewGroup) {
+        removeVisibilityRetry(island)
+        islandEnabled[island] = false
         islandSessions.remove(island)?.let { cancelFallback(island, it) }
-        controllers.keys.toList().filter { findIsland(it) === island }.forEach { stopMarquee(it) }
+        islandTextViews(island).forEach {
+            unobserve(it)
+            stopMarquee(it)
+        }
+    }
+
+    /**
+     * Quiesces our controller without putting Xiaomi's END ellipsize mode back. Restoring it
+     * before TimerTextEffectView.setText() makes Xiaomi's createSafeText() permanently replace
+     * the incoming full string with the clipped one, and a still-attached TextWatcher can race
+     * the native 600 ms glyph transition. Full restoration still happens for non-owned content.
+     */
+    private fun pauseIsland(island: ViewGroup) {
+        removeVisibilityRetry(island)
+        islandEnabled[island] = false
+        islandSessions.remove(island)?.let { cancelFallback(island, it) }
+        islandTextViews(island).forEach { view ->
+            unobserve(view)
+            controllers.remove(view)?.stop()
+            unregisterScrolling(view)
+            view.scrollTo(0, 0)
+        }
+    }
+
+    private fun islandTextViews(island: ViewGroup): List<TextView> =
+        (controllers.keys.toList() + observed.keys.toList())
+            .distinct()
+            .filter { findIsland(it) === island }
+
+    /**
+     * Xiaomi keeps previous carousel entries inflated but ancestor-invisible. Their update hook
+     * can finish long before the user cycles them into the camera slot, and visibility changes
+     * do not trigger TextView layout listeners. Keep a token-scoped pre-draw retry on the shared
+     * window tree, then run the normal stable-geometry gate when this entry actually becomes
+     * visible. The listener removes itself after one activation or when a newer update wins.
+     */
+    private fun armVisibilityRetry(
+        island: ViewGroup,
+        token: Any,
+        mode: MarqueeDismissMode,
+        originalTimeoutSecs: Int,
+        generation: Long,
+        ongoing: Boolean,
+        notification: StatusBarNotification?,
+    ) {
+        removeVisibilityRetry(island)
+        Log.i(
+            "HyperBridge",
+            "HyperBridge: compact marquee waiting for visible carousel slot " +
+                "key=${islandKeys[island].orEmpty()}",
+        )
+        lateinit var listener: ViewTreeObserver.OnPreDrawListener
+        listener = ViewTreeObserver.OnPreDrawListener {
+            if (islandTokens[island] !== token || !island.isAttachedToWindow) {
+                removeVisibilityRetry(island, listener)
+                return@OnPreDrawListener true
+            }
+            if (compactTextViews(island).isEmpty()) return@OnPreDrawListener true
+            removeVisibilityRetry(island, listener)
+            Log.i(
+                "HyperBridge",
+                "HyperBridge: visible carousel slot restored " +
+                    "key=${islandKeys[island].orEmpty()}",
+            )
+            island.postOnAnimation {
+                scheduleMarquee(
+                    island = island,
+                    token = token,
+                    enabled = true,
+                    mode = mode,
+                    originalTimeoutSecs = originalTimeoutSecs,
+                    generation = generation,
+                    ongoing = ongoing,
+                    notification = notification,
+                    visualBefore = null,
+                    settleUntilMs = 0L,
+                )
+            }
+            true
+        }
+        visibilityRetries[island] = listener
+        island.viewTreeObserver.takeIf { it.isAlive }?.addOnPreDrawListener(listener)
+    }
+
+    private fun removeVisibilityRetry(
+        island: ViewGroup,
+        expected: ViewTreeObserver.OnPreDrawListener? = null,
+    ) {
+        val listener = visibilityRetries[island] ?: return
+        if (expected != null && listener !== expected) return
+        visibilityRetries.remove(island)
+        island.viewTreeObserver.takeIf { it.isAlive }?.removeOnPreDrawListener(listener)
     }
 
     private fun findIsland(view: View): ViewGroup? {
@@ -439,20 +632,34 @@ object MarqueeHook {
         return false
     }
 
-    private fun hasReadyCompactText(view: View): Boolean {
+    private fun compactTextViews(view: View): List<TextView> {
+        val result = ArrayList<TextView>(2)
+        collectCompactTextViews(view, result)
+        return result
+    }
+
+    private fun collectCompactTextViews(view: View, result: MutableList<TextView>) {
         if (view is TextView) {
-            return isUsableCompactText(view) && view.isAttachedToWindow && visibleWidth(view) > 0
+            if (isUsableCompactText(view)) result += view
+            return
         }
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {
-                if (hasReadyCompactText(view.getChildAt(index))) return true
+                collectCompactTextViews(view.getChildAt(index), result)
             }
         }
-        return false
+    }
+
+    private fun geometrySignature(views: List<TextView>): Int = views.fold(1) { signature, view ->
+        var next = 31 * signature + System.identityHashCode(view)
+        next = 31 * next + view.text?.toString().orEmpty().hashCode()
+        next = 31 * next + view.width
+        next = 31 * next + availableTextWidth(view)
+        next
     }
 
     private fun isUsableCompactText(view: TextView): Boolean =
-        view.visibility == View.VISIBLE &&
+        view.isShown &&
             !isExpanded(view) &&
             normalize(view.text?.toString().orEmpty()).isNotEmpty()
 
@@ -466,14 +673,72 @@ object MarqueeHook {
         return false
     }
 
-    private fun visibleWidth(view: View): Int {
-        var width = if (view.width > 0) view.width else Int.MAX_VALUE
+    private fun availableTextWidth(view: TextView): Int {
+        if (view.width <= 0) return 0
+        compactArea(view)?.let { area ->
+            if (area.width <= 0) return 0
+            val viewLocation = IntArray(2)
+            val areaLocation = IntArray(2)
+            view.getLocationInWindow(viewLocation)
+            area.getLocationInWindow(areaLocation)
+            val textStart = viewLocation[0] + view.compoundPaddingLeft
+            val textEnd = viewLocation[0] + view.width - view.compoundPaddingRight
+            val slotStart = areaLocation[0] + area.paddingLeft
+            val slotEnd = areaLocation[0] + area.width - area.paddingRight
+            return (minOf(textEnd, slotEnd) - maxOf(textStart, slotStart)).coerceAtLeast(0)
+        }
+        val visible = Rect()
+        val clippedWidth = if (view.getLocalVisibleRect(visible) && visible.width() > 0) {
+            minOf(view.width, visible.width())
+        } else {
+            view.width
+        }
+        return (clippedWidth - view.compoundPaddingLeft - view.compoundPaddingRight)
+            .coerceAtLeast(0)
+    }
+
+    private fun compactArea(view: TextView): ViewGroup? {
+        compactAreas[view]?.get()?.takeIf { isDescendantOf(view, it) }?.let { return it }
         var parent = view.parent
         while (parent is ViewGroup) {
-            if (parent.width > 0 && parent.width < width) width = parent.width
+            val entryName = runCatching {
+                parent.resources.getResourceEntryName(parent.id)
+            }.getOrNull()
+            if (entryName == "area_left" || entryName == "area_right") {
+                compactAreas[view] = WeakReference(parent)
+                return parent
+            }
             parent = parent.parent
         }
-        return if (width == Int.MAX_VALUE) 0 else width
+        return null
+    }
+
+    private fun compactAreaName(view: TextView): String = compactArea(view)?.let { area ->
+        runCatching { area.resources.getResourceEntryName(area.id) }.getOrNull()
+    } ?: "other"
+
+    private fun isDescendantOf(view: View, ancestor: ViewGroup): Boolean {
+        var parent = view.parent
+        while (parent is ViewGroup) {
+            if (parent === ancestor) return true
+            parent = parent.parent
+        }
+        return false
+    }
+
+    private fun overflowTolerancePx(view: TextView): Float =
+        maxOf(1f, view.resources.displayMetrics.density * 0.5f)
+
+    private fun laidOutTextWidth(view: TextView, fallbackText: String): Float {
+        val layout = view.layout
+        if (layout != null && layout.lineCount > 0) {
+            var widest = 0f
+            for (line in 0 until layout.lineCount) {
+                widest = maxOf(widest, layout.getLineWidth(line))
+            }
+            if (widest > 0f) return widest
+        }
+        return view.paint.measureText(fallbackText)
     }
 
     private fun normalize(text: String): String = text
@@ -529,11 +794,22 @@ object MarqueeHook {
                 startNanos = frameTimeNanos
                 lastNanos = frameTimeNanos
             }
-            val maxScroll = maxOf(0f, view.paint.measureText(text) - (visibleWidth(view) - view.paddingLeft - view.paddingRight).toFloat())
+            val maxScroll = MarqueeMotion.overflowDistance(
+                textWidthPx = laidOutTextWidth(view, text),
+                availableWidthPx = availableTextWidth(view),
+                tolerancePx = overflowTolerancePx(view),
+            )
             if (maxScroll <= 0f) {
                 unregisterScrolling(view)
                 stop()
                 return
+            }
+            // Xiaomi can remeasure TimerTextEffectView after the controller starts. Never keep
+            // an offset beyond the newly laid-out last glyph, even while paused at the end.
+            if (scrollX > maxScroll) {
+                scrollX = maxScroll
+                view.scrollTo(scrollX.toInt(), 0)
+                view.invalidate()
             }
             val elapsedMs = (frameTimeNanos - startNanos) / 1_000_000
             when (state) {

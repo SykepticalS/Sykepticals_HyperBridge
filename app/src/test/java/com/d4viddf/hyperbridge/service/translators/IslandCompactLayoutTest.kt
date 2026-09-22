@@ -51,12 +51,12 @@ class IslandCompactLayoutTest {
     }
 
     @Test
-    fun leftTextLongerThanTwentyCharactersIsTruncated() {
-        val original = "abcdefghijklmnopqrstu"
-        assertEquals(21, original.length)
+    fun leftTextLongerThanFifteenCharactersIsTruncatedAfterFifteen() {
+        val original = "abcdefghijklmnop"
+        assertEquals(16, original.length)
         val truncated = IslandCompactLayout.compactLeftText(original)
-        assertEquals("abcdefghijklmnopq...", truncated)
-        assertEquals(IslandCompactLayout.LEFT_MAX_VISIBLE, truncated.length)
+        assertEquals("abcdefghijklmno...", truncated)
+        assertEquals(IslandCompactLayout.LEFT_MAX_CHARACTERS + 3, truncated.length)
         assertTrue(truncated.endsWith("..."))
         val left = IslandCompactLayout.left("pic", original)
         assertEquals(truncated, left.textInfo?.title)
@@ -65,9 +65,9 @@ class IslandCompactLayoutTest {
     }
 
     @Test
-    fun leftTextOfTwentyCharactersStillShows() {
-        val value = "12345678901234567890"
-        assertEquals(20, value.length)
+    fun leftTextOfFifteenCharactersStillShows() {
+        val value = "123456789012345"
+        assertEquals(15, value.length)
         assertEquals(value, IslandCompactLayout.left("pic", value).textInfo?.title)
         assertTrue(IslandCompactLayout.leftShouldMarquee(value))
     }
@@ -90,16 +90,16 @@ class IslandCompactLayoutTest {
 
     @Test
     fun leftTextCountsSpacesTowardTheTruncationLimit() {
-        val longWithSpaces = "hello world 123456789"
-        assertEquals(21, longWithSpaces.length)
+        val longWithSpaces = "hello world 12345"
+        assertEquals(17, longWithSpaces.length)
         val truncated = IslandCompactLayout.compactLeftText(longWithSpaces)
-        assertEquals("hello world 12345...", truncated)
-        assertEquals(IslandCompactLayout.LEFT_MAX_VISIBLE, truncated.length)
+        assertEquals("hello world 123...", truncated)
+        assertEquals(IslandCompactLayout.LEFT_MAX_CHARACTERS + 3, truncated.length)
         assertEquals(truncated, IslandCompactLayout.left("pic", longWithSpaces).textInfo?.title)
         assertTrue(IslandCompactLayout.leftShouldMarquee(longWithSpaces))
 
-        val shown = "hello world 12345678"
-        assertEquals(20, shown.length)
+        val shown = "hello world 123"
+        assertEquals(15, shown.length)
         assertEquals(shown, IslandCompactLayout.left("pic", shown).textInfo?.title)
         assertTrue(IslandCompactLayout.leftShouldMarquee(shown))
     }
@@ -117,7 +117,7 @@ class IslandCompactLayoutTest {
                 right = longRight,
             ),
         )
-        assertEquals("abcdefghijklmnopq...", truncatedLeft.first.textInfo?.title)
+        assertEquals("abcdefghijklmno...", truncatedLeft.first.textInfo?.title)
         assertTrue(IslandCompactLayout.leftShouldMarquee("abcdefghijklmnopqrstuvwxyz"))
         assertEquals(longRight, truncatedLeft.second.textInfo?.title)
     }

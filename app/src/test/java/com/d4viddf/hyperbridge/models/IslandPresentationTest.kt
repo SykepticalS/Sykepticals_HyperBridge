@@ -181,6 +181,14 @@ class IslandPresentationTest {
         assertEquals(focusOnly, IslandVisualMetadata.injectTextUpdateAnimation(focusOnly))
     }
 
+    @Test fun compactTextDetectionEnablesMeasuredRuntimeMarquee() {
+        val textIsland = """{"param_v2":{"param_island":{"bigIslandArea":{"imageTextInfoLeft":{"textInfo":{"title":"Ada"}},"imageTextInfoRight":{"textInfo":{"title":"A sufficiently long message"}}}}}}"""
+        val iconOnly = """{"param_v2":{"param_island":{"bigIslandArea":{"imageTextInfoLeft":{"picInfo":{"pic":"avatar"}}}}}}"""
+        assertTrue(IslandVisualMetadata.hasCompactText(textIsland))
+        assertFalse(IslandVisualMetadata.hasCompactText(iconOnly))
+        assertFalse(IslandVisualMetadata.hasCompactText("not-json"))
+    }
+
     @Test fun injectFloatingFlagsWritesEnableFloatFirstFloatAndReopen() {
         val json = """{"param_v2":{"param_island":{},"enableFloat":true,"islandFirstFloat":true,"reopen":true}}"""
         val patched = IslandVisualMetadata.injectFloatingFlags(json, enableFloat = false)

@@ -1752,12 +1752,13 @@ class NotificationProcessingEngine private constructor(
                     AppIconPalette.color(this, sbn.packageName),
                     *glowContactTexts(sbn, effectiveTitle, effectiveText),
                 )
-            val visualPlan = IslandVisualMetadata.plan(
+                val visualPlan = IslandVisualMetadata.plan(
                     config = finalConfig,
                     glow = glow,
                     keepPosted = sourceStaysPosted(sbn, type),
                     marqueeCapable = marqueeCapabilitiesReady(),
                     updatable = NotificationLifecyclePolicy.isProgressLifecycle(type),
+                    forceMarquee = effectiveTitle.isNotBlank() || effectiveText.isNotBlank(),
                 )
                 IslandVisualExtras.apply(notification.extras, visualPlan)
                 val floatPresentation = IslandFloatingPresentationPolicy.resolve(
@@ -1929,7 +1930,9 @@ class NotificationProcessingEngine private constructor(
                 title = effectiveTitle,
                 text = effectiveText,
                 shouldAlertOnce = decision.onlyAlertOnce,
-                suppressContentIntent = isSavedScreenRecording,
+                // The saved-recording notification owns a direct activity PendingIntent for the
+                // captured video. Preserve it so tapping the confirmation island opens that file.
+                suppressContentIntent = false,
                 config = finalConfig,
                 updatableOverride = NotificationLifecyclePolicy.isProgressLifecycle(type),
                 inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE,
@@ -1965,7 +1968,7 @@ class NotificationProcessingEngine private constructor(
                 callSession = callSession,
                 screenRecordingSession = screenRecordingSession,
                 deleteIntent = sbn.notification.deleteIntent,
-                dismissSourceOnContentClick = false
+                dismissSourceOnContentClick = isSavedScreenRecording
             )
             updatePermanentIsland()
 
@@ -2322,6 +2325,7 @@ class NotificationProcessingEngine private constructor(
             keepPosted = keepPosted,
             marqueeCapable = marqueeCapabilitiesReady(),
             updatable = updatable,
+            forceMarquee = IslandVisualMetadata.hasCompactText(data.jsonParam),
         )
         val floatPresentation = IslandFloatingPresentationPolicy.resolve(
             config.firstFloat ?: false,

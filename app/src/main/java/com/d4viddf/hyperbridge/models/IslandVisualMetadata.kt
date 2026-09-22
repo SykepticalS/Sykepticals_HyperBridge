@@ -119,6 +119,28 @@ object IslandVisualMetadata {
     }
 
     /**
+     * Returns whether the compact island payload owns text views that may need pixel-accurate
+     * overflow handling. The runtime hook still measures the real Xiaomi view before scrolling;
+     * this only makes sure the hook is enabled for text islands without requiring a user toggle.
+     */
+    fun hasCompactText(jsonParam: String): Boolean {
+        return runCatching {
+            val root = JsonParser.parseString(jsonParam).asJsonObject
+            val area = root.getAsJsonObject("param_v2")
+                ?.getAsJsonObject("param_island")
+                ?.getAsJsonObject("bigIslandArea")
+                ?: return false
+            listOf("imageTextInfoLeft", "imageTextInfoRight").any { sideName ->
+                val textInfo = area.getAsJsonObject(sideName)?.getAsJsonObject("textInfo")
+                    ?: return@any false
+                listOf("title", "content", "frontTitle").any { field ->
+                    textInfo.get(field)?.takeIf { it.isJsonPrimitive }?.asString?.isNotBlank() == true
+                }
+            }
+        }.getOrDefault(false)
+    }
+
+    /**
      * HyperOS reads these from `param_v2`. Kit defaults and omitted-false values otherwise
      * re-expand an already visible island on the next notify().
      */

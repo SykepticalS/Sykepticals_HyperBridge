@@ -3,6 +3,7 @@ package com.d4viddf.hyperbridge.ui
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.d4viddf.hyperbridge.receiver.InlineReplyReceiver
 
 object InlineReplyIntents {
     const val ACTION = "com.sykeptical.hyperbridge.action.INLINE_REPLY"
@@ -30,10 +31,14 @@ object InlineReplyIntents {
         replyAction: PendingIntent,
         resultKey: String,
         sourcePackage: String? = null,
-    ): PendingIntent = PendingIntent.getActivity(
+    ): PendingIntent = PendingIntent.getBroadcast(
         context,
         requestCode,
-        launchIntent(context, replyAction, resultKey, sourcePackage).apply {
+        Intent(context, InlineReplyReceiver::class.java).apply {
+            action = ACTION
+            putExtra(InlineReplyActivity.EXTRA_PENDING_INTENT, replyAction)
+            putExtra(InlineReplyActivity.EXTRA_RESULT_KEY, resultKey)
+            sourcePackage?.let { putExtra(InlineReplyActivity.EXTRA_PACKAGE_NAME, it) }
             putExtra(EXTRA_INLINE_REPLY, true)
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,

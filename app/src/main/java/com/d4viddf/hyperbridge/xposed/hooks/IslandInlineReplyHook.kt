@@ -95,6 +95,8 @@ object IslandInlineReplyHook {
 
     private fun hookDispatchers(module: XposedModule, loader: ClassLoader) {
         if (!dispatchers.add(loader)) return
+        hookLiveClickPath(module, loader)
+        hookLiveCollapsePath(module, loader)
         val names = arrayOf(
             "miui.systemui.notification.focus.FocusNotifPreHandler\$ClickHandler",
             "miui.systemui.notification.focus.FocusNotifPreHandler",
@@ -145,6 +147,92 @@ object IslandInlineReplyHook {
                     Log.i("HyperBridge", "island reply hooked ${clazz.simpleName} methods=${methods.size}")
                 }
             }
+        }
+    }
+
+    /** Exact HyperOS 4 path from MIUISystemUIPlugin 17.1.4.71.0. */
+    private fun hookLiveClickPath(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val clazz = loader.loadClass(
+                "miui.systemui.notification.focus.moduleV3.ModuleViewHolder",
+            )
+            val methods = clazz.declaredMethods.filter { method ->
+                method.name == "handleBtnClick" &&
+                    method.parameterTypes.firstOrNull() == PendingIntent::class.java
+            }
+            check(methods.isNotEmpty()) { "ModuleViewHolder.handleBtnClick missing" }
+            methods.forEach { method ->
+                module.hook(method).intercept { chain ->
+                    if (openReply(chain.thisObject, chain.args, module)) null else chain.proceed()
+                }
+            }
+            module.log("HyperBridge: plugin class hooked ModuleViewHolder.handleBtnClick count=${methods.size}")
+            Log.i("HyperBridge", "plugin class hooked ModuleViewHolder.handleBtnClick count=${methods.size}")
+        }.onFailure {
+            module.log("HyperBridge: ModuleViewHolder.handleBtnClick hook unavailable: ${it.message}")
+        }
+    }
+
+    /**
+     * The live plugin schedules expanded -> small in delayCollapsed(), then its
+     * private lambda calls DynamicIslandWindowView.collapse("delay"). Guard all
+     * three points so an already queued runnable cannot race the composer open.
+     */
+    private fun hookLiveCollapsePath(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val safeguards = loader.loadClass(
+                "miui.systemui.dynamicisland.window.DynamicIslandSafeguardsController",
+            )
+            val delay = safeguards.declaredMethods.single {
+                it.name == "delayCollapsed" &&
+                    it.parameterTypes.size == 1 &&
+                    it.parameterTypes[0] == java.lang.Long.TYPE
+            }
+            module.hook(delay).intercept { chain ->
+                IslandReplyCollapseGuard.remember(chain.thisObject)
+                if (IslandReplyComposer.shouldStayExpanded()) {
+                    Log.i("HyperBridge", "timeout method blocked DynamicIslandSafeguardsController.delayCollapsed")
+                    null
+                } else {
+                    chain.proceed()
+                }
+            }
+            safeguards.declaredMethods
+                .filter { it.name == "delayCollapsed\$lambda\$3" }
+                .forEach { method ->
+                    module.hook(method).intercept { chain ->
+                        if (IslandReplyComposer.shouldStayExpanded()) {
+                            Log.i("HyperBridge", "timeout method blocked DynamicIslandSafeguardsController.delayCollapsed\$lambda\$3")
+                            null
+                        } else {
+                            chain.proceed()
+                        }
+                    }
+                }
+
+            val window = loader.loadClass(
+                "miui.systemui.dynamicisland.window.DynamicIslandWindowView",
+            )
+            window.declaredMethods
+                .filter {
+                    it.name == "collapse" &&
+                        it.parameterTypes.contentEquals(arrayOf(String::class.java))
+                }
+                .forEach { method ->
+                    module.hook(method).intercept { chain ->
+                        val reason = chain.args.firstOrNull() as? String
+                        if (reason == "delay" && IslandReplyComposer.shouldStayExpanded()) {
+                            Log.i("HyperBridge", "timeout method blocked DynamicIslandWindowView.collapse(delay)")
+                            null
+                        } else {
+                            chain.proceed()
+                        }
+                    }
+                }
+            module.log("HyperBridge: plugin class hooked DynamicIslandSafeguardsController.delayCollapsed")
+            Log.i("HyperBridge", "plugin class hooked DynamicIslandSafeguardsController.delayCollapsed")
+        }.onFailure {
+            module.log("HyperBridge: live island collapse hook unavailable: ${it.message}")
         }
     }
 
@@ -229,6 +317,30 @@ object IslandInlineReplyHook {
     }
 }
 
+private object IslandReplyCollapseGuard {
+    private val safeguards = Collections.synchronizedSet(
+        Collections.newSetFromMap(WeakHashMap<Any, Boolean>()),
+    )
+
+    fun remember(instance: Any?) {
+        if (instance != null) safeguards += instance
+    }
+
+    fun cancelScheduledCollapse() {
+        val snapshot = synchronized(safeguards) { safeguards.toList() }
+        snapshot.forEach { instance ->
+            runCatching {
+                instance.javaClass.getDeclaredMethod("cancelDelayCollapsed").apply {
+                    isAccessible = true
+                }.invoke(instance)
+            }
+        }
+        if (snapshot.isNotEmpty()) {
+            Log.i("HyperBridge", "cancelled scheduled island collapse instances=${snapshot.size}")
+        }
+    }
+}
+
 internal data class IslandReplyPayload(
     val replyAction: PendingIntent,
     val resultKey: String,
@@ -244,7 +356,11 @@ internal object IslandReplyComposer {
     private var lastPayload: IslandReplyPayload? = null
     private var lastModule: XposedModule? = null
     private var lastContext = WeakReference<Context?>(null)
-    private var lastSource = WeakReference<Any?>(null)
+    private var lastSource: Any? = null
+    private var activeRow: ViewGroup? = null
+    private var retryRoot: View? = null
+    private var retryListener: View.OnLayoutChangeListener? = null
+    private var dumpedMissingHost = false
     private var hiddenButtons: List<View> = emptyList()
 
     fun openNow(
@@ -256,10 +372,11 @@ internal object IslandReplyComposer {
         lastPayload = payload
         lastModule = module
         lastContext = WeakReference(context)
-        lastSource = WeakReference(source)
+        lastSource = source
         intendedOpen = true
         MarqueeHook.holdAutoHide()
         SystemUiDispatcher.notifyReplyComposer(true)
+        IslandReplyCollapseGuard.cancelScheduledCollapse()
         val run = {
             runCatching { embed(payload, module, source) }
                 .onFailure { module.log("HyperBridge: island reply embed failed: ${it.message}") }
@@ -306,6 +423,7 @@ internal object IslandReplyComposer {
     fun markOpening() {
         intendedOpen = true
         MarqueeHook.holdAutoHide()
+        IslandReplyCollapseGuard.cancelScheduledCollapse()
     }
 
     fun markAborted() {
@@ -322,7 +440,7 @@ internal object IslandReplyComposer {
         val payload = lastPayload ?: return
         val module = lastModule ?: return
         val run = {
-            runCatching { embed(payload, module, lastSource.get()) }
+            runCatching { embed(payload, module, lastSource) }
             Unit
         }
         if (Looper.myLooper() == Looper.getMainLooper()) run() else main.post(run)
@@ -334,6 +452,7 @@ internal object IslandReplyComposer {
             return
         }
         intendedOpen = false
+        clearLayoutRetry()
         restoreHiddenButtons()
         val view = overlay.get()
         overlay = WeakReference(null)
@@ -342,6 +461,8 @@ internal object IslandReplyComposer {
             (view.parent as? ViewGroup)?.removeView(view)
             restoreImeWindow(view)
         }
+        activeRow = null
+        lastSource = null
         MarqueeHook.releaseAutoHide()
         SystemUiDispatcher.notifyReplyComposer(false)
     }
@@ -390,7 +511,16 @@ internal object IslandReplyComposer {
         val row = findButtonRow(source)?.takeIf { host ->
             host.javaClass.simpleName.contains("Window", ignoreCase = true).not() &&
                 host.childCount <= 6
-        } ?: return false
+        } ?: run {
+            installLayoutRetry(payload, module, source)
+            if (!dumpedMissingHost) {
+                dumpedMissingHost = true
+                dumpExpandedTree(module, source)
+            }
+            return false
+        }
+        clearLayoutRetry()
+        dumpedMissingHost = false
         val existing = overlay.get()
         if (existing?.parent === row && existing.isAttachedToWindow) return true
         dismissKeepingIntent()
@@ -414,6 +544,7 @@ internal object IslandReplyComposer {
             )
         }
         row.addView(composer, params)
+        activeRow = row
         overlay = WeakReference(composer)
         intendedOpen = true
         IslandWindowImeHook.sanitize(row)
@@ -427,6 +558,50 @@ internal object IslandReplyComposer {
         module.log("HyperBridge: island reply embedded in ${row.javaClass.simpleName} children=${row.childCount}")
         Log.i("HyperBridge", "island reply embedded in ${row.javaClass.simpleName}")
         return true
+    }
+
+    private fun installLayoutRetry(
+        payload: IslandReplyPayload,
+        module: XposedModule,
+        source: Any?,
+    ) {
+        if (retryListener != null) return
+        val root = viewFrom(source)?.rootView
+            ?: findNamedInWindows("DynamicIslandExpandedView")?.rootView
+            ?: return
+        val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (!intendedOpen || overlay.get()?.isAttachedToWindow == true) return@OnLayoutChangeListener
+            runCatching { embed(payload, module, source) }
+        }
+        retryRoot = root
+        retryListener = listener
+        root.addOnLayoutChangeListener(listener)
+    }
+
+    private fun clearLayoutRetry() {
+        val root = retryRoot
+        val listener = retryListener
+        if (root != null && listener != null) root.removeOnLayoutChangeListener(listener)
+        retryRoot = null
+        retryListener = null
+    }
+
+    private fun dumpExpandedTree(module: XposedModule, source: Any?) {
+        val root = findNamedInWindows("DynamicIslandExpandedView")
+            ?: viewFrom(source)?.rootView
+            ?: return
+        fun describe(view: View, depth: Int, out: MutableList<String>) {
+            if (out.size >= 80 || depth > 8) return
+            val text = (view as? TextView)?.text?.toString()?.take(40).orEmpty()
+            out += "${"  ".repeat(depth)}${view.javaClass.name} id=${view.id} text=$text children=${(view as? ViewGroup)?.childCount ?: 0}"
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) describe(view.getChildAt(index), depth + 1, out)
+            }
+        }
+        val lines = mutableListOf<String>()
+        describe(root, 0, lines)
+        module.log("HyperBridge: island reply host missing; expanded tree:\n${lines.joinToString("\n")}")
+        Log.i("HyperBridge", "island reply host missing; expanded tree:\n${lines.joinToString("\n")}")
     }
 
     private fun findButtonRow(source: Any?): ViewGroup? {

@@ -2,6 +2,7 @@ package com.d4viddf.hyperbridge.service.recording
 
 import android.content.Context
 import android.util.Log
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
@@ -127,6 +128,11 @@ class ScreenRecordingIslandController(private val context: Context) {
 
     private fun sessionFrom(snapshot: RecorderSnapshot): ScreenRecordingSession {
         val startedAt = snapshot.startedAtWallClock.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val timerStartedAt = if (snapshot.state == ScreenRecorderContract.STATE_STARTING) {
+            startedAt
+        } else {
+            System.currentTimeMillis() - snapshot.durationAt(SystemClock.elapsedRealtime())
+        }
         val recording = snapshot.state == ScreenRecorderContract.STATE_RECORDING
         val paused = snapshot.state == ScreenRecorderContract.STATE_PAUSED
         return ScreenRecordingSession(
@@ -143,6 +149,7 @@ class ScreenRecordingIslandController(private val context: Context) {
             countdownRemaining = snapshot.countdownRemaining.takeIf {
                 snapshot.state == ScreenRecorderContract.STATE_STARTING
             } ?: 0,
+            timerStartedAt = timerStartedAt,
         )
     }
 
