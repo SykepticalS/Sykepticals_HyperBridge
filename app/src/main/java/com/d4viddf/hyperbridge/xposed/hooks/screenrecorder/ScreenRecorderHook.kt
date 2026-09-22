@@ -62,6 +62,7 @@ object ScreenRecorderHook {
     @Volatile private var recordingNotificationBuilderMethod: Method? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingConfirmedStart: Runnable? = null
+    private var pendingStartObserver: (() -> Unit)? = null
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         if (param.packageName != ScreenRecorderContract.TARGET_PACKAGE) return
@@ -800,7 +801,7 @@ object ScreenRecorderHook {
         val expanded = when {
             snapshot.state == ScreenRecorderContract.STATE_STARTING -> compact
             snapshot.state == ScreenRecorderContract.STATE_PAUSED -> text.notificationPausedTitle
-            else -> stringOrFallback(context, R.string.screen_recording_active, "Recording screen..")
+            else -> stringOrFallback(context, R.string.screen_recording_compact, "Recording..")
         }
         return ScreenRecordingTranslator(context).buildFocusExtras(
             session = session,
@@ -927,18 +928,39 @@ object ScreenRecorderHook {
 
     private fun scheduleConfirmedStart(context: Context) {
         cancelPendingConfirmedStart()
-        ScreenRecorderControlClient.reportStarting()
+        xposedModule?.let { initializeControlClient(context, it) }
+        val armed = AtomicBoolean(false)
         val start = Runnable {
             pendingConfirmedStart = null
+            pendingStartObserver?.invoke()
+            pendingStartObserver = null
             requestRecorderStart(context)
         }
-        pendingConfirmedStart = start
-        mainHandler.postDelayed(start, ScreenRecorderContract.COUNTDOWN_SECONDS * ScreenRecorderContract.COUNTDOWN_TICK_MS)
+        // The local snapshot is published before the service is bound, with no countdown.
+        // Wait for the service echo that actually posts the island, then hold for the full
+        // countdown so "Starting…" is on screen before MediaMuxer.start().
+        pendingStartObserver = ScreenRecorderControlClient.observe { snapshot ->
+            if (
+                snapshot.state != ScreenRecorderContract.STATE_STARTING ||
+                snapshot.countdownRemaining <= 0 ||
+                !armed.compareAndSet(false, true)
+            ) {
+                return@observe
+            }
+            pendingConfirmedStart = start
+            mainHandler.postDelayed(
+                start,
+                ScreenRecorderContract.COUNTDOWN_SECONDS * ScreenRecorderContract.COUNTDOWN_TICK_MS,
+            )
+        }
+        ScreenRecorderControlClient.reportStarting()
     }
 
     private fun cancelPendingConfirmedStart() {
         pendingConfirmedStart?.let(mainHandler::removeCallbacks)
         pendingConfirmedStart = null
+        pendingStartObserver?.invoke()
+        pendingStartObserver = null
     }
 
     private fun requestRecorderStart(context: Context) {

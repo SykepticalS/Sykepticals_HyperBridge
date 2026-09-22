@@ -50,7 +50,7 @@ class ScreenRecordingPayloadFactoryTest {
         assertEquals("miui.focus.pic_ticker", expanded["picProfile"].asString)
         assertEquals("miui.focus.pic_ticker", expanded["picProfileDark"].asString)
         assertEquals("miui.focus.pic_recorder_app_badge", expanded["appIconPkg"].asString)
-        assertEquals("Recording screen..", expanded["title"].asString)
+        assertEquals("Recording..", expanded["title"].asString)
         assertEquals(1_000L, expanded.getAsJsonObject("timerInfo")["timerWhen"].asLong)
         assertEquals(1_000L, expanded.getAsJsonObject("timerInfo")["timerTotal"].asLong)
         assertEquals(9_000L, expanded.getAsJsonObject("timerInfo")["timerSystemCurrent"].asLong)
@@ -213,7 +213,7 @@ class ScreenRecordingPayloadFactoryTest {
         paused: Boolean = false,
         timerStartedAt: Long = 1_000L,
         compactText: String = "Recording..",
-        expandedText: String = "Recording screen..",
+        expandedText: String = "Recording..",
     ) = ScreenRecordingPayloadFactory.build(
         session = ScreenRecordingSession(
             logicalId = "screen-recording:key:1000",

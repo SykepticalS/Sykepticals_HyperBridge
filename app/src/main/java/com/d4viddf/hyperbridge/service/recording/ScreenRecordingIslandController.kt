@@ -70,7 +70,7 @@ class ScreenRecordingIslandController(private val context: Context) {
             context.getString(R.string.screen_recording_compact)
         }
         val floatPresentation = IslandFloatingPresentationPolicy.resolve(
-            firstFloat = true,
+            firstFloat = session.countdownRemaining <= 0,
             floatOnUpdate = false,
             isUpdate = isUpdate,
         )
@@ -78,11 +78,7 @@ class ScreenRecordingIslandController(private val context: Context) {
             session = session,
             design = design,
             compactText = title,
-            expandedText = if (session.countdownRemaining > 0) {
-                title
-            } else {
-                context.getString(R.string.screen_recording_active)
-            },
+            expandedText = title,
             isUpdate = isUpdate,
             enableFloat = floatPresentation.enableFloat,
         )

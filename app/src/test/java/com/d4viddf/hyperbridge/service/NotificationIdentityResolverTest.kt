@@ -43,6 +43,42 @@ class NotificationIdentityResolverTest {
     }
 
     @Test
+    fun instagramMultiAccountShareShowsReceivingAndSender() {
+        val (title, text) = NotificationIdentityResolver.resolve(
+            packageName = "com.instagram.android",
+            appLabel = "Instagram",
+            title = "sykeptical: atahan.",
+            text = "Sent you a reel",
+            conversationTitle = "sykeptical",
+            personNames = listOf("atahan."),
+            messageSender = "atahan.",
+            messageText = "Sent you a reel",
+            ticker = "Sent you a reel",
+            selfName = "Atahan Alin",
+            isGroupConversation = false,
+        )
+        assertEquals("sykeptical: atahan.", title)
+        assertEquals("Sent you a reel", text)
+    }
+
+    @Test
+    fun instagramSingleAccountShareUsesSenderOnly() {
+        val (title, text) = NotificationIdentityResolver.resolve(
+            packageName = "com.instagram.android",
+            appLabel = "Instagram",
+            title = "atahan.",
+            text = "Sent you a reel",
+            conversationTitle = "atahan.",
+            personNames = listOf("atahan."),
+            messageSender = "atahan.",
+            messageText = "Sent you a reel",
+            selfName = "Atahan Alin",
+        )
+        assertEquals("atahan.", title)
+        assertEquals("Sent you a reel", text)
+    }
+
+    @Test
     fun messagingStyleCompoundTitleIsNotUsedAsSubtitle() {
         val (title, text) = NotificationIdentityResolver.resolve(
             appLabel = "Instagram",
@@ -55,8 +91,25 @@ class NotificationIdentityResolverTest {
             ticker = "Sent you a post",
             selfName = "atahan.",
         )
-        assertEquals("amerikanbebesi", title)
+        assertEquals("amerikanbebesi: nisa", title)
         assertEquals("Sent you a post", text)
+    }
+
+    @Test
+    fun groupMediaShareKeepsSendingMemberAsTitle() {
+        val (title, text) = NotificationIdentityResolver.resolve(
+            appLabel = "Instagram",
+            title = "Family (2 messages): Mom",
+            text = "Sent you a reel",
+            conversationTitle = "Family (2 messages)",
+            personNames = listOf("Mom"),
+            messageSender = "Mom",
+            messageText = "Sent you a reel",
+            selfName = "Atahan Alin",
+            isGroupConversation = true,
+        )
+        assertEquals("Mom", title)
+        assertEquals("Sent you a reel", text)
     }
 
     @Test

@@ -81,10 +81,9 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         val stopPending = stopIntent ?: actionIntent(session, 2, ScreenRecordingActionReceiver.ACTION_STOP)
         val actionKeys = mutableListOf<String>()
         if (session.capabilities.canPause) {
-            val pausePicture = getColoredPicture(
+            val pausePicture = getDrawablePicture(
                 if (session.paused) PIC_RESUME else PIC_PAUSE,
-                if (session.paused) R.drawable.ic_focus_resume_light else R.drawable.ic_focus_pause_light,
-                HIGHLIGHT_COLOR,
+                if (session.paused) R.drawable.ic_focus_resume else R.drawable.ic_focus_pause,
             )
             builder.addPicture(pausePicture)
             builder.addAction(
@@ -94,8 +93,8 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
                     icon = pausePicture.icon,
                     pendingIntent = pausePending,
                     actionIntentType = 1,
-                    actionBgColor = HIGHLIGHT_COLOR,
-                    actionBgColorDark = HIGHLIGHT_COLOR,
+                    actionBgColor = null,
+                    actionBgColorDark = null,
                     titleColor = "#FFFFFF",
                     titleColorDark = "#FFFFFF",
                 )
@@ -103,7 +102,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
             actionKeys += ACTION_PAUSE
         }
         if (session.capabilities.canStop) {
-            val stopPicture = getColoredPicture(PIC_STOP, R.drawable.ic_screen_recording_stop_light, HIGHLIGHT_COLOR)
+            val stopPicture = getDrawablePicture(PIC_STOP, R.drawable.ic_screen_recording_stop_dark)
             builder.addPicture(stopPicture)
             builder.addAction(
                 HyperAction(
@@ -112,8 +111,8 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
                     icon = stopPicture.icon,
                     pendingIntent = stopPending,
                     actionIntentType = 1,
-                    actionBgColor = HIGHLIGHT_COLOR,
-                    actionBgColorDark = HIGHLIGHT_COLOR,
+                    actionBgColor = null,
+                    actionBgColorDark = null,
                     titleColor = "#FFFFFF",
                     titleColorDark = "#FFFFFF",
                 )
@@ -130,7 +129,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         )
         builder.setChatInfo(
             title = expanded,
-            content = compact,
+            content = "",
             pictureKey = PIC_TICKER,
             appPkg = PIC_APP_BADGE,
             actionKeys = actionKeys,
@@ -206,14 +205,14 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
                 Icon.createWithResource(picturePackage, R.drawable.ic_screen_recording_app_badge_blank),
             )
             if (canPause) {
-                putParcelable(PIC_PAUSE, getColoredPicture(PIC_PAUSE, R.drawable.ic_focus_pause_light, HIGHLIGHT_COLOR).icon)
-                putParcelable(PIC_PAUSE_DARK, getColoredPicture(PIC_PAUSE_DARK, R.drawable.ic_focus_pause, HIGHLIGHT_COLOR).icon)
-                putParcelable(PIC_RESUME, getColoredPicture(PIC_RESUME, R.drawable.ic_focus_resume_light, HIGHLIGHT_COLOR).icon)
-                putParcelable(PIC_RESUME_DARK, getColoredPicture(PIC_RESUME_DARK, R.drawable.ic_focus_resume, HIGHLIGHT_COLOR).icon)
+                putParcelable(PIC_PAUSE, getDrawablePicture(PIC_PAUSE, R.drawable.ic_focus_pause).icon)
+                putParcelable(PIC_PAUSE_DARK, getDrawablePicture(PIC_PAUSE_DARK, R.drawable.ic_focus_pause).icon)
+                putParcelable(PIC_RESUME, getDrawablePicture(PIC_RESUME, R.drawable.ic_focus_resume).icon)
+                putParcelable(PIC_RESUME_DARK, getDrawablePicture(PIC_RESUME_DARK, R.drawable.ic_focus_resume).icon)
             }
             if (canStop) {
-                putParcelable(PIC_STOP, getColoredPicture(PIC_STOP, R.drawable.ic_screen_recording_stop_light, HIGHLIGHT_COLOR).icon)
-                putParcelable(PIC_STOP_DARK, getColoredPicture(PIC_STOP_DARK, R.drawable.ic_screen_recording_stop_dark, HIGHLIGHT_COLOR).icon)
+                putParcelable(PIC_STOP, getDrawablePicture(PIC_STOP, R.drawable.ic_screen_recording_stop_dark).icon)
+                putParcelable(PIC_STOP_DARK, getDrawablePicture(PIC_STOP_DARK, R.drawable.ic_screen_recording_stop_dark).icon)
             }
         }
         return Bundle().apply {

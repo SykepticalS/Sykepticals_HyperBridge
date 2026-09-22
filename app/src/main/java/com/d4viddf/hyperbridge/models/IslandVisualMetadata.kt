@@ -108,12 +108,16 @@ object IslandVisualMetadata {
      * `textInfo` objects. Their own holder then installs TextChangeHelper and performs the
      * upward fade/translation transition when that text changes in place.
      */
-    fun injectTextUpdateAnimation(jsonParam: String, enabled: Boolean = true): String {
+    fun injectTextUpdateAnimation(
+        jsonParam: String,
+        enabled: Boolean = true,
+        skipSides: Set<String> = emptySet(),
+    ): String {
         return runCatching {
             val root = JsonParser.parseString(jsonParam).asJsonObject
             val paramV2 = root.getAsJsonObject("param_v2") ?: return jsonParam
             val paramIsland = paramV2.getAsJsonObject("param_island") ?: return jsonParam
-            writeTextUpdateAnimation(paramIsland, enabled)
+            writeTextUpdateAnimation(paramIsland, enabled, skipSides)
             Gson().toJson(root)
         }.getOrDefault(jsonParam)
     }
@@ -184,19 +188,25 @@ object IslandVisualMetadata {
         }
     }
 
-    private fun writeTextUpdateAnimation(element: com.google.gson.JsonElement, enabled: Boolean) {
+    private fun writeTextUpdateAnimation(
+        element: com.google.gson.JsonElement,
+        enabled: Boolean,
+        skipSides: Set<String> = emptySet(),
+        skipping: Boolean = false,
+    ) {
         when {
             element.isJsonObject -> {
                 val obj = element.asJsonObject
                 obj.entrySet().toList().forEach { (name, value) ->
+                    val childSkipping = skipping || name in skipSides
                     if (name == "textInfo" && value.isJsonObject) {
-                        value.asJsonObject.addProperty("turnAnim", enabled)
+                        value.asJsonObject.addProperty("turnAnim", enabled && !childSkipping)
                     }
-                    writeTextUpdateAnimation(value, enabled)
+                    writeTextUpdateAnimation(value, enabled, skipSides, childSkipping)
                 }
             }
             element.isJsonArray -> element.asJsonArray.forEach {
-                writeTextUpdateAnimation(it, enabled)
+                writeTextUpdateAnimation(it, enabled, skipSides, skipping)
             }
         }
     }

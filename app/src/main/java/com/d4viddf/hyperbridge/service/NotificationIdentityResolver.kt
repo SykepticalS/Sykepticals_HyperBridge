@@ -32,6 +32,7 @@ object NotificationIdentityResolver {
     }
 
     fun resolve(
+        packageName: String = "",
         appLabel: String = "",
         title: CharSequence? = null,
         text: CharSequence? = null,
@@ -79,11 +80,29 @@ object NotificationIdentityResolver {
             shareSender,
             remoteName,
         )
-        val sender = if (groupConversation) personSender else firstDistinct(
-            conversation,
-            personSender,
-        )
         val rawTitle = firstDistinct(title.clean(), bigTitle.clean())
+        // Multiple logged-in Instagram accounts label the shade as
+        // "{account receiving}: {account sender}". Keep that pair. A single
+        // account has no such prefix, so the sender stands alone. Groups
+        // still identify the member who sent the message.
+        val multiAccountTitle = instagramMultiAccountTitle(
+            packageName = packageName,
+            appLabel = app,
+            rawTitle = rawTitle,
+            receivingAccount = conversation,
+            sender = personSender,
+            groupConversation = groupConversation,
+        )
+        val directShareFromOther = !groupConversation &&
+            multiAccountTitle.isBlank() &&
+            personSender.isNotBlank() &&
+            isDirectMediaShare(messageText, text, bigText, ticker)
+        val sender = when {
+            groupConversation -> personSender
+            multiAccountTitle.isNotBlank() -> multiAccountTitle
+            directShareFromOther -> personSender
+            else -> firstDistinct(conversation, personSender)
+        }
         val resolvedTitle = if (groupConversation) {
             personSender.ifBlank { conversation }.ifBlank { stripSenderPrefix(rawTitle, names) }
         } else {
@@ -113,6 +132,25 @@ object NotificationIdentityResolver {
         }.orEmpty()
         return resolvedTitle to body
     }
+
+    private fun instagramMultiAccountTitle(
+        packageName: String,
+        appLabel: String,
+        rawTitle: String,
+        receivingAccount: String,
+        sender: String,
+        groupConversation: Boolean,
+    ): String {
+        if (groupConversation || rawTitle.isBlank()) return ""
+        val instagram = packageName == INSTAGRAM_PACKAGE || appLabel.equals("Instagram", true)
+        if (!instagram) return ""
+        if (receivingAccount.isBlank() || sender.isBlank() || receivingAccount.equals(sender, true)) return ""
+        val compound = "$receivingAccount: $sender"
+        return if (rawTitle.equals(compound, ignoreCase = true)) rawTitle else ""
+    }
+
+    private fun isDirectMediaShare(vararg values: CharSequence?): Boolean =
+        values.any { isMediaShareCaption(it) }
 
     private fun looksLikeGroupConversation(conversationTitle: String): Boolean =
         GROUP_UNREAD_COUNT.containsMatchIn(conversationTitle)
@@ -169,6 +207,8 @@ object NotificationIdentityResolver {
         val words = value.split(Regex("""\s+""")).filter { it.isNotBlank() }
         return words.size in 1..4 && !value.endsWith("...")
     }
+
+    private const val INSTAGRAM_PACKAGE = "com.instagram.android"
 
     private fun firstDistinct(vararg values: String): String =
         values.firstOrNull { it.isNotBlank() }.orEmpty()

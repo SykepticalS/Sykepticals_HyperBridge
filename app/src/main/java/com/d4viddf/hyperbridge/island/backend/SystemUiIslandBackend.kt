@@ -72,9 +72,14 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
             // island instead of relying on each producer to remember the hidden protocol flag.
             putBoolean(IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION, true)
             getString("miui.focus.param")?.let { json ->
+                val skipSides = if (metadata.semanticType == "SCREEN_RECORDING") {
+                    setOf("imageTextInfoLeft")
+                } else {
+                    emptySet()
+                }
                 putString(
                     "miui.focus.param",
-                    IslandVisualMetadata.injectTextUpdateAnimation(json),
+                    IslandVisualMetadata.injectTextUpdateAnimation(json, skipSides = skipSides),
                 )
             }
         }

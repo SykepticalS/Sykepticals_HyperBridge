@@ -503,6 +503,12 @@ abstract class BaseTranslator(
         return HyperPicture(key, transparentBitmap)
     }
 
+    protected fun getDrawablePicture(key: String, resId: Int): HyperPicture {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
+        val bitmap = drawable?.toBitmap() ?: createFallbackBitmap()
+        return HyperPicture(key, bitmap)
+    }
+
     protected fun getColoredPicture(key: String, resId: Int, colorHex: String): HyperPicture {
         val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
         val color = try { colorHex.toColorInt() } catch (e: Exception) { Color.WHITE }

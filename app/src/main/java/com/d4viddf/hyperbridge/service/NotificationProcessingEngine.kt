@@ -1140,6 +1140,7 @@ class NotificationProcessingEngine private constructor(
             !it.sender.isNullOrBlank() || !it.text.isNullOrBlank()
         }
         val (title, text) = NotificationIdentityResolver.resolve(
+            packageName = sbn.packageName,
             appLabel = getCachedAppLabel(sbn.packageName),
             title = rawTitle,
             text = extras.getCharSequence(Notification.EXTRA_TEXT),

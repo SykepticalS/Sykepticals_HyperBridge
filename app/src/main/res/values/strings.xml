@@ -726,7 +726,7 @@
     <string name="type_screen_recording">Screen recording</string>
     <string name="type_screen_recording_desc">Xiaomi system screen recording sessions</string>
     <string name="screen_recording_title">Screen recording</string>
-    <string name="screen_recording_active">Recording screen..</string>
+    <string name="screen_recording_active">Recording..</string>
     <string name="screen_recording_compact">Recording..</string>
     <string name="screen_recording_starting">Starting…</string>
     <string name="screen_recording_done">Done recording.</string>
