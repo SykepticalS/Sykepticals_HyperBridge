@@ -18,6 +18,8 @@ data class ActiveIsland(
     val subText: String,
     // Used for Deduplication
     val lastContentHash: Int,
+    /** Notification action buttons currently shown on this island. 0 means there are none. */
+    val actionFingerprint: Int = 0,
     /** Distinguishes repeated, semantically identical message events. */
     val messageEventFingerprint: MessageEventFingerprint? = null,
     val callSession: com.d4viddf.hyperbridge.service.call.CallSession? = null,

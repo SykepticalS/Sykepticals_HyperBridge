@@ -50,7 +50,9 @@ object IslandUpdateResolver {
             IslandPresentationReason.CONTENT_UPDATE
         },
         isMessagingEvent: Boolean = notificationType == NotificationType.MESSAGE,
-        messageEventFingerprint: MessageEventFingerprint? = null
+        messageEventFingerprint: MessageEventFingerprint? = null,
+        actionsChanged: Boolean = false,
+        actionRefreshBridgeId: Int? = null,
     ): IslandUpdateDecision {
         if (previous == null || previous.logicalId != logicalId) {
             return IslandUpdateDecision(
@@ -74,7 +76,7 @@ object IslandUpdateResolver {
                 !sameKnownMessageEvent &&
                 (previousMessageEvent != null || messageEventFingerprint != null)
 
-        if (!contentChanged && !messageEventChanged) {
+        if (!contentChanged && !messageEventChanged && !actionsChanged) {
             return IslandUpdateDecision(
                 kind = IslandPresentationKind.UNCHANGED,
                 bridgeId = previous.bridgeId,
@@ -92,11 +94,16 @@ object IslandUpdateResolver {
             else -> presentationReason
         }
 
+        // Action buttons (Reply, Boost, …) are part of the expanded island. HyperOS crashes
+        // if those buttons are patched onto the notification id it is already showing, so a
+        // button change retires that id and posts the updated buttons as a new one.
+        val refreshedBridgeId = actionRefreshBridgeId?.takeIf { actionsChanged && it != previous.bridgeId }
         return IslandUpdateDecision(
             kind = IslandPresentationKind.UPDATE,
-            bridgeId = previous.bridgeId,
+            bridgeId = refreshedBridgeId ?: previous.bridgeId,
             onlyAlertOnce = !updateReason.mayAutoExpand,
-            presentationReason = updateReason
+            presentationReason = updateReason,
+            cancelBeforeNotify = refreshedBridgeId != null,
         )
     }
 }

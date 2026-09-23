@@ -570,6 +570,74 @@ class IslandUpdateResolverTest {
         )
     }
 
+    @Test
+    fun changedActionButtonReplacesTheIslandInsteadOfPatchingIt() {
+        val refreshId = NotificationActionIdentity.refreshBridgeId("charging", 77, previousId = 42)
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "charging",
+            candidateBridgeId = 42,
+            contentHash = 10,
+            previous = PreviousIslandPresentation("charging", 42, 10),
+            notificationType = NotificationType.STANDARD,
+            actionsChanged = true,
+            actionRefreshBridgeId = refreshId,
+        )
+
+        assertEquals(IslandPresentationKind.UPDATE, decision.kind)
+        assertEquals(refreshId, decision.bridgeId)
+        assertTrue(decision.cancelBeforeNotify)
+        assertTrue(decision.onlyAlertOnce)
+        assertTrue(refreshId != 42)
+    }
+
+    @Test
+    fun unchangedActionButtonKeepsTheSameIsland() {
+        val decision = IslandUpdateResolver.decide(
+            logicalId = "charging",
+            candidateBridgeId = 99,
+            contentHash = 10,
+            previous = PreviousIslandPresentation("charging", 42, 11),
+            notificationType = NotificationType.STANDARD,
+            actionsChanged = false,
+        )
+
+        assertEquals(IslandPresentationKind.UPDATE, decision.kind)
+        assertEquals(42, decision.bridgeId)
+        assertFalse(decision.cancelBeforeNotify)
+    }
+
+    @Test
+    fun actionButtonIdentityIgnoresNothingWhenTheButtonIsReplaced() {
+        val boost = NotificationActionSnapshot(
+            title = "Boost",
+            semanticAction = 0,
+            iconResourceId = 0,
+            hasIcon = false,
+            remoteInputKey = "",
+            intentAction = "com.miui.power.BOOST",
+            intentComponent = "",
+        )
+        val boosting = boost.copy(title = "Boosting")
+        assertFalse(
+            NotificationActionIdentity.changed(
+                NotificationActionIdentity.fingerprint(listOf(boost)),
+                NotificationActionIdentity.fingerprint(listOf(boost)),
+            )
+        )
+        assertTrue(
+            NotificationActionIdentity.changed(
+                NotificationActionIdentity.fingerprint(listOf(boost)),
+                NotificationActionIdentity.fingerprint(listOf(boosting)),
+            )
+        )
+        assertTrue(
+            NotificationActionIdentity.changed(
+                NotificationActionIdentity.fingerprint(listOf(boost)),
+                NotificationActionIdentity.fingerprint(emptyList()),
+            )
+        )
+    }
+
     private fun messageEvent(timestamp: Long, messageCount: Int): MessageEventFingerprint {
         return MessageEventFingerprint(
             source = MessageEventFingerprintSource.MESSAGING_STYLE,

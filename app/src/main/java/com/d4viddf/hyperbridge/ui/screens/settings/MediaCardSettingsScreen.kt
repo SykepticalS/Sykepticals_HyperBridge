@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -73,7 +72,6 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmRestart by remember { mutableStateOf(false) }
     var previewSurface by remember { mutableIntStateOf(0) }
-    val systemDark = isSystemInDarkTheme()
 
     fun sync() = (context.applicationContext as? HyperBridgeApplication)?.syncHookConfig()
     fun saveBool(key: String, value: Boolean) {
@@ -132,45 +130,49 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
 
     val preview = if (previewSurface == 0) {
         MediaCardPreviewModel(
-            layoutStyle = shadeLayout,
-            cardTheme = shadeTheme,
-            ambientEnabled = shadeBackground == 0 && shadeAmbient != 0,
-            backgroundStyle = shadeBackground,
-            backgroundBlur = shadeBlur,
-            softCoverDark = softCoverIsDark(shadeTone, systemDark),
+            showShadow = !shadeHideShadow,
             coverStyle = shadeCover,
             hideCoverSource = shadeHideSource,
-            hideCoverShadow = shadeHideShadow,
             disableCoverFlip = shadeDisableFlip,
             hideDeviceSwitch = shadeHideDevice,
-            hideTime = shadeHideTime,
             hideCustomActions = shadeHideCustom,
-            waveProgress = shadeProgress == 1,
-            progressHeadGlow = shadeGlow,
-            thumbStyle = shadeThumb,
-            actionAlignLeft = shadeAlignLeft,
+            hideTime = shadeHideTime,
             actionOrder = shadeActionOrder,
+            actionAlignLeft = shadeAlignLeft,
+            cardTheme = shadeTheme,
+            backgroundStyle = shadeBackground,
+            backgroundBlur = shadeBlur,
+            softCoverTone = shadeTone,
+            ambientFlowMode = if (shadeBackground == 0) shadeAmbient else 0,
+            waveProgress = shadeProgress == C.NOTIFICATION_MEDIA_PROGRESS_STYLE_WAVE,
+            verticalProgressThumb = shadeThumb == C.NOTIFICATION_MEDIA_THUMB_STYLE_VERTICAL,
+            hideProgressThumb = shadeThumb == C.NOTIFICATION_MEDIA_THUMB_STYLE_HIDDEN,
         )
     } else {
+        val islandAmbientPreview = when (islandAmbient) {
+            C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_DEFAULT -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DYNAMIC
+            C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR
+            C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL
+            else -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DISABLED
+        }
         MediaCardPreviewModel(
-            layoutStyle = islandLayout,
-            cardTheme = islandTheme,
-            ambientEnabled = islandBackground == 0 && islandAmbient != C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_DISABLED,
-            backgroundStyle = islandBackground,
-            backgroundBlur = islandBlur,
-            softCoverDark = softCoverIsDark(islandTone, systemDark),
+            showShadow = false,
             coverStyle = islandCover,
             hideCoverSource = islandHideSource,
-            hideCoverShadow = false,
             disableCoverFlip = islandDisableFlip,
             hideDeviceSwitch = islandHideDevice,
-            hideTime = islandHideTime,
             hideCustomActions = islandHideCustom,
-            waveProgress = islandProgress == 1,
-            progressHeadGlow = islandGlow,
-            thumbStyle = islandThumb,
-            actionAlignLeft = islandAlignLeft,
+            hideTime = islandHideTime,
             actionOrder = islandActionOrder,
+            actionAlignLeft = islandAlignLeft,
+            cardTheme = islandTheme,
+            backgroundStyle = islandBackground,
+            backgroundBlur = islandBlur,
+            softCoverTone = islandTone,
+            ambientFlowMode = if (islandBackground == 0) islandAmbientPreview else 0,
+            waveProgress = islandProgress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE,
+            verticalProgressThumb = islandThumb == C.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_VERTICAL,
+            hideProgressThumb = islandThumb == C.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_HIDDEN,
         )
     }
 
@@ -374,12 +376,6 @@ private fun BackgroundControls(
             TogglePref("Auto-invert bright artwork", invert, onInvert)
         }
     }
-}
-
-private fun softCoverIsDark(tone: Int, systemDark: Boolean): Boolean = when (tone) {
-    C.MEDIA_SOFT_COVER_TONE_LIGHT -> false
-    C.MEDIA_SOFT_COVER_TONE_FOLLOW_SYSTEM -> systemDark
-    else -> true
 }
 
 @Composable

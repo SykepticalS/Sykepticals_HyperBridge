@@ -1785,6 +1785,20 @@ class NotificationProcessingEngine private constructor(
             }
 
             val isSummary = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+            val actionFingerprint = NotificationActionIdentity.fingerprint(sbn)
+            val actionsChanged = NotificationActionIdentity.changed(previous?.actionFingerprint, actionFingerprint)
+            val actionRefreshBridgeId = if (actionsChanged) {
+                NotificationActionIdentity.refreshBridgeId(effectiveKey, actionFingerprint, previous?.id)
+            } else {
+                null
+            }
+            if (actionsChanged) {
+                Log.i(
+                    TAG,
+                    "ACTION REFRESH logical=${effectiveKey.hashCode()} " +
+                        "from=${previous?.id} to=$actionRefreshBridgeId"
+                )
+            }
 
             // --- LAYERED ENGINE LOGIC ---
             val useLiveUpdates = type != NotificationType.SCREEN_RECORDING &&
@@ -1852,7 +1866,9 @@ class NotificationProcessingEngine private constructor(
                     previous = previousIslandPresentation(previous, isUpdate, effectiveKey, presentationBridgeId),
                     notificationType = type,
                     isMessagingEvent = isMessagingLifecycle,
-                    messageEventFingerprint = messageEventFingerprint
+                    messageEventFingerprint = messageEventFingerprint,
+                    actionsChanged = actionsChanged,
+                    actionRefreshBridgeId = actionRefreshBridgeId,
                 )
 
                 if (decision.kind == IslandPresentationKind.UNCHANGED) {
@@ -1940,6 +1956,7 @@ class NotificationProcessingEngine private constructor(
                     text = effectiveText,
                     subText = "LiveUpdate",
                     lastContentHash = newContentHash,
+                    actionFingerprint = actionFingerprint,
                     messageEventFingerprint = messageEventFingerprint,
                     deleteIntent = sbn.notification.deleteIntent
                 )
@@ -2016,7 +2033,9 @@ class NotificationProcessingEngine private constructor(
                 previous = previousIslandPresentation(previous, isUpdate, effectiveKey, presentationBridgeId),
                 notificationType = type,
                 isMessagingEvent = isMessagingLifecycle,
-                messageEventFingerprint = messageEventFingerprint
+                messageEventFingerprint = messageEventFingerprint,
+                actionsChanged = actionsChanged,
+                actionRefreshBridgeId = actionRefreshBridgeId,
             )
 
             if (decision.kind == IslandPresentationKind.UNCHANGED) {
@@ -2052,7 +2071,7 @@ class NotificationProcessingEngine private constructor(
                 suppressContentIntent = false,
                 config = finalConfig,
                 updatableOverride = NotificationLifecyclePolicy.isProgressLifecycle(type),
-                inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE && !decision.cancelBeforeNotify,
                 postGeneration = System.currentTimeMillis(),
             )
             if (!posted) return
@@ -2081,6 +2100,7 @@ class NotificationProcessingEngine private constructor(
                 text = effectiveText,
                 subText = "",
                 lastContentHash = newContentHash,
+                actionFingerprint = actionFingerprint,
                 messageEventFingerprint = messageEventFingerprint,
                 callSession = callSession,
                 screenRecordingSession = screenRecordingSession,
