@@ -69,7 +69,7 @@ class CallTranslator(
         builder.setShowNotification(config.isShowShade ?: true)
 
         val hiddenKey = "hidden_pixel"
-        builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = true))
+        builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = false))
         builder.addPicture(getTransparentPicture(hiddenKey))
 
         val bridgeActions = getFilteredCallActions(sbn, picKey, isIncoming, theme)
@@ -124,7 +124,12 @@ class CallTranslator(
             expandedTimeMs = config.floatTimeout
         )
 
-        if (!isIncoming && connectedAtForTimer != null) {
+        if (isIncoming) {
+            builder.setBigIslandInfo(
+                left = IslandCompactLayout.left(picKey, title),
+                right = IslandCompactLayout.right(context.getString(R.string.call_incoming)),
+            )
+        } else if (connectedAtForTimer != null) {
             builder.setBigIslandCountUp(connectedAtForTimer, picKey)
         } else {
             builder.setBigIslandInfo(
@@ -167,7 +172,8 @@ class CallTranslator(
         val selectedActions = CallActionSelectionPolicy.select(
             actions = actionSignals,
             isIncoming = isIncoming,
-            classifier = classifier
+            classifier = classifier,
+            packageName = sbn.packageName,
         )
 
         selectedActions.forEach { selected ->

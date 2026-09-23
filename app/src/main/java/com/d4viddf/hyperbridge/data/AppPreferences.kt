@@ -39,6 +39,16 @@ data class NotificationTypePreferenceSnapshot(
     val appOverrides: Map<String, Set<String>>
 )
 
+data class CallStagePreferenceSnapshot(
+    val globalStages: Set<String>,
+    val appOverrides: Map<String, Set<String>>,
+)
+
+data class CallFocusPreferenceSnapshot(
+    val globalEnabled: Boolean,
+    val appOverrides: Map<String, Boolean>,
+)
+
 class AppPreferences internal constructor(
     private val dao: SettingsDao,
     private val legacyDataStore: DataStore<Preferences>?,
@@ -676,6 +686,38 @@ class AppPreferences internal constructor(
         }
         .distinctUntilChanged()
 
+    val callStagePolicyFlow: Flow<CallStagePreferenceSnapshot> = dao.getAllFlow()
+        .map { settings ->
+            val values = settings.associate { it.key to it.value }
+            val global = values[GLOBAL_CALL_STAGES_KEY]?.deserializeSet()
+                ?: CallStage.entries.map { it.name }.toSet()
+            val overrides = values.mapNotNull { (key, value) ->
+                if (!key.startsWith("config_") || !key.endsWith("_call_stages")) return@mapNotNull null
+                val packageName = key.removePrefix("config_").removeSuffix("_call_stages")
+                if (packageName.isEmpty()) null else packageName to value.deserializeSet()
+            }.toMap()
+            CallStagePreferenceSnapshot(global, overrides)
+        }
+        .distinctUntilChanged()
+
+    val callFocusPolicyFlow: Flow<CallFocusPreferenceSnapshot> = dao.getAllFlow()
+        .map { settings ->
+            val values = settings.associate { it.key to it.value }
+            val overrides = values.mapNotNull { (key, value) ->
+                if (!key.startsWith("config_") || !key.endsWith("_call_focus_replacement")) {
+                    return@mapNotNull null
+                }
+                val packageName = key.removePrefix("config_").removeSuffix("_call_focus_replacement")
+                val enabled = value.toBooleanStrictOrNull() ?: return@mapNotNull null
+                if (packageName.isEmpty()) null else packageName to enabled
+            }.toMap()
+            CallFocusPreferenceSnapshot(
+                globalEnabled = values[GLOBAL_CALL_FOCUS_REPLACEMENT_KEY].toBoolean(false),
+                appOverrides = overrides,
+            )
+        }
+        .distinctUntilChanged()
+
     suspend fun updateGlobalNotificationType(type: NotificationType, isEnabled: Boolean) {
         val currentStr = dao.getSetting(GLOBAL_NOTIFICATION_TYPES_KEY)
         val currentSet = currentStr?.deserializeSet() ?: NotificationType.configurableEntries.map { it.name }.toSet()
@@ -705,6 +747,29 @@ class AppPreferences internal constructor(
     // ========================================================================
 
     val GLOBAL_CALL_STAGES_KEY = "global_call_stages"
+    val GLOBAL_CALL_FOCUS_REPLACEMENT_KEY = "global_call_focus_replacement"
+
+    val globalCallFocusReplacementFlow: Flow<Boolean> =
+        dao.getSettingFlow(GLOBAL_CALL_FOCUS_REPLACEMENT_KEY).map { it.toBoolean(false) }
+
+    suspend fun setGlobalCallFocusReplacement(enabled: Boolean) {
+        save(GLOBAL_CALL_FOCUS_REPLACEMENT_KEY, enabled.toString())
+    }
+
+    fun getAppCallFocusReplacementFlow(packageName: String): Flow<Boolean?> {
+        return dao.getSettingFlow("config_${packageName}_call_focus_replacement")
+            .map { it?.toBooleanStrictOrNull() }
+    }
+
+    suspend fun setAppCallFocusReplacement(packageName: String, enabled: Boolean) {
+        save("config_${packageName}_call_focus_replacement", enabled.toString())
+    }
+
+    fun getEffectiveCallFocusReplacementSync(packageName: String): Boolean {
+        val appValue = memoryCache["config_${packageName}_call_focus_replacement"]?.toBooleanStrictOrNull()
+        if (appValue != null) return appValue
+        return memoryCache[GLOBAL_CALL_FOCUS_REPLACEMENT_KEY].toBoolean(false)
+    }
 
     val globalCallStagesFlow: Flow<Set<CallStage>> = dao.getSettingFlow(GLOBAL_CALL_STAGES_KEY).map { raw ->
         raw.deserializeCallStages(CallStage.entries.toSet())

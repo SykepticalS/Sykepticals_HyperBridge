@@ -158,6 +158,7 @@ fun AppConfigScreen(
     val effectiveConfig by viewModel.getEffectiveAppConfigFlow(packageName).collectAsState(initial = null)
     val activeTypes = effectiveConfig?.activeTypes ?: emptySet()
     val activeCallStages = effectiveConfig?.activeCallStages ?: CallStage.entries.toSet()
+    val replaceCallWithFocus = effectiveConfig?.replaceCallWithFocus == true
     val isManagedByTheme = effectiveConfig?.isManagedByTheme == true
 
     val appIslandConfig by viewModel.getAppIslandConfig(packageName).collectAsState(initial = IslandConfig())
@@ -236,6 +237,7 @@ fun AppConfigScreen(
             isManagedByTheme = isManagedByTheme,
             activeTypes = activeTypes,
             activeCallStages = activeCallStages,
+            replaceCallWithFocus = replaceCallWithFocus,
             appIslandConfig = appIslandConfig,
             globalConfig = globalConfig,
             blockedTerms = blockedTerms,
@@ -247,6 +249,7 @@ fun AppConfigScreen(
             onToggleBridged = { enabled -> viewModel.toggleApp(packageName, enabled) },
             onToggleType = { type, enabled -> viewModel.updateAppConfig(packageName, type, enabled) },
             onToggleCallStage = { stage, enabled -> viewModel.updateAppCallStage(packageName, stage, enabled) },
+            onToggleCallFocus = { enabled -> viewModel.updateAppCallFocus(packageName, enabled) },
             onUpdateIslandConfig = { config -> viewModel.updateAppIslandConfig(packageName, config) },
             onUpdateBlockedTerms = { terms -> viewModel.updateAppBlockedTerms(packageName, terms) },
             onNavConfigClick = { onNavConfigClick(packageName) },
@@ -331,6 +334,7 @@ fun AppConfigContent(
     isManagedByTheme: Boolean,
     activeTypes: Set<String>,
     activeCallStages: Set<CallStage>,
+    replaceCallWithFocus: Boolean = false,
     appIslandConfig: IslandConfig,
     globalConfig: IslandConfig,
     blockedTerms: Set<String>,
@@ -342,6 +346,7 @@ fun AppConfigContent(
     onToggleBridged: (Boolean) -> Unit,
     onToggleType: (NotificationType, Boolean) -> Unit,
     onToggleCallStage: (CallStage, Boolean) -> Unit,
+    onToggleCallFocus: (Boolean) -> Unit = {},
     onUpdateIslandConfig: (IslandConfig) -> Unit,
     onUpdateBlockedTerms: (Set<String>) -> Unit,
     onNavConfigClick: () -> Unit,
@@ -569,7 +574,9 @@ fun AppConfigContent(
                             onToggleType = onToggleType,
                             onToggleCallStage = onToggleCallStage,
                             onNavConfigClick = onNavConfigClick,
-                            navEditDesc = navEditDesc
+                            navEditDesc = navEditDesc,
+                            replaceCallWithFocus = replaceCallWithFocus,
+                            onToggleCallFocus = onToggleCallFocus,
                         )
                     }
                 }
@@ -938,7 +945,9 @@ fun AppNotificationTypesContent(
     onToggleType: (NotificationType, Boolean) -> Unit,
     onToggleCallStage: (CallStage, Boolean) -> Unit,
     onNavConfigClick: () -> Unit,
-    navEditDesc: String
+    navEditDesc: String,
+    replaceCallWithFocus: Boolean = false,
+    onToggleCallFocus: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1027,6 +1036,30 @@ fun AppNotificationTypesContent(
                                     onCheckedChange = { onToggleCallStage(stage, it) }
                                 )
                             }
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleCallFocus(!replaceCallWithFocus) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.call_focus_replacement),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = stringResource(R.string.call_focus_replacement_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = replaceCallWithFocus,
+                                onCheckedChange = onToggleCallFocus
+                            )
                         }
                     }
                 }
@@ -1677,6 +1710,7 @@ private fun SampleAppConfigContent(currentSubscreen: AppConfigSubscreen?) {
         onToggleBridged = {},
         onToggleType = { _, _ -> },
         onToggleCallStage = { _, _ -> },
+        onToggleCallFocus = {},
         onUpdateIslandConfig = {},
         onUpdateBlockedTerms = {},
         onNavConfigClick = {},

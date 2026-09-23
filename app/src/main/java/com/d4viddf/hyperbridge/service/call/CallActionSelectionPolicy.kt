@@ -14,7 +14,8 @@ object CallActionSelectionPolicy {
     fun select(
         actions: List<CallActionSignal>,
         isIncoming: Boolean,
-        classifier: CallNotificationClassifier
+        classifier: CallNotificationClassifier,
+        packageName: String? = null,
     ): List<SelectedCallAction> {
         val classified = actions.mapIndexedNotNull { index, action ->
             if (!action.hasPendingIntent) return@mapIndexedNotNull null
@@ -30,10 +31,14 @@ object CallActionSelectionPolicy {
             )
         }
 
+        val allowMicrophone = packageName == null || CallMicrophoneApps.supportsNotificationMute(packageName)
         val preferredRoles = if (isIncoming) {
             listOf(CallActionRole.DECLINE_OR_HANG_UP, CallActionRole.ANSWER)
         } else {
-            listOf(CallActionRole.MICROPHONE, CallActionRole.DECLINE_OR_HANG_UP)
+            buildList {
+                if (allowMicrophone) add(CallActionRole.MICROPHONE)
+                add(CallActionRole.DECLINE_OR_HANG_UP)
+            }
         }
 
         return preferredRoles.mapNotNull { preferred ->

@@ -2,6 +2,7 @@ package com.d4viddf.hyperbridge.xposed
 
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.xposed.hooks.FocusWhitelistHook
+import com.d4viddf.hyperbridge.xposed.hooks.CallIslandPresenceHook
 import com.d4viddf.hyperbridge.xposed.hooks.HeadsUpSuppressionHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandClickCleanupHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandInlineReplyHook
@@ -31,6 +32,7 @@ class HyperBridgeModule : XposedModule() {
                 IslandWindowImeHook.install(this, param)
                 FocusWhitelistHook.install(this, param)
                 HeadsUpSuppressionHook.install(this, param)
+                CallIslandPresenceHook.install(this, param)
                 OuterGlowHook.install(this, param)
                 ActiveIslandDismissHook.install(this, param)
                 MarqueeHook.install(this, param)

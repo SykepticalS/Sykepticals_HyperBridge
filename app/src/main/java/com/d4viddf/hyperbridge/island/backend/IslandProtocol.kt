@@ -35,6 +35,9 @@ object IslandProtocol {
     // Keep this identical to HyperIsland's IslandDispatchContract so the source marker and the
     // copied SystemUI suppression hook share the same proven contract.
     const val EXTRA_SUPPRESS_SOURCE_HEADS_UP = "hyperisland.suppress_source_heads_up"
+    /** Source call notification is carrying the island focus payload instead of a SystemUI proxy. */
+    const val EXTRA_CALL_FOCUS = "hyperbridge.call_focus"
+    const val EXTRA_CALL_FOCUS_DECORATION = "hyperbridge.call_focus_decoration"
     const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"
     const val EXTRA_MARQUEE_ENABLED = "hyperbridge.marquee.enabled"
     const val EXTRA_MARQUEE_MODE = "hyperbridge.marquee.mode"

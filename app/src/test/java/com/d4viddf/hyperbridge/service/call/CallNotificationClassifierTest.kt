@@ -181,6 +181,45 @@ class CallNotificationClassifierTest {
     }
 
     @Test
+    fun mutePhraseMatchesWhenTheLabelContainsTheKeyword() {
+        val action = CallActionSignal("Mute microphone", 0, true)
+
+        assertEquals(CallActionRole.MICROPHONE, classifier.roleForAction(action))
+        assertEquals(CallMicrophoneState.UNMUTED, classifier.microphoneStateForAction(action))
+    }
+
+    @Test
+    fun notificationMuteIsLimitedToWhatsAppAndInstagram() {
+        val actions = listOf(
+            CallActionSignal("Mute microphone", 0, true),
+            CallActionSignal("Hang up", 0, true),
+        )
+
+        val whatsApp = CallActionSelectionPolicy.select(
+            actions,
+            isIncoming = false,
+            classifier = classifier,
+            packageName = "com.whatsapp",
+        )
+        val instagram = CallActionSelectionPolicy.select(
+            actions,
+            isIncoming = false,
+            classifier = classifier,
+            packageName = "com.instagram.android",
+        )
+        val other = CallActionSelectionPolicy.select(
+            actions,
+            isIncoming = false,
+            classifier = classifier,
+            packageName = "com.telegram.messenger",
+        )
+
+        assertEquals(listOf(0, 1), whatsApp.map { it.index })
+        assertEquals(listOf(0, 1), instagram.map { it.index })
+        assertEquals(listOf(1), other.map { it.index })
+    }
+
+    @Test
     fun ongoingControlsNeverInventMuteWhenAppDoesNotExposeIt() {
         val actions = listOf(
             CallActionSignal("Open call", 0, true),

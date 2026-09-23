@@ -4,7 +4,7 @@ import android.os.Bundle;
 import com.d4viddf.hyperbridge.processing.IIslandDispatcher;
 
 interface INotificationProcessingService {
-    boolean processPosted(in Bundle request);
+    boolean processPosted(inout Bundle request);
     void processRemoved(in Bundle request);
     void reconcile(in Bundle request);
     void reload();

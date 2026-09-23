@@ -30,10 +30,15 @@ class NotificationProcessingService : Service() {
 
         override fun processPosted(request: Bundle?): Boolean {
             enforceSystemUiCaller()
-            val sbn = request?.statusBarNotification() ?: return false
+            val posted = request ?: return false
+            val sbn = posted.statusBarNotification() ?: return false
             sbn.notification.extras.remove(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP)
             activeSources[sbn.key] = sbn
             engine.onNotificationPosted(sbn)
+            sbn.notification.extras.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION)?.let { decoration ->
+                posted.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
+                sbn.notification.extras.remove(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION)
+            }
             return sbn.notification.extras.getBoolean(
                 IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP,
                 false,

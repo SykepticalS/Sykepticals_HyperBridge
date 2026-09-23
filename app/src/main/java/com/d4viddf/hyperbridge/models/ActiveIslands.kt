@@ -26,5 +26,7 @@ data class ActiveIsland(
     val screenRecordingSession: com.d4viddf.hyperbridge.service.recording.ScreenRecordingSession? = null,
     val deleteIntent: android.app.PendingIntent? = null,
     /** The mirrored source should be retired when this bridge notification is opened. */
-    val dismissSourceOnContentClick: Boolean = false
+    val dismissSourceOnContentClick: Boolean = false,
+    /** The calling app's own notification carries the focus payload, so no SystemUI proxy is posted. */
+    val sourceFocus: Boolean = false,
 )

@@ -12,6 +12,8 @@ object HookConfigSync {
     const val KEY_HEARTBEAT = "heartbeat_elapsed"
     const val KEY_ALLOWED_PACKAGES = "allowed_packages"
     const val KEY_TYPE_POLICY = "type_policy"
+    const val KEY_CALL_STAGE_POLICY = "call_stage_policy"
+    const val KEY_CALL_FOCUS_POLICY = "call_focus_policy"
     const val KEY_FOCUS_ENABLED = "focus_enabled"
     const val KEY_SUPPRESS_SOURCE_HEADS_UP = "suppress_source_heads_up"
     const val KEY_MARQUEE_SPEED = "marquee_speed"
@@ -63,6 +65,36 @@ object HookConfigSync {
             .putString(KEY_ALLOWED_PACKAGES, packages.sorted().joinToString(","))
             .putString(KEY_TYPE_POLICY, policy)
             .apply()
+        sync(context)
+    }
+
+    fun updateCallStagePolicy(
+        context: Context,
+        globalStages: Set<String>,
+        overrides: Map<String, Set<String>>,
+    ) {
+        val policy = JSONObject().apply {
+            put("global", globalStages.sorted().joinToString(","))
+            put("overrides", JSONObject().apply {
+                overrides.toSortedMap().forEach { (pkg, stages) -> put(pkg, stages.sorted().joinToString(",")) }
+            })
+        }.toString()
+        local(context).edit().putString(KEY_CALL_STAGE_POLICY, policy).apply()
+        sync(context)
+    }
+
+    fun updateCallFocusPolicy(
+        context: Context,
+        globalEnabled: Boolean,
+        overrides: Map<String, Boolean>,
+    ) {
+        val policy = JSONObject().apply {
+            put("global", globalEnabled)
+            put("overrides", JSONObject().apply {
+                overrides.toSortedMap().forEach { (pkg, enabled) -> put(pkg, enabled) }
+            })
+        }.toString()
+        local(context).edit().putString(KEY_CALL_FOCUS_POLICY, policy).apply()
         sync(context)
     }
 

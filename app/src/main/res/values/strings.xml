@@ -224,7 +224,7 @@
 
     <string name="system_version">System Version</string>
 
-    <string name="call_incoming">Incoming Call</string>
+    <string name="call_incoming">Incoming call…</string>
     <string name="call_ongoing">Active Call</string>
     <string name="call_calling">Calling…</string>
     <string name="call_ringing">Ringing…</string>
@@ -238,6 +238,8 @@
     <string name="call_stage_outgoing_desc">Calling, ringing, and connecting before the call is answered</string>
     <string name="call_stage_active">Active calls</string>
     <string name="call_stage_active_desc">Connected calls with an elapsed-time display</string>
+    <string name="call_focus_replacement">Replace call notification with focus notification</string>
+    <string name="call_focus_replacement_desc">Use the calling app\'s own notification as the island, so leaving the call shrinks into the island</string>
 
     <string-array name="call_keywords_hangup">
         <item>hang</item>

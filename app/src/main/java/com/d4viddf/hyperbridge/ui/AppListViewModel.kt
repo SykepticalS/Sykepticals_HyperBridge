@@ -203,6 +203,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         val isManagedByTheme: Boolean,
         val activeTypes: Set<String>,
         val activeCallStages: Set<com.d4viddf.hyperbridge.models.CallStage>,
+        val replaceCallWithFocus: Boolean,
         val useNativeEngine: Boolean,
         val navigationOverride: NavigationModule?,
         val localNavContent: Pair<NavContent, NavContent> // Added for the bottom sheet
@@ -217,13 +218,22 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             preferences.getAppCallStagesFlow(packageName),
             preferences.globalCallStagesFlow
         ) { appStages, globalStages -> appStages ?: globalStages }
+        val callFocusFlow = combine(
+            preferences.getAppCallFocusReplacementFlow(packageName),
+            preferences.globalCallFocusReplacementFlow
+        ) { appFocus, globalFocus -> appFocus ?: globalFocus }
+        val callOptionsFlow = combine(
+            effectiveCallStagesFlow,
+            callFocusFlow
+        ) { stages, focus -> stages to focus }
         return combine(
             preferences.getAppConfigFlow(packageName),
             preferences.globalNotificationTypesFlow,
-            effectiveCallStagesFlow,
+            callOptionsFlow,
             preferences.getEffectiveNavLayout(packageName), // Gets the fallback-resolved NavContent
             activeTheme
-        ) { appPrefTypes, globalTypes, effectiveCallStages, effectiveNavContent, theme ->
+        ) { appPrefTypes, globalTypes, callOptions, effectiveNavContent, theme ->
+            val (effectiveCallStages, replaceCallWithFocus) = callOptions
 
             val themeOverride = theme?.apps?.get(packageName)
             val isManaged = themeOverride != null
@@ -248,6 +258,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 isManagedByTheme = isManaged,
                 activeTypes = effectiveTypes,
                 activeCallStages = effectiveCallStages,
+                replaceCallWithFocus = replaceCallWithFocus,
                 useNativeEngine = effectiveEngine,
                 navigationOverride = effectiveNavVisuals,
                 localNavContent = effectiveNavContent
@@ -340,6 +351,12 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     fun updateAppCallStage(pkg: String, stage: com.d4viddf.hyperbridge.models.CallStage, enabled: Boolean) {
         viewModelScope.launch {
             preferences.updateAppCallStage(pkg, stage, enabled)
+        }
+    }
+
+    fun updateAppCallFocus(pkg: String, enabled: Boolean) {
+        viewModelScope.launch {
+            preferences.setAppCallFocusReplacement(pkg, enabled)
         }
     }
 

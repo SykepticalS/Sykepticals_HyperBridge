@@ -10,6 +10,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.os.Parcel
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -72,6 +73,7 @@ import com.d4viddf.hyperbridge.service.call.CallNotificationSignals
 import com.d4viddf.hyperbridge.service.call.CallReplacementPolicy
 import com.d4viddf.hyperbridge.service.call.CallSession
 import com.d4viddf.hyperbridge.service.call.CallSessionInput
+import com.d4viddf.hyperbridge.service.call.CallState
 import com.d4viddf.hyperbridge.service.call.CallSessionTracker
 import com.d4viddf.hyperbridge.service.call.CallStageVisibilityPolicy
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsStore
@@ -138,6 +140,8 @@ class NotificationProcessingEngine private constructor(
 
     private val TAG = "HyperBridgeDebug"
     private val EXTRA_ORIGINAL_KEY = "hyper_original_key"
+    /** Leaves room for the source notification already travelling in the same Binder call. */
+    private val SOURCE_FOCUS_DECORATION_LIMIT = 256 * 1024
 
     // --- CHANNELS ---
     private val NOTIFICATION_CHANNEL_ID = BridgeNotificationChannels.ACTIVE
@@ -1801,8 +1805,13 @@ class NotificationProcessingEngine private constructor(
             }
 
             // --- LAYERED ENGINE LOGIC ---
+            val incomingCallBanner = callSession?.state == CallState.INCOMING_RINGING &&
+                sbn.notification.fullScreenIntent != null
+            val replaceWithSourceFocus = callSession != null &&
+                preferences.getEffectiveCallFocusReplacementSync(sbn.packageName)
             val useLiveUpdates = type != NotificationType.SCREEN_RECORDING &&
                     !isSavedScreenRecording &&
+                    !replaceWithSourceFocus &&
                     getEffectiveEngine(sbn.packageName)
             val finalConfig = baseBehaviorConfig.let { config ->
                 config.copy(
@@ -1872,7 +1881,7 @@ class NotificationProcessingEngine private constructor(
                 )
 
                 if (decision.kind == IslandPresentationKind.UNCHANGED) {
-                    markSourceHeadsUpSuppressed(sbn)
+                    markSourceHeadsUpSuppressed(sbn, incomingCallBanner)
                     return
                 }
 
@@ -1930,6 +1939,7 @@ class NotificationProcessingEngine private constructor(
                         sbn,
                         type,
                         islandPostGeneration,
+                        incomingCallBanner = incomingCallBanner,
                     )) return
 
                 expiredIslands.acceptNewGeneration(
@@ -2038,8 +2048,82 @@ class NotificationProcessingEngine private constructor(
                 actionRefreshBridgeId = actionRefreshBridgeId,
             )
 
-            if (decision.kind == IslandPresentationKind.UNCHANGED) {
-                markSourceHeadsUpSuppressed(sbn)
+            val switchingFocusMode = type == NotificationType.CALL &&
+                previous != null &&
+                previous.sourceFocus != replaceWithSourceFocus
+            if (decision.kind == IslandPresentationKind.UNCHANGED && !switchingFocusMode) {
+                val focusRefreshed = !replaceWithSourceFocus || type != NotificationType.CALL ||
+                    attachSourceCallFocus(
+                        sbn, data, effectiveTitle, effectiveText, finalConfig, inPlaceUpdate = false,
+                    )
+                if (focusRefreshed) {
+                    markSourceHeadsUpSuppressed(sbn, incomingCallBanner)
+                    return
+                }
+            }
+
+            if (replaceWithSourceFocus && type == NotificationType.CALL &&
+                attachSourceCallFocus(
+                    sbn,
+                    data,
+                    effectiveTitle,
+                    effectiveText,
+                    finalConfig,
+                    inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                )
+            ) {
+                if (previous != null && !previous.sourceFocus) {
+                    internalBridgeReplacements.mark(
+                        previous.id,
+                        effectiveKey,
+                        processingGeneration,
+                        System.currentTimeMillis(),
+                    )
+                    islandBackend.cancel(previous.id)
+                    reverseTranslations.remove(previous.id)
+                }
+                markSourceHeadsUpSuppressed(sbn, incomingCallBanner)
+                expiredIslands.acceptNewGeneration(
+                    sbn.key,
+                    sourceGenerationFingerprint(newContentHash, sbn.postTime),
+                    messageEventFingerprint,
+                    effectiveKey,
+                )
+                activeTranslations[effectiveKey] = decision.bridgeId
+                reverseTranslations[decision.bridgeId] = effectiveKey
+                activeIslands[effectiveKey] = ActiveIsland(
+                    id = decision.bridgeId,
+                    type = type,
+                    postTime = System.currentTimeMillis(),
+                    sourcePostTime = sbn.postTime,
+                    packageName = sbn.packageName,
+                    sourceKey = sbn.key,
+                    logicalId = effectiveKey,
+                    groupKey = sbn.groupKey,
+                    isGroupSummary = isSummary,
+                    generation = processingGeneration,
+                    title = effectiveTitle,
+                    text = effectiveText,
+                    subText = "",
+                    lastContentHash = newContentHash,
+                    actionFingerprint = actionFingerprint,
+                    messageEventFingerprint = messageEventFingerprint,
+                    callSession = callSession,
+                    deleteIntent = sbn.notification.deleteIntent,
+                    sourceFocus = true,
+                )
+                updatePermanentIsland()
+                handlePostNotificationSideEffects(
+                    originalKey = effectiveKey,
+                    bridgeId = decision.bridgeId,
+                    generation = processingGeneration,
+                    config = finalConfig,
+                    type = type,
+                    isLiveUpdate = false,
+                    sbn = sbn,
+                    title = effectiveTitle,
+                    text = effectiveText,
+                )
                 return
             }
 
@@ -2073,6 +2157,7 @@ class NotificationProcessingEngine private constructor(
                 updatableOverride = NotificationLifecyclePolicy.isProgressLifecycle(type),
                 inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE && !decision.cancelBeforeNotify,
                 postGeneration = System.currentTimeMillis(),
+                incomingCallBanner = incomingCallBanner,
             )
             if (!posted) return
 
@@ -2411,7 +2496,44 @@ class NotificationProcessingEngine private constructor(
         updatableOverride: Boolean? = null,
         inPlaceUpdate: Boolean = false,
         postGeneration: Long = System.currentTimeMillis(),
+        incomingCallBanner: Boolean = false,
     ): Boolean {
+        val notification = assembleIslandNotification(
+            sbn = sbn,
+            data = data,
+            title = title,
+            text = text,
+            shouldAlertOnce = shouldAlertOnce,
+            suppressContentIntent = suppressContentIntent,
+            config = config,
+            updatableOverride = updatableOverride,
+            inPlaceUpdate = inPlaceUpdate,
+        )
+        val posted = postIsland(
+            bridgeId,
+            notification,
+            bridgeId.toString(),
+            sbn,
+            detectNotificationType(sbn),
+            postGeneration,
+            inPlaceUpdate = inPlaceUpdate,
+            incomingCallBanner = incomingCallBanner,
+        )
+        if (!posted) return false
+        return true
+    }
+
+    private fun assembleIslandNotification(
+        sbn: StatusBarNotification,
+        data: HyperIslandData,
+        title: String,
+        text: String,
+        shouldAlertOnce: Boolean,
+        suppressContentIntent: Boolean = false,
+        config: IslandConfig,
+        updatableOverride: Boolean? = null,
+        inPlaceUpdate: Boolean = false,
+    ): Notification {
         val semanticType = detectNotificationType(sbn)
         val keepPosted = sourceStaysPosted(sbn, semanticType)
         val updatable = updatableOverride ?: (
@@ -2487,17 +2609,80 @@ class NotificationProcessingEngine private constructor(
             notification.extras.putBoolean("miui.island.updateNoFloat", true)
         }
 
-        val posted = postIsland(
-            bridgeId,
-            notification,
-            bridgeId.toString(),
-            sbn,
-            semanticType,
-            postGeneration,
+        return notification
+    }
+
+    /**
+     * Copies the call island onto the source notification and leaves that notification posted.
+     * Returns false when the decoration is too large to travel back over the processing Binder
+     * call; the caller then posts the SystemUI proxy instead.
+     */
+    private fun attachSourceCallFocus(
+        sbn: StatusBarNotification,
+        data: HyperIslandData,
+        title: String,
+        text: String,
+        config: IslandConfig,
+        inPlaceUpdate: Boolean,
+    ): Boolean {
+        val notification = assembleIslandNotification(
+            sbn = sbn,
+            data = data,
+            title = title,
+            text = text,
+            shouldAlertOnce = true,
+            config = config,
+            updatableOverride = true,
             inPlaceUpdate = inPlaceUpdate,
         )
-        if (!posted) return false
+        val extras = notification.extras
+        val decoration = Bundle()
+        for (key in extras.keySet()) {
+            if (!isSourceFocusExtra(key)) continue
+            when (val value = extras.get(key)) {
+                is Bundle -> decoration.putBundle(key, Bundle(value))
+                is String -> decoration.putString(key, value)
+                is Boolean -> decoration.putBoolean(key, value)
+                is Int -> decoration.putInt(key, value)
+                is Long -> decoration.putLong(key, value)
+                is android.os.Parcelable -> decoration.putParcelable(key, value)
+            }
+        }
+        decoration.remove(IslandProtocol.EXTRA_OWNER)
+        decoration.putBoolean(IslandProtocol.EXTRA_CALL_FOCUS, true)
+        decoration.putString(IslandProtocol.EXTRA_SOURCE_PACKAGE, sbn.packageName)
+        // SystemUI names the island with MiuiBaseNotifUtil.getTargetPkg, which is this
+        // notification's package. The exit animation matches that name to the closing app.
+        decoration.putString("miui.pkg.name", sbn.packageName)
+        decoration.putString(IslandProtocol.EXTRA_SEMANTIC_TYPE, NotificationType.CALL.name)
+        if (decoration.getString("miui.focus.param").isNullOrBlank()) return false
+        val size = runCatching { bundleSize(decoration) }.getOrElse { return false }
+        if (size > SOURCE_FOCUS_DECORATION_LIMIT) {
+            Log.w(TAG, "Call focus decoration is $size bytes; keeping the SystemUI proxy")
+            return false
+        }
+        sbn.notification.extras.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
         return true
+    }
+
+    private fun isSourceFocusExtra(key: String): Boolean {
+        if (key == IslandProtocol.EXTRA_OWNER || key == IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) return false
+        return key.startsWith("miui.focus") ||
+            key.startsWith("miui.island") ||
+            key == "miui.enableFloat" ||
+            key.startsWith("hyperbridge.") ||
+            key == IslandProtocol.MIUI_BIG_ISLAND_EFFECT ||
+            key == IslandProtocol.MIUI_EFFECT
+    }
+
+    private fun bundleSize(bundle: Bundle): Int {
+        val parcel = Parcel.obtain()
+        return try {
+            bundle.writeToParcel(parcel, 0)
+            parcel.dataSize()
+        } finally {
+            parcel.recycle()
+        }
     }
 
     // =========================================================================
@@ -2869,6 +3054,7 @@ class NotificationProcessingEngine private constructor(
         semanticType: NotificationType? = null,
         generation: Long = source?.postTime ?: 0L,
         inPlaceUpdate: Boolean = false,
+        incomingCallBanner: Boolean = false,
     ): Boolean {
         val metadata = IslandMetadata(
             logicalToken = logicalToken,
@@ -2883,13 +3069,16 @@ class NotificationProcessingEngine private constructor(
         } else {
             islandBackend.post(id, notification, metadata)
         }
-        if (result.isSuccess && source != null) markSourceHeadsUpSuppressed(source)
+        if (result.isSuccess && source != null) markSourceHeadsUpSuppressed(source, incomingCallBanner)
         return result.isSuccess
     }
 
-    private fun markSourceHeadsUpSuppressed(source: StatusBarNotification) {
+    private fun markSourceHeadsUpSuppressed(
+        source: StatusBarNotification,
+        incomingCallBanner: Boolean = false,
+    ) {
         if (source.packageName == IslandProtocol.SYSTEM_UI_PACKAGE) return
-        if (source.notification.fullScreenIntent != null) return
+        if (source.notification.fullScreenIntent != null && !incomingCallBanner) return
         source.notification.extras.putBoolean(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP, true)
     }
 

@@ -267,10 +267,12 @@ object SystemUiNotificationIngressHook {
         }
         runCatching {
             val started = android.os.SystemClock.elapsedRealtime()
-            val replaced = remote.processPosted(Bundle().apply {
+            val request = Bundle().apply {
                 putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
-            })
+            }
+            val replaced = remote.processPosted(request)
             resident[sbn.key] = incoming
+            applyCallFocusDecoration(sbn, request)
             if (replaced) markSourceHeadsUpSuppressed(sbn)
             if (replaced) module.log(
                 "HyperBridge: pre-snapshot replacement package=${sbn.packageName} " +
@@ -294,10 +296,12 @@ object SystemUiNotificationIngressHook {
                 return@forEach
             }
             runCatching {
-                val replaced = remote.processPosted(Bundle().apply {
+                val request = Bundle().apply {
                     putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
-                })
+                }
+                val replaced = remote.processPosted(request)
                 resident[key] = incoming
+                applyCallFocusDecoration(sbn, request)
                 if (replaced) markSourceHeadsUpSuppressed(sbn)
             }.onSuccess {
                 pendingPosts.remove(key, sbn)
@@ -308,8 +312,15 @@ object SystemUiNotificationIngressHook {
         }
     }
 
+    private fun applyCallFocusDecoration(sbn: StatusBarNotification, request: Bundle) {
+        val decoration = request.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) ?: return
+        sbn.notification.extras.putAll(decoration)
+    }
+
     private fun markSourceHeadsUpSuppressed(sbn: StatusBarNotification) {
-        if (sbn.notification.fullScreenIntent != null) return
+        // Incoming calls keep their full-screen intent. The engine only reports replacement
+        // for those when the incoming island is posted, so the banner can be hidden without
+        // cancelling the notification that vibrates and owns the call.
         sbn.notification.extras.putBoolean(
             IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP,
             true,

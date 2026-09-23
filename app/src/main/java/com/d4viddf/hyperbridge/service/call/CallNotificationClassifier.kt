@@ -208,8 +208,7 @@ class CallNotificationClassifier(
         val normalizedKeyword = keyword.trim().lowercase()
         if (normalizedKeyword.isEmpty()) return false
         return normalizedTitle == normalizedKeyword ||
-                normalizedTitle.startsWith(" ") ||
-                normalizedTitle.endsWith(" ")
+                normalizedTitle.contains(normalizedKeyword)
     }
 
     companion object {

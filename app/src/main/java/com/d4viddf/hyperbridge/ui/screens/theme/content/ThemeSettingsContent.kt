@@ -131,6 +131,7 @@ fun NotificationTypesContent() {
     val enabledCallStages by preferences.globalCallStagesFlow.collectAsState(
         initial = com.d4viddf.hyperbridge.models.CallStage.entries.toSet()
     )
+    val replaceCallWithFocus by preferences.globalCallFocusReplacementFlow.collectAsState(initial = false)
 
     Column(
         Modifier
@@ -226,6 +227,35 @@ fun NotificationTypesContent() {
                                 }
                             )
                         }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                scope.launch { preferences.setGlobalCallFocusReplacement(!replaceCallWithFocus) }
+                            }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.call_focus_replacement),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = stringResource(R.string.call_focus_replacement_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = replaceCallWithFocus,
+                            onCheckedChange = { enabled ->
+                                scope.launch { preferences.setGlobalCallFocusReplacement(enabled) }
+                            }
+                        )
                     }
                 }
             }
