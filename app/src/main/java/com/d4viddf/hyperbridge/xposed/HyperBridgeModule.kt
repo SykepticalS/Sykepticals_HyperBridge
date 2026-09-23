@@ -9,13 +9,13 @@ import com.d4viddf.hyperbridge.xposed.hooks.IslandWindowImeHook
 import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
 import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
 import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
-import com.d4viddf.hyperbridge.xposed.hooks.IslandAutoExpandHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandTextUpdateAnimationHook
 import com.d4viddf.hyperbridge.xposed.hooks.SystemUiBootstrapHook
 import com.d4viddf.hyperbridge.xposed.hooks.SystemUiNotificationIngressHook
 import com.d4viddf.hyperbridge.xposed.hooks.XmsfFocusAuthHook
 import com.d4viddf.hyperbridge.xposed.hooks.XmsfHandshakeHook
 import com.d4viddf.hyperbridge.xposed.hooks.screenrecorder.ScreenRecorderHook
+import com.d4viddf.hyperbridge.xposed.mediacard.MediaCardHook
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
@@ -35,7 +35,7 @@ class HyperBridgeModule : XposedModule() {
                 ActiveIslandDismissHook.install(this, param)
                 MarqueeHook.install(this, param)
                 IslandTextUpdateAnimationHook.install(this, param)
-                IslandAutoExpandHook.install(this, param)
+                MediaCardHook.install(this, param)
             }
             IslandProtocol.XMSF_PACKAGE -> {
                 if (XmsfFocusAuthHook.install(this, param)) {

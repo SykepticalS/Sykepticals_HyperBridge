@@ -2,9 +2,15 @@ package com.d4viddf.hyperbridge.models
 
 enum class IslandTextContent { AUTOMATIC, TITLE, CONTENT, SUBTITLE, APP, SENDER, STATE, PROGRESS, NONE, CUSTOM }
 
-enum class MarqueeDismissMode(val loops: Int, val overridesTimeout: Boolean) {
+enum class MarqueeDismissMode(
+    val loops: Int,
+    val overridesTimeout: Boolean,
+    val holdsForRightScroll: Boolean = false,
+) {
     OFF(0, false), AFTER_ONE(1, false), AFTER_TWO(2, false),
-    AFTER_ONE_OVERRIDE_TIMEOUT(1, true), AFTER_TWO_OVERRIDE_TIMEOUT(2, true);
+    AFTER_ONE_OVERRIDE_TIMEOUT(1, true), AFTER_TWO_OVERRIDE_TIMEOUT(2, true),
+    /** Keep a timed island up until the right text has fully scrolled, then settle briefly. */
+    WAIT_FOR_RIGHT_SCROLL(0, true, holdsForRightScroll = true);
 
     companion object {
         fun parse(value: String?): MarqueeDismissMode = entries.firstOrNull { it.name == value } ?: OFF

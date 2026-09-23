@@ -102,11 +102,37 @@ object IslandGlowResolver {
 }
 
 object MarqueeTimeoutPolicy {
+    const val RIGHT_SCROLL_SETTLE_MS = 500L
+
     fun effectiveTimeout(originalSeconds: Int, mode: MarqueeDismissMode, hasOverflow: Boolean): Int? =
         if (mode.overridesTimeout && hasOverflow) null else originalSeconds.coerceAtLeast(1)
 
     fun shouldDismiss(mode: MarqueeDismissMode, completedLoops: Int, ongoing: Boolean): Boolean =
         !ongoing && mode.loops > 0 && completedLoops >= mode.loops
+
+    /**
+     * How long to wait before dismissing an island whose hide mode holds for the right text.
+     * `null` means the right text still has not revealed its full string, so the island stays up.
+     * A finished reveal waits [RIGHT_SCROLL_SETTLE_MS] after the end of the text, then dismisses
+     * only once the original expiry has also been reached.
+     */
+    fun rightScrollExpiryDelayMs(
+        nowMs: Long,
+        expiresAtMs: Long,
+        rightOverflowing: Boolean,
+        rightRevealPending: Boolean,
+        lastReachedEndAtMs: Long?,
+    ): Long? {
+        if (rightOverflowing && rightRevealPending) {
+            return if (nowMs < expiresAtMs) expiresAtMs - nowMs else null
+        }
+        val dismissAt = if (rightOverflowing && lastReachedEndAtMs != null) {
+            maxOf(expiresAtMs, lastReachedEndAtMs + RIGHT_SCROLL_SETTLE_MS)
+        } else {
+            expiresAtMs
+        }
+        return (dismissAt - nowMs).coerceAtLeast(0L)
+    }
 }
 
 object IslandGenerationGuard {

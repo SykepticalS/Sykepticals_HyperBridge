@@ -209,6 +209,7 @@ fun IslandSettingsControl(
                         MarqueeDismissMode.AFTER_TWO -> "After 2 scrolls"
                         MarqueeDismissMode.AFTER_ONE_OVERRIDE_TIMEOUT -> "After 1 scroll, hide immediately"
                         MarqueeDismissMode.AFTER_TWO_OVERRIDE_TIMEOUT -> "After 2 scrolls, hide immediately"
+                        MarqueeDismissMode.WAIT_FOR_RIGHT_SCROLL -> "Hold timeout until right text finishes"
                     }
                 }
             )

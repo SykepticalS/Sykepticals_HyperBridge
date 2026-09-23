@@ -21,6 +21,8 @@ object HookConfig {
             .getOrNull()
     }
 
+    internal fun remotePreferences(): android.content.SharedPreferences? = prefs
+
     fun focusEnabled(): Boolean = prefs?.getBoolean(HookConfigSync.KEY_FOCUS_ENABLED, true) == true
     fun suppressSourceHeadsUp(): Boolean =
         prefs?.getBoolean(HookConfigSync.KEY_SUPPRESS_SOURCE_HEADS_UP, true) ?: true

@@ -28,10 +28,9 @@ object IslandVisualMetadata {
         keepPosted: Boolean,
         marqueeCapable: Boolean,
         updatable: Boolean = false,
-        forceMarquee: Boolean = false,
     ): OwnedIslandVisualPlan {
         val originalTimeout = config.timeout ?: 10
-        val marqueeEnabled = config.marqueeEnabled == true || forceMarquee
+        val marqueeEnabled = config.marqueeEnabled == true
         val marqueeMode = config.marqueeDismissMode ?: MarqueeDismissMode.OFF
         val overrideTimeout = marqueeCapable && marqueeEnabled && marqueeMode.overridesTimeout && !keepPosted
         return OwnedIslandVisualPlan(
@@ -123,9 +122,8 @@ object IslandVisualMetadata {
     }
 
     /**
-     * Returns whether the compact island payload owns text views that may need pixel-accurate
-     * overflow handling. The runtime hook still measures the real Xiaomi view before scrolling;
-     * this only makes sure the hook is enabled for text islands without requiring a user toggle.
+     * Returns whether the compact island payload owns text. Scrolling still follows the
+     * user's marquee setting; the runtime hook measures the real Xiaomi view before moving text.
      */
     fun hasCompactText(jsonParam: String): Boolean {
         return runCatching {

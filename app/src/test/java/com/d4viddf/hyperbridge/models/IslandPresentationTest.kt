@@ -90,6 +90,70 @@ class IslandPresentationTest {
         assertEquals(10, MarqueeTimeoutPolicy.effectiveTimeout(10, MarqueeDismissMode.AFTER_ONE_OVERRIDE_TIMEOUT, false))
         assertTrue(MarqueeTimeoutPolicy.shouldDismiss(MarqueeDismissMode.AFTER_TWO, 2, false))
         assertFalse(MarqueeTimeoutPolicy.shouldDismiss(MarqueeDismissMode.AFTER_ONE, 3, true))
+        assertFalse(MarqueeTimeoutPolicy.shouldDismiss(MarqueeDismissMode.WAIT_FOR_RIGHT_SCROLL, 3, false))
+    }
+
+    @Test fun rightScrollHoldWaitsForRevealThenHalfSecondAfterExpiry() {
+        val expiresAt = 10_000L
+        assertEquals(
+            4_000L,
+            MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
+                nowMs = 6_000L,
+                expiresAtMs = expiresAt,
+                rightOverflowing = true,
+                rightRevealPending = true,
+                lastReachedEndAtMs = null,
+            ),
+        )
+        assertNull(
+            MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
+                nowMs = 10_000L,
+                expiresAtMs = expiresAt,
+                rightOverflowing = true,
+                rightRevealPending = true,
+                lastReachedEndAtMs = null,
+            ),
+        )
+        assertEquals(
+            500L,
+            MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
+                nowMs = 12_000L,
+                expiresAtMs = expiresAt,
+                rightOverflowing = true,
+                rightRevealPending = false,
+                lastReachedEndAtMs = 12_000L,
+            ),
+        )
+        assertEquals(
+            0L,
+            MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
+                nowMs = 12_500L,
+                expiresAtMs = expiresAt,
+                rightOverflowing = true,
+                rightRevealPending = false,
+                lastReachedEndAtMs = 12_000L,
+            ),
+        )
+        assertEquals(
+            3_000L,
+            MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
+                nowMs = 7_000L,
+                expiresAtMs = expiresAt,
+                rightOverflowing = true,
+                rightRevealPending = false,
+                lastReachedEndAtMs = 4_000L,
+            ),
+        )
+        assertEquals(
+            0L,
+            MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
+                nowMs = 10_000L,
+                expiresAtMs = expiresAt,
+                rightOverflowing = false,
+                rightRevealPending = false,
+                lastReachedEndAtMs = null,
+            ),
+        )
     }
 
     @Test fun explicitAppOffBeatsGlobalForceAndEffectsStayIndependent() {
@@ -142,6 +206,28 @@ class IslandPresentationTest {
         assertEquals(8, IslandVisualMetadata.plan(config, glow, keepPosted = true, marqueeCapable = true).islandTimeoutSeconds)
         assertEquals(8, IslandVisualMetadata.plan(config, glow, keepPosted = false, marqueeCapable = false).islandTimeoutSeconds)
         assertEquals(8, IslandVisualMetadata.plan(config, glow, keepPosted = false, marqueeCapable = true).originalTimeoutSeconds)
+    }
+
+    @Test fun disabledMarqueeNeverOverridesTheUserTimeout() {
+        val glow = IslandGlowResolver.resolve(IslandConfig(), IslandConfig(), null)
+        val disabled = IslandConfig(
+            timeout = 8,
+            marqueeEnabled = false,
+            marqueeDismissMode = MarqueeDismissMode.WAIT_FOR_RIGHT_SCROLL,
+        )
+        val plan = IslandVisualMetadata.plan(disabled, glow, keepPosted = false, marqueeCapable = true)
+        assertFalse(plan.marqueeEnabled)
+        assertEquals(8, plan.islandTimeoutSeconds)
+
+        val waiting = disabled.copy(marqueeEnabled = true)
+        assertEquals(
+            Int.MAX_VALUE,
+            IslandVisualMetadata.plan(waiting, glow, keepPosted = false, marqueeCapable = true).islandTimeoutSeconds,
+        )
+        assertEquals(
+            8,
+            IslandVisualMetadata.plan(waiting, glow, keepPosted = true, marqueeCapable = true).islandTimeoutSeconds,
+        )
     }
 
     @Test fun onGlowWithoutManualColorWritesDynamicPaletteIntoJson() {

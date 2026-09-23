@@ -11,7 +11,6 @@ import com.d4viddf.hyperbridge.debug.AgentDebugLog
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.island.backend.IslandMetadata
-import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import com.d4viddf.hyperbridge.models.IslandVisualMetadata
 import com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig
@@ -20,7 +19,6 @@ import com.d4viddf.hyperbridge.screenrecorder.ScreenRecorderContract
 import com.d4viddf.hyperbridge.service.BridgeNotificationChannels
 import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentation
 import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentationPolicy
-import com.d4viddf.hyperbridge.service.translators.applyStagedAutoExpand
 import com.d4viddf.hyperbridge.service.translators.ScreenRecordingSavedPayloadFactory
 import com.d4viddf.hyperbridge.service.translators.ScreenRecordingTranslator
 import java.util.concurrent.Executors
@@ -148,11 +146,10 @@ class ScreenRecordingIslandController(private val context: Context) {
                 IslandVisualMetadata.injectFloatingFlags(
                     json,
                     enableFloat = true,
-                    islandFirstFloat = false,
-                    reopen = false,
+                    islandFirstFloat = true,
+                    reopen = true,
                 ),
             )
-            notification.extras.putBoolean(IslandProtocol.EXTRA_AUTO_EXPAND_ENTRANCE, true)
             val success = backend.post(
                 SAVED_NOTIFICATION_ID,
                 notification,
@@ -193,7 +190,6 @@ class ScreenRecordingIslandController(private val context: Context) {
             session.paused -> context.getString(R.string.screen_recording_paused)
             else -> context.getString(R.string.screen_recording_compact)
         }
-        // enableFloat puts the island on screen. Staged posts expand after the appear animation.
         val floatPresentation = if (session.countdownRemaining > 0) {
             IslandFloatingPresentation(
                 enableFloat = !isUpdate,
@@ -236,7 +232,6 @@ class ScreenRecordingIslandController(private val context: Context) {
                 floatPresentation.reopen,
             ),
         )
-        notification.extras.applyStagedAutoExpand(floatPresentation)
         val success = backend.post(
             NOTIFICATION_ID,
             notification,

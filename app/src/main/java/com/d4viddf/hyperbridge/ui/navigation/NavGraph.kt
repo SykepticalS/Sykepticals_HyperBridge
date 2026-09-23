@@ -23,6 +23,7 @@ import com.d4viddf.hyperbridge.ui.screens.settings.ImportPreviewScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.InfoScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.IslandSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.LicensesScreen
+import com.d4viddf.hyperbridge.ui.screens.settings.MediaCardSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.NavCustomizationScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.PrioritySettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.SetupHealthScreen
@@ -77,6 +78,7 @@ fun mainNavGraph(
             onNavSettingsClick = { navigator.navigate(Screen.NavCustomization(null)) },
             onInlineReplyClick = { navigator.navigate(Screen.ReplyCustomization) },
             onIslandSettingsClick = { navigator.navigate(Screen.IslandSettings) },
+            onMediaCardSettingsClick = { navigator.navigate(Screen.MediaCardSettings) },
             onEngineSettingsClick = { navigator.navigate(Screen.EngineSettings) },
             onDndSettingsClick = { navigator.navigate(Screen.DndSettings) },
             onPermanentIslandClick = { navigator.navigate(Screen.PermanentIslandConfig) }
@@ -167,6 +169,9 @@ fun mainNavGraph(
     }
     entry<Screen.IslandSettings> {
         IslandSettingsScreen(onBack = { navigator.goBack() })
+    }
+    entry<Screen.MediaCardSettings> {
+        MediaCardSettingsScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.BugReport> {
         BugReportScreen(

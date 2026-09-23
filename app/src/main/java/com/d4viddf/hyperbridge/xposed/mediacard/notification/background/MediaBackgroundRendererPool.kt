@@ -1,0 +1,17 @@
+package com.d4viddf.hyperbridge.xposed.mediacard.notification.background
+
+import java.util.WeakHashMap
+
+internal object MediaBackgroundRendererPool {
+    private val lock = Any()
+    private val renderers = WeakHashMap<ClassLoader, NotificationMediaBackgroundRenderer>()
+
+    fun get(classLoader: ClassLoader): NotificationMediaBackgroundRenderer {
+        return synchronized(lock) {
+            renderers.getOrPut(classLoader) {
+                NotificationMediaBackgroundRenderer(classLoader)
+            }
+        }
+    }
+
+}

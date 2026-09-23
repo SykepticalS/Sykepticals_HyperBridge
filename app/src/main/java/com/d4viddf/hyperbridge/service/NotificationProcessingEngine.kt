@@ -38,7 +38,6 @@ import com.d4viddf.hyperbridge.service.translators.ProgressTranslator
 import com.d4viddf.hyperbridge.service.translators.DownloadTranslator
 import com.d4viddf.hyperbridge.service.translators.IslandCompactLayout
 import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentationPolicy
-import com.d4viddf.hyperbridge.service.translators.applyStagedAutoExpand
 import com.d4viddf.hyperbridge.service.translators.StandardTranslator
 import com.d4viddf.hyperbridge.service.translators.TimerTranslator
 import com.d4viddf.hyperbridge.service.translators.WidgetTranslator
@@ -438,8 +437,8 @@ class NotificationProcessingEngine private constructor(
                 builder.setChatInfo(title, message, "migration_icon", packageName)
                 builder.setShowNotification(true)
                 builder.setEnableFloat(true)
-                builder.setIslandFirstFloat(false)
-                builder.setReopen(false)
+                builder.setIslandFirstFloat(true)
+                builder.setReopen(true)
 
                 val data = HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
 
@@ -458,11 +457,10 @@ class NotificationProcessingEngine private constructor(
                     IslandVisualMetadata.injectFloatingFlags(
                         data.jsonParam,
                         enableFloat = true,
-                        islandFirstFloat = false,
-                        reopen = false,
+                        islandFirstFloat = true,
+                        reopen = true,
                     ),
                 )
-                notification.extras.putBoolean(IslandProtocol.EXTRA_AUTO_EXPAND_ENTRANCE, true)
 
                 postIsland(bridgeId, notification, "migration_update", semanticType = NotificationType.PROGRESS)
             }
@@ -1877,7 +1875,6 @@ class NotificationProcessingEngine private constructor(
                     keepPosted = sourceStaysPosted(sbn, type),
                     marqueeCapable = marqueeCapabilitiesReady(),
                     updatable = NotificationLifecyclePolicy.isProgressLifecycle(type),
-                    forceMarquee = effectiveTitle.isNotBlank() || effectiveText.isNotBlank(),
                 )
                 IslandVisualExtras.apply(notification.extras, visualPlan)
                 val floatPresentation = IslandFloatingPresentationPolicy.resolve(
@@ -1889,7 +1886,6 @@ class NotificationProcessingEngine private constructor(
                     notification.extras.putBoolean("miui.island.updateNoFloat", true)
                 }
                 notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
-                notification.extras.applyStagedAutoExpand(floatPresentation)
                 notification.extras.getString("miui.focus.param")?.let { json ->
                     notification.extras.putString(
                         "miui.focus.param",
@@ -1910,13 +1906,14 @@ class NotificationProcessingEngine private constructor(
                     }
                 }
 
+                val islandPostGeneration = System.currentTimeMillis()
                 if (!postIsland(
                         decision.bridgeId,
                         notification,
                         decision.bridgeId.toString(),
                         sbn,
                         type,
-                        System.currentTimeMillis(),
+                        islandPostGeneration,
                     )) return
 
                 expiredIslands.acceptNewGeneration(
@@ -2445,7 +2442,6 @@ class NotificationProcessingEngine private constructor(
             keepPosted = keepPosted,
             marqueeCapable = marqueeCapabilitiesReady(),
             updatable = updatable,
-            forceMarquee = IslandVisualMetadata.hasCompactText(data.jsonParam),
         )
         val floatPresentation = IslandFloatingPresentationPolicy.resolve(
             config.firstFloat ?: false,
@@ -2467,7 +2463,6 @@ class NotificationProcessingEngine private constructor(
         )
         IslandVisualExtras.apply(notification.extras, visualPlan)
         notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
-        notification.extras.applyStagedAutoExpand(floatPresentation)
         if (inPlaceUpdate) {
             notification.extras.putBoolean("miui.island.updateNoFloat", true)
         }
@@ -2632,10 +2627,14 @@ class NotificationProcessingEngine private constructor(
                 HookConfigSync.replaceScreenRecorder(this))
 
     private var syncJob: Job? = null
-    fun onIngressConnected() {
-        Log.i(TAG, "HyperBridge SystemUI notification ingress connected")
-        islandBackend.cancelAllOwned()
-        syncNotifications(refresh = true, restoreLiveSources = true)
+    fun onIngressConnected(preserveVisibleIslands: Boolean = false) {
+        Log.i(TAG, "HyperBridge SystemUI notification ingress connected preserve=$preserveVisibleIslands")
+        // Recents clear rebinds this listener while islands are already showing.
+        // The first connection still clears leftovers and restores live sessions.
+        if (!preserveVisibleIslands) {
+            islandBackend.cancelAllOwned()
+        }
+        syncNotifications(refresh = true, restoreLiveSources = !preserveVisibleIslands)
         syncJob?.cancel()
         syncJob = serviceScope.launch {
             while (true) {

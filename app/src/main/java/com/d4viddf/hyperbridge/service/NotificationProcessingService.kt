@@ -54,7 +54,9 @@ class NotificationProcessingService : Service() {
             val snapshot = request?.statusBarNotifications().orEmpty()
             activeSources.clear()
             snapshot.forEach { activeSources[it.key] = it }
-            engine.onIngressConnected()
+            engine.onIngressConnected(
+                preserveVisibleIslands = request?.getBoolean(KEY_PRESERVE_VISIBLE_ISLANDS, false) == true,
+            )
         }
 
         override fun reload() {
@@ -107,5 +109,6 @@ class NotificationProcessingService : Service() {
         const val KEY_NOTIFICATION = "notification"
         const val KEY_NOTIFICATIONS = "notifications"
         const val KEY_REASON = "reason"
+        const val KEY_PRESERVE_VISIBLE_ISLANDS = "preserveVisibleIslands"
     }
 }
