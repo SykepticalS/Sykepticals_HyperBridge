@@ -9,6 +9,7 @@ enum class NotificationType(@StringRes val labelRes: Int, val isConfigurable: Bo
     PROGRESS(R.string.type_progress),
     DOWNLOAD(R.string.type_download),
     MEDIA(R.string.type_media),
+    VOICE_MESSAGE(R.string.type_voice_message),
     NAVIGATION(R.string.type_nav),
     CALL(R.string.type_call),
     TIMER(R.string.type_timer),

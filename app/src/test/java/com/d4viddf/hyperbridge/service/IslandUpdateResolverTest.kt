@@ -392,11 +392,31 @@ class IslandUpdateResolverTest {
                 isAppCancellation = true
             )
         )
-        assertFalse(
+        assertTrue(
             NotificationLifecyclePolicy.shouldDismissIslandOnSourceRemoval(
                 type = NotificationType.DOWNLOAD,
                 dismissWithOriginal = false,
                 isAppCancellation = true
+            )
+        )
+    }
+
+    @Test
+    fun missingDownloadIslandIsReapedOnlyAfterTheReplacementWindow() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.DOWNLOAD,
+                removeOriginalNotification = false,
+                dismissWithOriginal = true,
+                replacementGraceExpired = false,
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.shouldReapMissingSource(
+                type = NotificationType.DOWNLOAD,
+                removeOriginalNotification = false,
+                dismissWithOriginal = false,
+                replacementGraceExpired = true,
             )
         )
     }
@@ -450,9 +470,9 @@ class IslandUpdateResolverTest {
     }
 
     @Test
-    fun bulkClearAndRecentsCleanupKeepActiveIslands() {
-        assertTrue(NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_CANCEL_ALL))
-        assertTrue(
+    fun shadeClearAllDismissesIslandsAndRecentsCleanupKeepsThem() {
+        assertFalse(NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_CANCEL_ALL))
+        assertFalse(
             NotificationLifecyclePolicy.preservesActiveIsland(NotificationLifecyclePolicy.REASON_LISTENER_CANCEL_ALL)
         )
         assertTrue(

@@ -241,6 +241,17 @@ class IslandPresentationTest {
         assertEquals("#25D366", glow.resolvedIslandColor())
     }
 
+    @Test fun countUpKeepsCallerNameOnTheCompactLeft() {
+        val json = """{"param_v2":{"param_island":{"bigIslandArea":{"imageTextInfoLeft":{"type":1,"picInfo":{"pic":"avatar"}},"sameWidthDigitInfo":{"timerInfo":{"timerType":1}}}}}}"""
+        val patched = IslandVisualMetadata.injectCompactLeftTitle(json, "Ada Lovelace")
+        val left = com.google.gson.JsonParser.parseString(patched).asJsonObject
+            .getAsJsonObject("param_v2")
+            .getAsJsonObject("param_island")
+            .getAsJsonObject("bigIslandArea")
+        assertEquals("Ada Lovelace", left.getAsJsonObject("imageTextInfoLeft").getAsJsonObject("textInfo").get("title").asString)
+        assertTrue(left.has("sameWidthDigitInfo"))
+    }
+
     @Test fun injectUpdatableMarksFocusPayloadForInPlaceRefresh() {
         val json = """{"param_v2":{"param_island":{}}}"""
         val patched = IslandVisualMetadata.injectUpdatable(json, true)

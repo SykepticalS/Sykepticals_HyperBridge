@@ -28,9 +28,6 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -71,7 +68,6 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmRestart by remember { mutableStateOf(false) }
-    var previewSurface by remember { mutableIntStateOf(0) }
 
     fun sync() = (context.applicationContext as? HyperBridgeApplication)?.syncHookConfig()
     fun saveBool(key: String, value: Boolean) {
@@ -108,28 +104,7 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
     var switcherMax by prefs.rememberInt(C.KEY_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_MAX_COUNT, C.DEFAULT_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_MAX_COUNT)
     var keepAodExpanded by prefs.rememberBool(C.KEY_HOOK_AOD_DISABLE_MEDIA_CARD_COLLAPSING, C.DEFAULT_HOOK_AOD_DISABLE_MEDIA_CARD_COLLAPSING)
 
-    var islandLayout by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE)
-    var islandTheme by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_CARD_THEME, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_CARD_THEME)
-    var islandAmbient by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE)
-    var islandBackground by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE)
-    var islandBlur by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_BLUR, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_BLUR)
-    var islandAnimate by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION)
-    var islandInvert by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT)
-    var islandTone by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE)
-    var islandCover by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_COVER_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_COVER_STYLE)
-    var islandHideSource by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_COVER_SOURCE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_COVER_SOURCE)
-    var islandDisableFlip by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_DISABLE_COVER_FLIP, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_DISABLE_COVER_FLIP)
-    var islandHideDevice by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_DEVICE_SWITCH, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_DEVICE_SWITCH)
-    var islandHideTime by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_TIME, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_TIME)
-    var islandHideCustom by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_CUSTOM_ACTIONS, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_CUSTOM_ACTIONS)
-    var islandProgress by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE)
-    var islandGlow by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_HEAD_GLOW, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_HEAD_GLOW)
-    var islandThumb by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_THUMB_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_THUMB_STYLE)
-    var islandAlignLeft by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ALIGN_LEFT, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ALIGN_LEFT)
-    var islandActionOrder by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ORDER, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ORDER)
-
-    val preview = if (previewSurface == 0) {
-        MediaCardPreviewModel(
+    val preview = MediaCardPreviewModel(
             showShadow = !shadeHideShadow,
             coverStyle = shadeCover,
             hideCoverSource = shadeHideSource,
@@ -148,33 +123,6 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
             verticalProgressThumb = shadeThumb == C.NOTIFICATION_MEDIA_THUMB_STYLE_VERTICAL,
             hideProgressThumb = shadeThumb == C.NOTIFICATION_MEDIA_THUMB_STYLE_HIDDEN,
         )
-    } else {
-        val islandAmbientPreview = when (islandAmbient) {
-            C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_DEFAULT -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DYNAMIC
-            C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR
-            C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL
-            else -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DISABLED
-        }
-        MediaCardPreviewModel(
-            showShadow = false,
-            coverStyle = islandCover,
-            hideCoverSource = islandHideSource,
-            disableCoverFlip = islandDisableFlip,
-            hideDeviceSwitch = islandHideDevice,
-            hideCustomActions = islandHideCustom,
-            hideTime = islandHideTime,
-            actionOrder = islandActionOrder,
-            actionAlignLeft = islandAlignLeft,
-            cardTheme = islandTheme,
-            backgroundStyle = islandBackground,
-            backgroundBlur = islandBlur,
-            softCoverTone = islandTone,
-            ambientFlowMode = if (islandBackground == 0) islandAmbientPreview else 0,
-            waveProgress = islandProgress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE,
-            verticalProgressThumb = islandThumb == C.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_VERTICAL,
-            hideProgressThumb = islandThumb == C.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_HIDDEN,
-        )
-    }
 
     if (confirmRestart) {
         AlertDialog(
@@ -200,7 +148,7 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Media cards") },
+                title = { Text("Notification media") },
                 navigationIcon = {
                     FilledTonalIconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -220,19 +168,6 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = previewSurface == 0,
-                    onClick = { previewSurface = 0 },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text("Notification") }
-                SegmentedButton(
-                    selected = previewSurface == 1,
-                    onClick = { previewSurface = 1 },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text("Island") }
-            }
-            Spacer(Modifier.height(12.dp))
             MediaCardPreview(preview)
             Text(
                 "Options that do not apply to the current style stay hidden. Use the restart icon after you are done.",
@@ -242,43 +177,43 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
             )
 
             SectionTitle("Notification shade")
-            ChoicePref("Layout style", shadeLayout, layoutChoices) { shadeLayout = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_LAYOUT_STYLE, it) }
+            ChoicePref("Layout style", shadeLayout, layoutChoices) { shadeLayout = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_LAYOUT_STYLE, it) }
             BackgroundControls(
                 background = shadeBackground,
-                onBackground = { shadeBackground = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_STYLE, it) },
+                onBackground = { shadeBackground = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_STYLE, it) },
                 theme = shadeTheme,
-                onTheme = { shadeTheme = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_CARD_THEME, it) },
+                onTheme = { shadeTheme = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_CARD_THEME, it) },
                 ambient = shadeAmbient,
                 ambientChoices = notificationAmbientChoices,
-                onAmbient = { shadeAmbient = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE, it) },
+                onAmbient = { shadeAmbient = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE, it) },
                 tone = shadeTone,
-                onTone = { shadeTone = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_SOFT_COVER_TONE, it) },
+                onTone = { shadeTone = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_SOFT_COVER_TONE, it) },
                 animate = shadeAnimate,
-                onAnimate = { shadeAnimate = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_COLOR_ANIMATION, it) },
+                onAnimate = { shadeAnimate = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_COLOR_ANIMATION, it) },
                 blur = shadeBlur,
-                onBlur = { shadeBlur = it; previewSurface = 0 },
-                onBlurCommit = { shadeBlur = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_BLUR, it) },
+                onBlur = { shadeBlur = it },
+                onBlurCommit = { shadeBlur = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_BLUR, it) },
                 invert = shadeInvert,
-                onInvert = { shadeInvert = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_AUTO_INVERT, it) },
+                onInvert = { shadeInvert = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_BACKGROUND_AUTO_INVERT, it) },
             )
-            ChoicePref("Album cover", shadeCover, coverChoices) { shadeCover = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_COVER_STYLE, it) }
+            ChoicePref("Album cover", shadeCover, coverChoices) { shadeCover = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_COVER_STYLE, it) }
             Show(shadeCover != C.NOTIFICATION_MEDIA_COVER_STYLE_HIDDEN) {
-                TogglePref("Hide cover source icon", shadeHideSource) { shadeHideSource = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_COVER_SOURCE, it) }
-                TogglePref("Hide cover shadow", shadeHideShadow) { shadeHideShadow = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_COVER_SHADOW, it) }
-                TogglePref("Disable cover flip animation", shadeDisableFlip) { shadeDisableFlip = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_DISABLE_COVER_FLIP, it) }
+                TogglePref("Hide cover source icon", shadeHideSource) { shadeHideSource = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_COVER_SOURCE, it) }
+                TogglePref("Hide cover shadow", shadeHideShadow) { shadeHideShadow = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_COVER_SHADOW, it) }
+                TogglePref("Disable cover flip animation", shadeDisableFlip) { shadeDisableFlip = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_DISABLE_COVER_FLIP, it) }
             }
-            TogglePref("Hide output-device switch", shadeHideDevice) { shadeHideDevice = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_DEVICE_SWITCH, it) }
-            TogglePref("Hide progress time", shadeHideTime) { shadeHideTime = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_TIME, it) }
-            TogglePref("Hide custom action buttons", shadeHideCustom) { shadeHideCustom = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_CUSTOM_ACTIONS, it) }
-            ChoicePref("Progress style", shadeProgress, progressChoices) { shadeProgress = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_PROGRESS_STYLE, it) }
+            TogglePref("Hide output-device switch", shadeHideDevice) { shadeHideDevice = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_DEVICE_SWITCH, it) }
+            TogglePref("Hide progress time", shadeHideTime) { shadeHideTime = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_TIME, it) }
+            TogglePref("Hide custom action buttons", shadeHideCustom) { shadeHideCustom = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_HIDE_CUSTOM_ACTIONS, it) }
+            ChoicePref("Progress style", shadeProgress, progressChoices) { shadeProgress = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_PROGRESS_STYLE, it) }
             Show(shadeProgress == C.NOTIFICATION_MEDIA_PROGRESS_STYLE_DEFAULT) {
-                TogglePref("Progress-tail glow", shadeGlow) { shadeGlow = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_PROGRESS_HEAD_GLOW, it) }
+                TogglePref("Progress-tail glow", shadeGlow) { shadeGlow = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_PROGRESS_HEAD_GLOW, it) }
             }
             Show(shadeProgress == C.NOTIFICATION_MEDIA_PROGRESS_STYLE_WAVE) {
-                ChoicePref("Seek thumb", shadeThumb, thumbChoices) { shadeThumb = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_THUMB_STYLE, it) }
+                ChoicePref("Seek thumb", shadeThumb, thumbChoices) { shadeThumb = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_THUMB_STYLE, it) }
             }
-            TogglePref("Align action buttons left", shadeAlignLeft) { shadeAlignLeft = it; previewSurface = 0; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_ACTION_ALIGN_LEFT, it) }
-            ChoicePref("Action-button order", shadeActionOrder, actionOrderChoices) { shadeActionOrder = it; previewSurface = 0; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_ACTION_ORDER, it) }
+            TogglePref("Align action buttons left", shadeAlignLeft) { shadeAlignLeft = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_ACTION_ALIGN_LEFT, it) }
+            ChoicePref("Action-button order", shadeActionOrder, actionOrderChoices) { shadeActionOrder = it; saveInt(C.KEY_HOOK_NOTIFICATION_MEDIA_ACTION_ORDER, it) }
 
             SectionTitle("Notification card switching")
             TogglePref("Enable multi-media card switching", switcherEnabled) { switcherEnabled = it; saveBool(C.KEY_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_ENABLED, it) }
@@ -296,47 +231,111 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
                 )
             }
             TogglePref("Keep media card expanded in full AOD", keepAodExpanded) { keepAodExpanded = it; saveBool(C.KEY_HOOK_AOD_DISABLE_MEDIA_CARD_COLLAPSING, it) }
-
-            SectionTitle("Island expanded player")
-            ChoicePref("Layout style", islandLayout, layoutChoices) { islandLayout = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE, it) }
-            BackgroundControls(
-                background = islandBackground,
-                onBackground = { islandBackground = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE, it) },
-                theme = islandTheme,
-                onTheme = { islandTheme = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_CARD_THEME, it) },
-                ambient = islandAmbient,
-                ambientChoices = islandAmbientChoices,
-                onAmbient = { islandAmbient = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE, it) },
-                tone = islandTone,
-                onTone = { islandTone = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE, it) },
-                animate = islandAnimate,
-                onAnimate = { islandAnimate = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION, it) },
-                blur = islandBlur,
-                onBlur = { islandBlur = it; previewSurface = 1 },
-                onBlurCommit = { islandBlur = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_BLUR, it) },
-                invert = islandInvert,
-                onInvert = { islandInvert = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT, it) },
-            )
-            ChoicePref("Album cover", islandCover, coverChoices) { islandCover = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_COVER_STYLE, it) }
-            Show(islandCover != C.ISLAND_EXPANDED_MEDIA_COVER_STYLE_HIDDEN) {
-                TogglePref("Hide cover source icon", islandHideSource) { islandHideSource = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_COVER_SOURCE, it) }
-                TogglePref("Disable cover flip animation", islandDisableFlip) { islandDisableFlip = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_DISABLE_COVER_FLIP, it) }
-            }
-            TogglePref("Hide output-device switch", islandHideDevice) { islandHideDevice = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_DEVICE_SWITCH, it) }
-            TogglePref("Hide progress time", islandHideTime) { islandHideTime = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_TIME, it) }
-            TogglePref("Hide custom action buttons", islandHideCustom) { islandHideCustom = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_CUSTOM_ACTIONS, it) }
-            ChoicePref("Progress style", islandProgress, progressChoices) { islandProgress = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE, it) }
-            Show(islandProgress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_DEFAULT) {
-                TogglePref("Progress-tail glow", islandGlow) { islandGlow = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_HEAD_GLOW, it) }
-            }
-            Show(islandProgress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE) {
-                ChoicePref("Seek thumb", islandThumb, thumbChoices) { islandThumb = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_THUMB_STYLE, it) }
-            }
-            TogglePref("Align action buttons left", islandAlignLeft) { islandAlignLeft = it; previewSurface = 1; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ALIGN_LEFT, it) }
-            ChoicePref("Action-button order", islandActionOrder, actionOrderChoices) { islandActionOrder = it; previewSurface = 1; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ORDER, it) }
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+fun IslandExpandedMediaSettings() {
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences(IslandProtocol.REMOTE_PREFS, Context.MODE_PRIVATE)
+    }
+    fun sync() = (context.applicationContext as? HyperBridgeApplication)?.syncHookConfig()
+    fun saveBool(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+        sync()
+    }
+    fun saveInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
+        sync()
+    }
+
+    var layout by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE)
+    var theme by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_CARD_THEME, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_CARD_THEME)
+    var ambient by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE)
+    var background by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE)
+    var blur by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_BLUR, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_BLUR)
+    var animate by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION)
+    var invert by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT)
+    var tone by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE)
+    var cover by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_COVER_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_COVER_STYLE)
+    var hideSource by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_COVER_SOURCE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_COVER_SOURCE)
+    var disableFlip by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_DISABLE_COVER_FLIP, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_DISABLE_COVER_FLIP)
+    var hideDevice by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_DEVICE_SWITCH, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_DEVICE_SWITCH)
+    var hideTime by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_TIME, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_TIME)
+    var hideCustom by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_CUSTOM_ACTIONS, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_CUSTOM_ACTIONS)
+    var progress by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE)
+    var glow by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_HEAD_GLOW, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_HEAD_GLOW)
+    var thumb by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_THUMB_STYLE, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_THUMB_STYLE)
+    var alignLeft by prefs.rememberBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ALIGN_LEFT, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ALIGN_LEFT)
+    var actionOrder by prefs.rememberInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ORDER, C.DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ORDER)
+
+    val ambientPreview = when (ambient) {
+        C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_DEFAULT -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DYNAMIC
+        C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_COVER_COLOR
+        C.ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_CUSTOM_FULL
+        else -> C.NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DISABLED
+    }
+    MediaCardPreview(
+        MediaCardPreviewModel(
+            showShadow = false,
+            coverStyle = cover,
+            hideCoverSource = hideSource,
+            disableCoverFlip = disableFlip,
+            hideDeviceSwitch = hideDevice,
+            hideCustomActions = hideCustom,
+            hideTime = hideTime,
+            actionOrder = actionOrder,
+            actionAlignLeft = alignLeft,
+            cardTheme = theme,
+            backgroundStyle = background,
+            backgroundBlur = blur,
+            softCoverTone = tone,
+            ambientFlowMode = if (background == 0) ambientPreview else 0,
+            waveProgress = progress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE,
+            verticalProgressThumb = thumb == C.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_VERTICAL,
+            hideProgressThumb = thumb == C.ISLAND_EXPANDED_MEDIA_THUMB_STYLE_HIDDEN,
+        )
+    )
+    SectionTitle("Island expanded player")
+    ChoicePref("Layout style", layout, layoutChoices) { layout = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE, it) }
+    BackgroundControls(
+        background = background,
+        onBackground = { background = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_STYLE, it) },
+        theme = theme,
+        onTheme = { theme = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_CARD_THEME, it) },
+        ambient = ambient,
+        ambientChoices = islandAmbientChoices,
+        onAmbient = { ambient = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_AMBIENT_FLOW_MODE, it) },
+        tone = tone,
+        onTone = { tone = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE, it) },
+        animate = animate,
+        onAnimate = { animate = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION, it) },
+        blur = blur,
+        onBlur = { blur = it },
+        onBlurCommit = { blur = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_BLUR, it) },
+        invert = invert,
+        onInvert = { invert = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT, it) },
+    )
+    ChoicePref("Album cover", cover, coverChoices) { cover = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_COVER_STYLE, it) }
+    Show(cover != C.ISLAND_EXPANDED_MEDIA_COVER_STYLE_HIDDEN) {
+        TogglePref("Hide cover source icon", hideSource) { hideSource = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_COVER_SOURCE, it) }
+        TogglePref("Disable cover flip animation", disableFlip) { disableFlip = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_DISABLE_COVER_FLIP, it) }
+    }
+    TogglePref("Hide output-device switch", hideDevice) { hideDevice = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_DEVICE_SWITCH, it) }
+    TogglePref("Hide progress time", hideTime) { hideTime = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_TIME, it) }
+    TogglePref("Hide custom action buttons", hideCustom) { hideCustom = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_HIDE_CUSTOM_ACTIONS, it) }
+    ChoicePref("Progress style", progress, progressChoices) { progress = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE, it) }
+    Show(progress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_DEFAULT) {
+        TogglePref("Progress-tail glow", glow) { glow = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_PROGRESS_HEAD_GLOW, it) }
+    }
+    Show(progress == C.ISLAND_EXPANDED_MEDIA_PROGRESS_STYLE_WAVE) {
+        ChoicePref("Seek thumb", thumb, thumbChoices) { thumb = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_THUMB_STYLE, it) }
+    }
+    TogglePref("Align action buttons left", alignLeft) { alignLeft = it; saveBool(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ALIGN_LEFT, it) }
+    ChoicePref("Action-button order", actionOrder, actionOrderChoices) { actionOrder = it; saveInt(C.KEY_HOOK_ISLAND_EXPANDED_MEDIA_ACTION_ORDER, it) }
 }
 
 @Composable

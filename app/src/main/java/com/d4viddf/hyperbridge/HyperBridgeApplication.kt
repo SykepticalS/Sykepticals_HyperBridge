@@ -76,15 +76,6 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
             }
         }
         scope.launch {
-            preferences.callFocusPolicyFlow.collect { policy ->
-                HookConfigSync.updateCallFocusPolicy(
-                    this@HyperBridgeApplication,
-                    policy.globalEnabled,
-                    policy.appOverrides,
-                )
-            }
-        }
-        scope.launch {
             combine(
                 preferences.screenRecordingReplaceFloatingFlow,
                 preferences.screenRecordingImmediateStartFlow,

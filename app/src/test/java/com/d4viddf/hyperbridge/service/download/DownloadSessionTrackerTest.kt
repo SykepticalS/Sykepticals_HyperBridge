@@ -84,6 +84,30 @@ class DownloadSessionTrackerTest {
         assertEquals("holiday.mp4", DownloadIdentity.stableLabel("Downloading holiday.mp4", "12% • 3 MB/s"))
     }
 
+    @Test
+    fun finishedNoticeDoesNotCountAsALiveDownload() {
+        val tracker = DownloadSessionTracker()
+        val first = tracker.resolve(input(sourceKey = "chrome:1", notificationId = 1, title = "clip.mp4", now = 1_000L))
+        tracker.markSourceRemoved("chrome:1", 1_050L)
+        val finished = tracker.resolve(
+            input(sourceKey = "chrome:2", notificationId = 2, title = "clip.mp4", now = 1_200L).copy(finished = true)
+        )
+
+        assertEquals(first.logicalId, finished.logicalId)
+        assertFalse(tracker.hasLiveProgress(first.logicalId, "chrome:1"))
+        assertTrue(tracker.isFinished(first.logicalId))
+    }
+
+    @Test
+    fun unfinishedRepostKeepsTheDownloadAlive() {
+        val tracker = DownloadSessionTracker()
+        val first = tracker.resolve(input(sourceKey = "chrome:1", notificationId = 1, title = "clip.mp4", now = 1_000L))
+        tracker.markSourceRemoved("chrome:1", 1_050L)
+        tracker.resolve(input(sourceKey = "chrome:2", notificationId = 2, title = "clip.mp4", now = 1_200L))
+
+        assertTrue(tracker.hasLiveProgress(first.logicalId, "chrome:1"))
+    }
+
     private fun input(
         sourceKey: String = "0|com.android.chrome|1|null|0",
         packageName: String = "com.android.chrome",

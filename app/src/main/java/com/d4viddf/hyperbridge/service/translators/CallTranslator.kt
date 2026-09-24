@@ -13,6 +13,7 @@ import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.BridgeAction
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
+import com.d4viddf.hyperbridge.models.IslandVisualMetadata
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.service.call.CallActionIconSizingPolicy
 import com.d4viddf.hyperbridge.service.call.CallIslandTimeoutPolicy
@@ -110,7 +111,9 @@ class CallTranslator(
             content = rightText,
             pictureKey = picKey,
             actionKeys = actionKeys,
-            appPkg = sbn.packageName,
+            // The avatar already carries the composited app badge. A real package here makes
+            // Xiaomi draw a second native badge beside it.
+            appPkg = hiddenKey,
             timer = timerInfo
         )
 
@@ -138,7 +141,17 @@ class CallTranslator(
             )
         }
 
-        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam())
+        val jsonParam = builder.buildJsonParam().let { raw ->
+            if (!isIncoming && connectedAtForTimer != null) {
+                IslandVisualMetadata.injectCompactLeftTitle(
+                    raw,
+                    IslandCompactLayout.compactLeftText(title),
+                )
+            } else {
+                raw
+            }
+        }
+        return HyperIslandData(builder.buildResourceBundle(), jsonParam)
     }
 
     private fun getFilteredCallActions(

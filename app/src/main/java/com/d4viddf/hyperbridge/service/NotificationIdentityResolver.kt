@@ -81,10 +81,29 @@ object NotificationIdentityResolver {
             remoteName,
         )
         val rawTitle = firstDistinct(title.clean(), bigTitle.clean())
+        val shortcut = shortcutLabel.clean().takeUnless {
+            it.equals(app, true) || it.equals(self, true)
+        }.orEmpty()
+        // A nicknamed Instagram contact keeps the real name on the message
+        // ("Nisa: Sent you a reel") and puts the nickname on the conversation
+        // shortcut. That shortcut is what the shade shows as the title.
+        val instagramNickname = instagramContactNickname(
+            packageName = packageName,
+            appLabel = app,
+            shortcutLabel = shortcut,
+            sender = personSender,
+            receivingAccount = stripUnreadCount(
+                conversationTitle.clean().takeUnless {
+                    it.equals(app, true) || it.equals(self, true)
+                }.orEmpty(),
+            ),
+            groupConversation = groupConversation,
+        )
         // Multiple logged-in Instagram accounts label the shade as
-        // "{account receiving}: {account sender}". Keep that pair. A single
-        // account has no such prefix, so the sender stands alone. Groups
-        // still identify the member who sent the message.
+        // "{account receiving}: {account sender}". Keep that pair when the
+        // contact has no nickname. A single account has no such prefix, so
+        // the sender stands alone. Groups still identify the member who sent
+        // the message.
         val multiAccountTitle = instagramMultiAccountTitle(
             packageName = packageName,
             appLabel = app,
@@ -94,11 +113,13 @@ object NotificationIdentityResolver {
             groupConversation = groupConversation,
         )
         val directShareFromOther = !groupConversation &&
+            instagramNickname.isBlank() &&
             multiAccountTitle.isBlank() &&
             personSender.isNotBlank() &&
             isDirectMediaShare(messageText, text, bigText, ticker)
         val sender = when {
             groupConversation -> personSender
+            instagramNickname.isNotBlank() -> instagramNickname
             multiAccountTitle.isNotBlank() -> multiAccountTitle
             directShareFromOther -> personSender
             else -> firstDistinct(conversation, personSender)
@@ -130,7 +151,42 @@ object NotificationIdentityResolver {
                 !candidate.equals(self, ignoreCase = true) &&
                 !isIdentityTitle(candidate, resolvedTitle, conversation, names, app)
         }.orEmpty()
-        return resolvedTitle to body
+        val resolvedBody = if (instagramNickname.isNotBlank()) {
+            prefixDistinctSender(personSender, body)
+        } else {
+            body
+        }
+        return resolvedTitle to resolvedBody
+    }
+
+    /**
+     * Instagram stores a user-assigned contact nickname on the conversation
+     * shortcut, including long emoji nicknames. The MessagingStyle sender stays
+     * the contact's real name, and multi-account titles stay `{account}: {name}`.
+     */
+    private fun instagramContactNickname(
+        packageName: String,
+        appLabel: String,
+        shortcutLabel: String,
+        sender: String,
+        receivingAccount: String,
+        groupConversation: Boolean,
+    ): String {
+        if (groupConversation || shortcutLabel.isBlank()) return ""
+        val instagram = packageName == INSTAGRAM_PACKAGE || appLabel.equals("Instagram", true)
+        if (!instagram) return ""
+        if (isMediaShareCaption(shortcutLabel)) return ""
+        if (shortcutLabel.equals(sender, true) || shortcutLabel.equals(receivingAccount, true)) return ""
+        val accountPair = "$receivingAccount: $sender"
+        if (receivingAccount.isNotBlank() && shortcutLabel.equals(accountPair, true)) return ""
+        return shortcutLabel
+    }
+
+    private fun prefixDistinctSender(sender: String, body: String): String {
+        if (sender.isBlank() || body.isBlank()) return body
+        val prefixed = "$sender:"
+        if (body.startsWith(prefixed, ignoreCase = true)) return body
+        return "$sender: $body"
     }
 
     private fun instagramMultiAccountTitle(

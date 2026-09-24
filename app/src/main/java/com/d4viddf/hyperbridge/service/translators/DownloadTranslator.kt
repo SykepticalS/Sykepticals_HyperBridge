@@ -115,11 +115,10 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
                     state = context.getString(R.string.downloading),
                     progress = "",
                 )
+                // The small island's right slot is the progress indicator only. Status text
+                // stays on the expanded island via chat info.
                 builder.setBigIslandInfo(
                     left = IslandCompactLayout.left(picKey, presentation.left.ifBlank { title }),
-                    right = IslandCompactLayout.right(
-                        presentation.right.ifBlank { context.getString(R.string.downloading) },
-                    ),
                 )
                 builder.setSmallIsland(picKey)
             } else {
@@ -127,9 +126,6 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
                     left = IslandCompactLayout.left(picKey, ""),
                     progressText = ProgressTextInfo(
                         progressInfo = CircularProgressInfo(progress = percent),
-                        textInfo = IslandCompactLayout.text(
-                            textContent.ifBlank { "$percent%" },
-                        ),
                     ),
                 )
                 builder.setSmallIslandCircularProgress(picKey, percent, themeProgressColor, isCCW = true)

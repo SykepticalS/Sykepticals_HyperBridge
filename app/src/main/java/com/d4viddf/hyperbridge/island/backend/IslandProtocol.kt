@@ -38,6 +38,8 @@ object IslandProtocol {
     /** Source call notification is carrying the island focus payload instead of a SystemUI proxy. */
     const val EXTRA_CALL_FOCUS = "hyperbridge.call_focus"
     const val EXTRA_CALL_FOCUS_DECORATION = "hyperbridge.call_focus_decoration"
+    /** Call island is showing, so the source shade entry must stay user-dismissable. */
+    const val EXTRA_CALL_SHADE_DISMISSIBLE = "hyperbridge.call_shade_dismissible"
     const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"
     const val EXTRA_MARQUEE_ENABLED = "hyperbridge.marquee.enabled"
     const val EXTRA_MARQUEE_MODE = "hyperbridge.marquee.mode"

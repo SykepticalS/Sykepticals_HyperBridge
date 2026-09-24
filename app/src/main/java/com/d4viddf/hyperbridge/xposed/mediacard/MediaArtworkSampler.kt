@@ -2,10 +2,7 @@ package com.d4viddf.hyperbridge.xposed.mediacard
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Picture
 import android.graphics.Rect
-import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import kotlin.math.sqrt
@@ -24,7 +21,15 @@ internal object MediaArtworkSampler {
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return null
         val (width, height) = targetSize(bitmap.width, bitmap.height, maxPixels)
         if (bitmap.config == Bitmap.Config.HARDWARE) {
-            return rasterize(bitmap, width, height)
+            // Reading the full texture back stalls composition. Scale on the GPU
+            // first, then copy only the tiny result.
+            val scaled = runCatching {
+                Bitmap.createScaledBitmap(bitmap, width, height, true)
+            }.getOrNull() ?: return null
+            if (scaled.config != Bitmap.Config.HARDWARE) return ensureArgb(scaled)
+            val copy = runCatching { scaled.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
+            if (copy != null && copy !== scaled) scaled.recycle()
+            return copy
         }
         if (width == bitmap.width && height == bitmap.height) {
             return runCatching { bitmap.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
@@ -32,9 +37,13 @@ internal object MediaArtworkSampler {
         val scaled = runCatching {
             Bitmap.createScaledBitmap(bitmap, width, height, true)
         }.getOrNull() ?: return null
-        if (scaled.config == Bitmap.Config.ARGB_8888) return scaled
-        return runCatching { scaled.copy(Bitmap.Config.ARGB_8888, false) }
-            .also { scaled.recycle() }
+        return ensureArgb(scaled)
+    }
+
+    private fun ensureArgb(bitmap: Bitmap): Bitmap? {
+        if (bitmap.config == Bitmap.Config.ARGB_8888) return bitmap
+        return runCatching { bitmap.copy(Bitmap.Config.ARGB_8888, false) }
+            .also { if (it.getOrNull() !== bitmap) bitmap.recycle() }
             .getOrNull()
     }
 
@@ -76,20 +85,5 @@ internal object MediaArtworkSampler {
         if (pixels <= maxPixels) return width to height
         val scale = sqrt(maxPixels.toDouble() / pixels)
         return (width * scale).toInt().coerceAtLeast(1) to (height * scale).toInt().coerceAtLeast(1)
-    }
-
-    private fun rasterize(bitmap: Bitmap, width: Int, height: Int): Bitmap? {
-        return runCatching {
-            val picture = Picture()
-            val canvas = picture.beginRecording(width, height)
-            canvas.drawBitmap(
-                bitmap,
-                null,
-                RectF(0f, 0f, width.toFloat(), height.toFloat()),
-                Paint(Paint.FILTER_BITMAP_FLAG),
-            )
-            picture.endRecording()
-            Bitmap.createBitmap(picture, width, height, Bitmap.Config.ARGB_8888)
-        }.getOrNull()
     }
 }

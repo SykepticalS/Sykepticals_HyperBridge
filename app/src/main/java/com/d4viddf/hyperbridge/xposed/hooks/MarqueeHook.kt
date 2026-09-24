@@ -116,9 +116,13 @@ object MarqueeHook {
                             IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION,
                             false,
                         )
+                    val preserveScroll = incoming?.extras?.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) ==
+                        "VOICE_MESSAGE"
                     if (island != null) {
                         islandTokens[island] = token
-                        if (nativeTextUpdate) pauseIsland(island) else resetIsland(island)
+                        if (!preserveScroll) {
+                            if (nativeTextUpdate) pauseIsland(island) else resetIsland(island)
+                        }
                         islandKeys[island]?.let(ActiveIslandDismissHook::invalidate)
                     }
                     val result = chain.proceed()
@@ -163,7 +167,7 @@ object MarqueeHook {
                         ongoing = ongoing,
                         notification = sbn ?: islandNotifications[island],
                         visualBefore = visualBefore,
-                        settleUntilMs = if (nativeTextUpdate) {
+                        settleUntilMs = if (nativeTextUpdate && !preserveScroll) {
                             SystemClock.uptimeMillis() + NATIVE_TEXT_EFFECT_SETTLE_MS
                         } else {
                             0L

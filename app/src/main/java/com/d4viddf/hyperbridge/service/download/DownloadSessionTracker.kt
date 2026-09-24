@@ -117,6 +117,35 @@ class DownloadSessionTracker(
     fun logicalIdForSource(sourceKey: String): String? = sourceIndex[sourceKey]
 
     @Synchronized
+    fun isFinished(logicalId: String): Boolean = sessions[logicalId]?.finished == true
+
+    /**
+     * True when a still-running download took over after [removedSourceKey] was cleared.
+     * A completion notice for the same file does not count.
+     */
+    @Synchronized
+    fun hasLiveProgress(logicalId: String, removedSourceKey: String): Boolean {
+        val session = sessions[logicalId] ?: return false
+        if (session.finished || session.sourceKey == removedSourceKey) return false
+        return session.replacementDeadline == null
+    }
+
+    /**
+     * Keeps a missing progress island through one replacement window.
+     * Returns false once that window has elapsed and the island can be removed.
+     */
+    @Synchronized
+    fun holdForReplacement(logicalId: String, now: Long): Boolean {
+        val current = sessions[logicalId] ?: return false
+        val until = current.replacementDeadline
+        if (until == null) {
+            sessions[logicalId] = current.copy(replacementDeadline = now + replacementGraceMs)
+            return true
+        }
+        return now <= until
+    }
+
+    @Synchronized
     fun end(logicalId: String) {
         val removed = sessions.remove(logicalId) ?: return
         sourceIndex.entries.removeIf { it.value == removed.logicalId }

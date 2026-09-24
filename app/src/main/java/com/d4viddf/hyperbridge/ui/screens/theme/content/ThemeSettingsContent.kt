@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.DisplaySettings
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.HourglassEmpty
@@ -131,7 +132,7 @@ fun NotificationTypesContent() {
     val enabledCallStages by preferences.globalCallStagesFlow.collectAsState(
         initial = com.d4viddf.hyperbridge.models.CallStage.entries.toSet()
     )
-    val replaceCallWithFocus by preferences.globalCallFocusReplacementFlow.collectAsState(initial = false)
+    val replaceVoiceWithFocus by preferences.globalVoiceFocusReplacementFlow.collectAsState(initial = false)
 
     Column(
         Modifier
@@ -155,6 +156,7 @@ fun NotificationTypesContent() {
                 NotificationType.CALL -> Icons.Outlined.Call to stringResource(R.string.type_call_desc)
                 NotificationType.TIMER -> Icons.Outlined.Timer to stringResource(R.string.type_timer_desc)
                 NotificationType.MESSAGE -> Icons.AutoMirrored.Outlined.Message to stringResource(R.string.type_message_desc)
+                NotificationType.VOICE_MESSAGE -> Icons.Outlined.Mic to stringResource(R.string.type_voice_message_desc)
                 else -> Icons.Outlined.Videocam to ""
             }
 
@@ -228,35 +230,38 @@ fun NotificationTypesContent() {
                             )
                         }
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                scope.launch { preferences.setGlobalCallFocusReplacement(!replaceCallWithFocus) }
-                            }
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.call_focus_replacement),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = stringResource(R.string.call_focus_replacement_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Switch(
-                            checked = replaceCallWithFocus,
-                            onCheckedChange = { enabled ->
-                                scope.launch { preferences.setGlobalCallFocusReplacement(enabled) }
-                            }
+                }
+            }
+
+            if (type == NotificationType.VOICE_MESSAGE && enabledTypesStr.contains(type.name)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 8.dp, bottom = 8.dp)
+                        .clickable {
+                            scope.launch { preferences.setGlobalVoiceFocusReplacement(!replaceVoiceWithFocus) }
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.voice_focus_replacement),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = stringResource(R.string.voice_focus_replacement_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = replaceVoiceWithFocus,
+                        onCheckedChange = { enabled ->
+                            scope.launch { preferences.setGlobalVoiceFocusReplacement(enabled) }
+                        }
+                    )
                 }
             }
 

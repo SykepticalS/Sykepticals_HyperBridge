@@ -54,7 +54,8 @@ internal class NotificationMediaBackgroundRenderer(
     private val cacheLock = Any()
 
     private companion object {
-        private const val MAX_ARTWORK_PIXELS = 256 * 256
+        private const val MAX_ARTWORK_PIXELS = 96 * 96
+        private const val MAX_RENDER_SIDE = 480
     }
 
     @Volatile
@@ -149,6 +150,10 @@ internal class NotificationMediaBackgroundRenderer(
         height: Int
     ): RenderedNotificationMediaBackground? {
         if (closed || width <= 0 || height <= 0) return null
+        val longest = max(width, height)
+        val renderScale = if (longest > MAX_RENDER_SIDE) MAX_RENDER_SIDE.toFloat() / longest else 1f
+        val renderWidth = (width * renderScale).toInt().coerceAtLeast(1)
+        val renderHeight = (height * renderScale).toInt().coerceAtLeast(1)
         val source = artwork.toBitmapSafe() ?: return null
         val fingerprint = source.fingerprint()
         val darkMode = context.resources.configuration.uiMode and 0x30 == 0x20
@@ -159,8 +164,8 @@ internal class NotificationMediaBackgroundRenderer(
             autoInvert,
             softCoverTone,
             darkMode,
-            width,
-            height
+            renderWidth,
+            renderHeight
         )
         cachedBackground(cacheKey)?.let { cached ->
             source.recycle()
@@ -172,11 +177,11 @@ internal class NotificationMediaBackgroundRenderer(
         }
         val baseColors = colorConfig(style, profile, autoInvert, softCoverTone)
         val result = when (style) {
-            1 -> renderCoverArt(source, baseColors, darkMode, fingerprint, width, height)
-            2 -> renderBlurredCover(source, baseColors, blurAmount, width, height)
-            3 -> renderRadialGradient(source, baseColors, width, height)
-            4 -> renderLinearGradient(source, baseColors, width, height)
-            5 -> renderSoftCover(profile.rawColors, softCoverTone, width, height)
+            1 -> renderCoverArt(source, baseColors, darkMode, fingerprint, renderWidth, renderHeight)
+            2 -> renderBlurredCover(source, baseColors, blurAmount, renderWidth, renderHeight)
+            3 -> renderRadialGradient(source, baseColors, renderWidth, renderHeight)
+            4 -> renderLinearGradient(source, baseColors, renderWidth, renderHeight)
+            5 -> renderSoftCover(profile.rawColors, softCoverTone, renderWidth, renderHeight)
             else -> null
         }
         source.recycle()
@@ -480,16 +485,14 @@ internal class NotificationMediaBackgroundRenderer(
             profileCache.get(fingerprint)?.let { return it }
         }
         val extracted = ColorExtractor.extractThemePalette(bitmap, 3).rawColors
-        val wallpaperColors = runCatching {
-            WallpaperColors.fromBitmap(bitmap)
-        }.getOrElse {
-            if (extracted.isEmpty()) return null
-            WallpaperColors(
-                Color.valueOf(extracted[0]),
-                extracted.getOrNull(1)?.let { Color.valueOf(it) },
-                extracted.getOrNull(2)?.let { Color.valueOf(it) }
-            )
-        }
+        if (extracted.isEmpty()) return null
+        // WallpaperColors.fromBitmap quantizes every pixel again. The extracted
+        // palette is already enough, and the second pass is what stalls song changes.
+        val wallpaperColors = WallpaperColors(
+            Color.valueOf(extracted[0]),
+            extracted.getOrNull(1)?.let { Color.valueOf(it) },
+            extracted.getOrNull(2)?.let { Color.valueOf(it) }
+        )
         val palette = monet.palette(wallpaperColors) ?: return null
         val profile = ArtworkProfile(palette, bitmap.brightness(), extracted.toList())
         synchronized(cacheLock) {

@@ -12,6 +12,9 @@ import com.d4viddf.hyperbridge.service.call.CallActionSignal
 import com.d4viddf.hyperbridge.service.call.CallNotificationClassifier
 import com.d4viddf.hyperbridge.service.call.CallNotificationSignals
 import com.d4viddf.hyperbridge.service.call.CallState
+import com.d4viddf.hyperbridge.service.NotificationRemoteViewsParser
+import com.d4viddf.hyperbridge.service.voice.VoicePlaybackDetector
+import com.d4viddf.hyperbridge.service.voice.VoicePlaybackSignals
 import io.github.libxposed.api.XposedModule
 import org.json.JSONObject
 
@@ -209,6 +212,7 @@ object HookConfig {
             notification.category == Notification.CATEGORY_CALL || template.contains("CallStyle") -> "CALL"
             notification.category == Notification.CATEGORY_MESSAGE || template.contains("MessagingStyle") -> "MESSAGE"
             template.contains("MediaStyle") || notification.category == Notification.CATEGORY_TRANSPORT -> "MEDIA"
+            isVoicePlayback(notification, extras, template) -> "VOICE_MESSAGE"
             extras.containsKey(Notification.EXTRA_PROGRESS_MAX) &&
                 (extras.getInt(Notification.EXTRA_PROGRESS_MAX) > 0 ||
                     extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE)) -> "PROGRESS"
@@ -217,5 +221,33 @@ object HookConfig {
             notification.category == Notification.CATEGORY_NAVIGATION -> "NAVIGATION"
             else -> "STANDARD"
         }
+    }
+
+    private fun isVoicePlayback(
+        notification: Notification,
+        extras: Bundle,
+        template: String,
+    ): Boolean {
+        val remote = runCatching { NotificationRemoteViewsParser.collect(notification) }.getOrNull()
+        val extrasMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val extrasProgress = extras.getInt(Notification.EXTRA_PROGRESS, 0)
+        val isMessage = notification.category == Notification.CATEGORY_MESSAGE || template.contains("MessagingStyle")
+        return VoicePlaybackDetector.isVoicePlayback(
+            VoicePlaybackSignals(
+                isMediaTransport = template.contains("MediaStyle") ||
+                    notification.category == Notification.CATEGORY_TRANSPORT,
+                isDownload = false,
+                isMessage = isMessage,
+                progress = if (extrasMax > 0) extrasProgress else remote?.progress ?: 0,
+                progressMax = if (extrasMax > 0) extrasMax else remote?.progressMax ?: 0,
+                title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+                text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
+                ticker = notification.tickerText?.toString().orEmpty(),
+                remoteTexts = remote?.texts.orEmpty(),
+                channelId = notification.channelId.orEmpty(),
+                hasCustomView = notification.contentView != null ||
+                    extras.getBoolean("android.contains.customView", false),
+            )
+        )
     }
 }

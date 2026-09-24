@@ -62,6 +62,44 @@ class NotificationIdentityResolverTest {
     }
 
     @Test
+    fun instagramNicknameReelShowsShortcutAndRealName() {
+        val (title, text) = NotificationIdentityResolver.resolve(
+            packageName = "com.instagram.android",
+            appLabel = "Instagram",
+            title = "amerikanbebesi: Nisa",
+            text = "Sent you a reel",
+            conversationTitle = "amerikanbebesi",
+            personNames = listOf("Nisa"),
+            messageSender = "Nisa",
+            messageText = "Sent you a reel",
+            ticker = "Sent you a reel",
+            shortcutLabel = "Yavrummmm",
+            selfName = "atahan.",
+        )
+        assertEquals("Yavrummmm", title)
+        assertEquals("Nisa: Sent you a reel", text)
+    }
+
+    @Test
+    fun instagramEmojiNicknameIsKeptWhole() {
+        val nickname = "Yavrummmmmm😍😍😍😍❤️❤️❤️❤️❤️❤️❤️🥺🥺🥺❤️❤️❤️🥺❤️🥺"
+        val (title, text) = NotificationIdentityResolver.resolve(
+            packageName = "com.instagram.android",
+            appLabel = "Instagram",
+            title = "amerikanbebesi: Nisa",
+            text = "Sent you a reel",
+            conversationTitle = "amerikanbebesi",
+            personNames = listOf("Nisa"),
+            messageSender = "Nisa",
+            messageText = "Sent you a reel",
+            shortcutLabel = nickname,
+            selfName = "atahan.",
+        )
+        assertEquals(nickname, title)
+        assertEquals("Nisa: Sent you a reel", text)
+    }
+
+    @Test
     fun instagramSingleAccountShareUsesSenderOnly() {
         val (title, text) = NotificationIdentityResolver.resolve(
             packageName = "com.instagram.android",

@@ -189,10 +189,19 @@ object SystemUiNotificationIngressHook {
                 listener = WeakReference(chain.thisObject)
                 val sbn = chain.args[0] as? StatusBarNotification
                 val reason = chain.args.lastOrNull() as? Int ?: 0
-                if (sbn != null && NotificationLifecyclePolicy.preservesActiveIsland(reason)) {
-                    // Recents clear and shade clear-all rebuild the pipeline. Swallowing the
-                    // proxy removal keeps the island view; HyperOS drops it inside proceed.
+                if (sbn != null && (
+                        NotificationLifecyclePolicy.preservesActiveIsland(reason) ||
+                            reason == NotificationLifecyclePolicy.REASON_CANCEL_ALL ||
+                            reason == NotificationLifecyclePolicy.REASON_LISTENER_CANCEL_ALL
+                        )
+                ) {
+                    // Shade clear-all and recents both rebuild the shade. Ignore replayed
+                    // posts of entries that were already showing.
                     noteBulkReplay()
+                }
+                if (sbn != null && NotificationLifecyclePolicy.preservesActiveIsland(reason)) {
+                    // Recents cleanup is not a user dismissal. Swallowing the proxy removal
+                    // keeps the island view; HyperOS drops it inside proceed.
                     if (isOwnedProxy(sbn)) return@intercept null
                 }
                 val result = chain.proceed()
@@ -273,6 +282,7 @@ object SystemUiNotificationIngressHook {
             val replaced = remote.processPosted(request)
             resident[sbn.key] = incoming
             applyCallFocusDecoration(sbn, request)
+            allowCallShadeDismissal(sbn, request)
             if (replaced) markSourceHeadsUpSuppressed(sbn)
             if (replaced) module.log(
                 "HyperBridge: pre-snapshot replacement package=${sbn.packageName} " +
@@ -302,6 +312,7 @@ object SystemUiNotificationIngressHook {
                 val replaced = remote.processPosted(request)
                 resident[key] = incoming
                 applyCallFocusDecoration(sbn, request)
+                allowCallShadeDismissal(sbn, request)
                 if (replaced) markSourceHeadsUpSuppressed(sbn)
             }.onSuccess {
                 pendingPosts.remove(key, sbn)
@@ -315,6 +326,22 @@ object SystemUiNotificationIngressHook {
     private fun applyCallFocusDecoration(sbn: StatusBarNotification, request: Bundle) {
         val decoration = request.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) ?: return
         sbn.notification.extras.putAll(decoration)
+        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "VOICE_MESSAGE") {
+            // The playback notification is low-importance and silent. Mark it ongoing so
+            // HyperOS will keep the focus island, and drop the custom shade layout so the
+            // original player row does not stay beside that island.
+            sbn.notification.flags = sbn.notification.flags or android.app.Notification.FLAG_ONGOING_EVENT
+            sbn.notification.contentView = null
+            sbn.notification.bigContentView = null
+        }
+    }
+
+    private fun allowCallShadeDismissal(sbn: StatusBarNotification, request: Bundle) {
+        if (!request.getBoolean(IslandProtocol.EXTRA_CALL_SHADE_DISMISSIBLE, false)) return
+        val locked = android.app.Notification.FLAG_ONGOING_EVENT or
+            android.app.Notification.FLAG_NO_CLEAR or
+            android.app.Notification.FLAG_FOREGROUND_SERVICE
+        sbn.notification.flags = sbn.notification.flags and locked.inv()
     }
 
     private fun markSourceHeadsUpSuppressed(sbn: StatusBarNotification) {
@@ -378,12 +405,19 @@ object SystemUiNotificationIngressHook {
 
     private fun visibleHash(sbn: StatusBarNotification): Int {
         val extras = sbn.notification.extras
+        val remote = sbn.notification?.let { notification ->
+            runCatching { com.d4viddf.hyperbridge.service.NotificationRemoteViewsParser.collect(notification) }.getOrNull()
+        }
         return listOf(
             extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
             extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
             extras?.getInt(Notification.EXTRA_PROGRESS, 0),
             extras?.getInt(Notification.EXTRA_PROGRESS_MAX, 0),
             latestMessageText(extras),
+            remote?.progress,
+            remote?.progressMax,
+            remote?.texts?.joinToString("|"),
+            remote?.clicks?.joinToString("|") { it.label },
         ).hashCode()
     }
 

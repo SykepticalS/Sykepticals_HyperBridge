@@ -28,7 +28,8 @@ data class RawNotificationTypeSignals(
     val isMedia: Boolean,
     val isMessage: Boolean,
     val hasProgress: Boolean,
-    val isDownload: Boolean
+    val isDownload: Boolean,
+    val isVoice: Boolean = false,
 )
 
 object RawNotificationTypeClassifier {
@@ -39,6 +40,7 @@ object RawNotificationTypeClassifier {
         signals.isTimer -> NotificationType.TIMER
         signals.isMedia -> NotificationType.MEDIA
         signals.isMessage -> NotificationType.MESSAGE
+        signals.isVoice -> NotificationType.VOICE_MESSAGE
         signals.hasProgress && signals.isDownload -> NotificationType.DOWNLOAD
         signals.hasProgress -> NotificationType.PROGRESS
         else -> NotificationType.STANDARD

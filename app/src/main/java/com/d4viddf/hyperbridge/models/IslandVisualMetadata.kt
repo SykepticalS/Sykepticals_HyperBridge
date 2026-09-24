@@ -162,6 +162,28 @@ object IslandVisualMetadata {
         }.getOrDefault(jsonParam)
     }
 
+    /**
+     * Count-up islands keep a picture-only left slot. Put the caller name back on that side
+     * without replacing the same-width timer on the right.
+     */
+    fun injectCompactLeftTitle(jsonParam: String, title: String): String {
+        val compact = title.trim()
+        if (compact.isEmpty()) return jsonParam
+        return runCatching {
+            val root = JsonParser.parseString(jsonParam).asJsonObject
+            val left = root.getAsJsonObject("param_v2")
+                ?.getAsJsonObject("param_island")
+                ?.getAsJsonObject("bigIslandArea")
+                ?.getAsJsonObject("imageTextInfoLeft")
+                ?: return jsonParam
+            val textInfo = left.getAsJsonObject("textInfo") ?: JsonObject().also {
+                left.add("textInfo", it)
+            }
+            textInfo.addProperty("title", compact)
+            Gson().toJson(root)
+        }.getOrDefault(jsonParam)
+    }
+
     fun injectProgressColor(jsonParam: String, color: String?): String {
         if (color.isNullOrBlank()) return jsonParam
         return runCatching {

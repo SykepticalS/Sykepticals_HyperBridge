@@ -95,6 +95,7 @@
     <string name="type_nav">Maps &amp; GPS</string>
     <string name="type_call">Calls</string>
     <string name="type_timer">Timers &amp; Alarms</string>
+    <string name="type_voice_message">Voice messages</string>
 
     <string name="download_complete">Download Complete</string>
     <string name="downloading">Downloading</string>
@@ -238,8 +239,6 @@
     <string name="call_stage_outgoing_desc">Calling, ringing, and connecting before the call is answered</string>
     <string name="call_stage_active">Active calls</string>
     <string name="call_stage_active_desc">Connected calls with an elapsed-time display</string>
-    <string name="call_focus_replacement">Replace call notification with focus notification</string>
-    <string name="call_focus_replacement_desc">Use the calling app\'s own notification as the island, so leaving the call shrinks into the island</string>
 
     <string-array name="call_keywords_hangup">
         <item>hang</item>
@@ -581,6 +580,12 @@
     <string name="type_nav_desc">Turn-by-turn directions and ETA</string>
     <string name="type_call_desc">Incoming and ongoing phone calls</string>
     <string name="type_timer_desc">Active timers and stopwatches</string>
+    <string name="type_voice_message_desc">Voice notes while they play, with progress</string>
+    <string name="voice_message_title">Voice message</string>
+    <string name="voice_focus_replacement">Replace voice notification with focus notification</string>
+    <string name="voice_focus_replacement_desc">Use the app\'s own playback notification as the island</string>
+    <string name="voice_action_play">Play</string>
+    <string name="voice_action_pause">Pause</string>
     <string name="select_triggered_events">Select triggered events</string>
     <string name="override_global_triggers">Override Global Triggers</string>
     <string name="override_global_trigger_desc">Set custom allowed notifications for this app</string>

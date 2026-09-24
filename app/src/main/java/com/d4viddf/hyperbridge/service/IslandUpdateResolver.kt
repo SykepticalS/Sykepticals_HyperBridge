@@ -198,7 +198,9 @@ object NotificationLifecyclePolicy {
     }
 
     fun isProgressLifecycle(type: NotificationType?): Boolean =
-        type == NotificationType.DOWNLOAD || type == NotificationType.PROGRESS
+        type == NotificationType.DOWNLOAD ||
+            type == NotificationType.PROGRESS ||
+            type == NotificationType.VOICE_MESSAGE
 
     /**
      * Call/media/nav/recording islands outlive the source FLAG_ONGOING_EVENT. Outgoing
@@ -238,16 +240,14 @@ object NotificationLifecyclePolicy {
         reason == REASON_APP_CANCEL || reason == REASON_APP_CANCEL_ALL
 
     /**
-     * Shade "clear all" and the recents overview "clear all" remove notifications in bulk.
-     * Neither one is the user dismissing an island. Recents cleanup force-stops apps and
-     * cancels their notifications with [REASON_PACKAGE_CHANGED].
+     * Recents cleanup force-stops apps and cancels their notifications with
+     * [REASON_PACKAGE_CHANGED]. That is not the user dismissing an island.
+     *
+     * Shade and lock-screen "clear all" ([REASON_CANCEL_ALL], [REASON_LISTENER_CANCEL_ALL])
+     * are a user dismissal of every clearable notification, same as a shade swipe
+     * ([REASON_CANCEL]). Those must retire the island with the source.
      */
-    fun preservesActiveIsland(reason: Int): Boolean = when (reason) {
-        REASON_CANCEL_ALL,
-        REASON_PACKAGE_CHANGED,
-        REASON_LISTENER_CANCEL_ALL -> true
-        else -> false
-    }
+    fun preservesActiveIsland(reason: Int): Boolean = reason == REASON_PACKAGE_CHANGED
 
     /**
      * Shade swipe/clear is a user dismissal. An app that clears its own notification ends
@@ -263,7 +263,7 @@ object NotificationLifecyclePolicy {
         @Suppress("UNUSED_PARAMETER") regroupingProtected: Boolean =
             type == NotificationType.MESSAGE || type == NotificationType.STANDARD,
     ): Boolean {
-        if (dismissesWithSource(type)) return true
+        if (dismissesWithSource(type) || isProgressLifecycle(type)) return true
         return dismissWithOriginal
     }
 
@@ -272,13 +272,12 @@ object NotificationLifecyclePolicy {
         type: NotificationType?,
         removeOriginalNotification: Boolean,
         dismissWithOriginal: Boolean,
-        retainedWithoutSource: Boolean = false
+        retainedWithoutSource: Boolean = false,
+        replacementGraceExpired: Boolean = false,
     ): Boolean {
         if (retainedWithoutSource) return false
-        if (type == NotificationType.MESSAGE ||
-            type == NotificationType.STANDARD ||
-            isProgressLifecycle(type)
-        ) return false
+        if (isProgressLifecycle(type)) return replacementGraceExpired
+        if (type == NotificationType.MESSAGE || type == NotificationType.STANDARD) return false
         if (removeOriginalNotification) return false
         return dismissesWithSource(type) || dismissWithOriginal
     }

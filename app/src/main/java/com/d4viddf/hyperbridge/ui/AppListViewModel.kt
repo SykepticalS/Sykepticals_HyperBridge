@@ -203,7 +203,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         val isManagedByTheme: Boolean,
         val activeTypes: Set<String>,
         val activeCallStages: Set<com.d4viddf.hyperbridge.models.CallStage>,
-        val replaceCallWithFocus: Boolean,
+        val replaceVoiceWithFocus: Boolean,
         val useNativeEngine: Boolean,
         val navigationOverride: NavigationModule?,
         val localNavContent: Pair<NavContent, NavContent> // Added for the bottom sheet
@@ -218,14 +218,14 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             preferences.getAppCallStagesFlow(packageName),
             preferences.globalCallStagesFlow
         ) { appStages, globalStages -> appStages ?: globalStages }
-        val callFocusFlow = combine(
-            preferences.getAppCallFocusReplacementFlow(packageName),
-            preferences.globalCallFocusReplacementFlow
+        val voiceFocusFlow = combine(
+            preferences.getAppVoiceFocusReplacementFlow(packageName),
+            preferences.globalVoiceFocusReplacementFlow
         ) { appFocus, globalFocus -> appFocus ?: globalFocus }
         val callOptionsFlow = combine(
             effectiveCallStagesFlow,
-            callFocusFlow
-        ) { stages, focus -> stages to focus }
+            voiceFocusFlow,
+        ) { stages, voiceFocus -> stages to voiceFocus }
         return combine(
             preferences.getAppConfigFlow(packageName),
             preferences.globalNotificationTypesFlow,
@@ -233,7 +233,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             preferences.getEffectiveNavLayout(packageName), // Gets the fallback-resolved NavContent
             activeTheme
         ) { appPrefTypes, globalTypes, callOptions, effectiveNavContent, theme ->
-            val (effectiveCallStages, replaceCallWithFocus) = callOptions
+            val (effectiveCallStages, replaceVoiceWithFocus) = callOptions
 
             val themeOverride = theme?.apps?.get(packageName)
             val isManaged = themeOverride != null
@@ -258,7 +258,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 isManagedByTheme = isManaged,
                 activeTypes = effectiveTypes,
                 activeCallStages = effectiveCallStages,
-                replaceCallWithFocus = replaceCallWithFocus,
+                replaceVoiceWithFocus = replaceVoiceWithFocus,
                 useNativeEngine = effectiveEngine,
                 navigationOverride = effectiveNavVisuals,
                 localNavContent = effectiveNavContent
@@ -354,9 +354,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateAppCallFocus(pkg: String, enabled: Boolean) {
+    fun updateAppVoiceFocus(pkg: String, enabled: Boolean) {
         viewModelScope.launch {
-            preferences.setAppCallFocusReplacement(pkg, enabled)
+            preferences.setAppVoiceFocusReplacement(pkg, enabled)
         }
     }
 

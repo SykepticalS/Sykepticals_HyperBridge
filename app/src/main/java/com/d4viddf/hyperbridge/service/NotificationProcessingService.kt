@@ -39,6 +39,10 @@ class NotificationProcessingService : Service() {
                 posted.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
                 sbn.notification.extras.remove(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION)
             }
+            if (sbn.notification.extras.getBoolean(IslandProtocol.EXTRA_CALL_SHADE_DISMISSIBLE, false)) {
+                posted.putBoolean(IslandProtocol.EXTRA_CALL_SHADE_DISMISSIBLE, true)
+                sbn.notification.extras.remove(IslandProtocol.EXTRA_CALL_SHADE_DISMISSIBLE)
+            }
             return sbn.notification.extras.getBoolean(
                 IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP,
                 false,
