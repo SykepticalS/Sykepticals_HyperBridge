@@ -260,22 +260,17 @@ class CallSessionTracker(
         val compoundReplacementBoundary = sourceReplacement &&
                 (rawChronometerStarted || rawChronometerBaseReset) &&
                 rawConnectedActionsAppeared
-        val chronometerStarted = rawChronometerStarted && !sourceReplacement
-        val chronometerBaseReset = rawChronometerBaseReset && !sourceReplacement
+        // CallStyle turns the chronometer on while the UI still says Calling. Mute/speaker
+        // appearing, or the incoming Answer button disappearing, is the actual connect.
         val connectedActionsAppeared = rawConnectedActionsAppeared && !sourceReplacement
 
-        if (chronometerStarted || chronometerBaseReset || answeredIncoming ||
-            connectedActionsAppeared || compoundReplacementBoundary
-        ) {
+        if (answeredIncoming || connectedActionsAppeared || compoundReplacementBoundary) {
             val transitionEvidence = when {
-                chronometerStarted -> CallActiveEvidence.CHRONOMETER_STARTED
-                chronometerBaseReset -> CallActiveEvidence.CHRONOMETER_BASE_RESET
                 answeredIncoming -> CallActiveEvidence.INCOMING_ANSWERED
                 connectedActionsAppeared -> CallActiveEvidence.CONNECTED_ACTIONS_APPEARED
                 else -> CallActiveEvidence.COMPOUND_SOURCE_REPLACEMENT
             }
-            val usesChronometerBase = chronometerStarted || chronometerBaseReset ||
-                    compoundReplacementBoundary
+            val usesChronometerBase = compoundReplacementBoundary && plausibleBase != null
             val connectedAt = when {
                 usesChronometerBase -> requireNotNull(plausibleBase)
                 else -> input.observedAt
@@ -285,8 +280,6 @@ class CallSessionTracker(
                 else -> ConnectedAtSource.OBSERVED_CONNECTION_TRANSITION
             }
             val reason = when (transitionEvidence) {
-                CallActiveEvidence.CHRONOMETER_STARTED -> "chronometer-start-transition"
-                CallActiveEvidence.CHRONOMETER_BASE_RESET -> "chronometer-base-reset-transition"
                 CallActiveEvidence.INCOMING_ANSWERED -> "incoming-answer-controls-disappeared"
                 CallActiveEvidence.CONNECTED_ACTIONS_APPEARED -> "connected-controls-transition"
                 CallActiveEvidence.COMPOUND_SOURCE_REPLACEMENT -> "replacement-chronometer-and-controls-transition"
@@ -296,16 +289,19 @@ class CallSessionTracker(
         }
 
         val elapsed = plausibleBase?.let { input.observedAt - it }
+        val recoveredByControls = classification.hasConnectedControl &&
+            elapsed != null &&
+            elapsed >= RECOVERED_ACTIVE_ELAPSED_MS
+        val recoveredByAge = elapsed != null && elapsed >= RECOVERED_ACTIVE_WITHOUT_CONTROLS_MS
         if (previous == null &&
             classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
             classification.state != CallState.INCOMING_RINGING &&
             !classification.hasAnswer &&
-            elapsed != null &&
-            elapsed >= RECOVERED_ACTIVE_ELAPSED_MS
+            (recoveredByControls || recoveredByAge)
         ) {
             // Process restart has no prior observation, so the answer transition is invisible.
-            // A chronometer that is already well underway is an in-progress call. A chronometer
-            // that starts with the first callback is still only dialing.
+            // A short-lived CallStyle chronometer is still dialing; mute/speaker or a long
+            // elapsed duration is what distinguishes an in-progress call.
             return ResolvedState(
                 CallState.ACTIVE,
                 plausibleBase,
@@ -401,7 +397,10 @@ class CallSessionTracker(
     private companion object {
         const val MATERIAL_BASE_CHANGE_MS = 1_000L
 
-        /** First sight of a chronometer younger than this is still dialing, not a restarted call. */
+        /** With mute/speaker present, this elapsed duration is an in-progress call after restart. */
         const val RECOVERED_ACTIVE_ELAPSED_MS = 3_000L
+
+        /** Hang-up-only CallStyle chronometers stay dialing until they are this old. */
+        const val RECOVERED_ACTIVE_WITHOUT_CONTROLS_MS = 60_000L
     }
 }

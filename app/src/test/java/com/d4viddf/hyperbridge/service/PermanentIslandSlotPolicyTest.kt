@@ -63,7 +63,7 @@ class PermanentIslandSlotPolicyTest {
     }
 
     @Test
-    fun lastRemainingExtraIslandIsAdoptedOntoPermanent() {
+    fun lastRemainingExtraIslandRestoresTheEmptyStub() {
         val plan = PermanentIslandSlotPolicy.afterRemoval(
             slotAvailable = true,
             occupyingLogicalId = "island-a",
@@ -71,12 +71,11 @@ class PermanentIslandSlotPolicyTest {
                 PermanentSlotIslandRef("island-b", bridgeId = 42, postTime = 200L),
             ),
         )
-        assertEquals(PermanentSlotAfterRemoval.ADOPT_LAST_ONTO_PERMANENT, plan.action)
-        assertEquals("island-b", plan.lastLogicalId)
+        assertEquals(PermanentSlotAfterRemoval.RESTORE_STUB, plan.action)
     }
 
     @Test
-    fun lastIslandAlreadyOnPermanentIsCollapsedAndLocked() {
+    fun lastRemainingOccupantIsNotCopiedOntoTheStub() {
         val plan = PermanentIslandSlotPolicy.afterRemoval(
             slotAvailable = true,
             occupyingLogicalId = "island-a",
@@ -121,7 +120,17 @@ class PermanentIslandSlotPolicyTest {
     }
 
     @Test
-    fun sourceFocusIslandsAreNotEligibleForThePermanentSlot() {
+    fun nativeSystemOccupantDoesNotRestoreTheStubWhenARealIslandLeaves() {
+        val plan = PermanentIslandSlotPolicy.afterRemoval(
+            slotAvailable = true,
+            occupyingLogicalId = NativeSystemIslandPolicy.logicalId("charge"),
+            remaining = emptyList(),
+        )
+        assertEquals(PermanentSlotAfterRemoval.NONE, plan.action)
+    }
+
+    @Test
+    fun ineligibleIslandsDoNotUseThePermanentSlot() {
         val plan = PermanentIslandSlotPolicy.postPlan(
             slotAvailable = true,
             occupyingLogicalId = null,
@@ -134,6 +143,61 @@ class PermanentIslandSlotPolicyTest {
             eligible = false,
         )
         assertFalse(plan.usePermanentSlot)
+    }
+
+    @Test
+    fun callIslandsOccupyThePermanentSlotWhenItIsAvailable() {
+        assertTrue(
+            PermanentIslandSlotPolicy.eligibleForPermanentSlot(
+                preferSourceFocus = true,
+                slotAvailable = true,
+            )
+        )
+        assertFalse(
+            PermanentIslandSlotPolicy.useSourceFocus(
+                preferSourceFocus = true,
+                usePermanentSlot = true,
+                slotAvailable = true,
+            )
+        )
+        val plan = PermanentIslandSlotPolicy.postPlan(
+            slotAvailable = true,
+            occupyingLogicalId = null,
+            occupantStillActive = false,
+            expansionLocked = true,
+            permanentPosted = true,
+            logicalId = "call-a",
+            alreadyPosted = false,
+            previousBridgeId = null,
+            eligible = true,
+        )
+        assertTrue(plan.usePermanentSlot)
+        assertTrue(plan.notifyInPlace)
+        assertTrue(plan.deferAutoExpand)
+    }
+
+    @Test
+    fun sourceFocusIsKeptOnlyWhenThePermanentSlotIsUnavailable() {
+        assertFalse(
+            PermanentIslandSlotPolicy.eligibleForPermanentSlot(
+                preferSourceFocus = true,
+                slotAvailable = false,
+            )
+        )
+        assertTrue(
+            PermanentIslandSlotPolicy.useSourceFocus(
+                preferSourceFocus = true,
+                usePermanentSlot = false,
+                slotAvailable = false,
+            )
+        )
+        assertFalse(
+            PermanentIslandSlotPolicy.useSourceFocus(
+                preferSourceFocus = true,
+                usePermanentSlot = false,
+                slotAvailable = true,
+            )
+        )
     }
 
     @Test

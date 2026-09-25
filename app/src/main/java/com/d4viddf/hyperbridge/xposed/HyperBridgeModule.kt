@@ -9,6 +9,7 @@ import com.d4viddf.hyperbridge.xposed.hooks.IslandInlineReplyHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandWindowImeHook
 import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
 import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
+import com.d4viddf.hyperbridge.xposed.hooks.NativeSystemIslandHook
 import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandTextUpdateAnimationHook
 import com.d4viddf.hyperbridge.xposed.hooks.SystemUiBootstrapHook
@@ -32,6 +33,7 @@ class HyperBridgeModule : XposedModule() {
                 IslandWindowImeHook.install(this, param)
                 FocusWhitelistHook.install(this, param)
                 HeadsUpSuppressionHook.install(this, param)
+                NativeSystemIslandHook.install(this, param)
                 CallIslandPresenceHook.install(this, param)
                 OuterGlowHook.install(this, param)
                 ActiveIslandDismissHook.install(this, param)

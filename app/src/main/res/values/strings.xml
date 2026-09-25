@@ -54,7 +54,7 @@
     <!-- Permanent Island -->
     <string name="permanent_island_title">Permanent Island</string>
     <string name="permanent_island_desc">Keep a Dynamic Island pill on screen. Incoming islands update that pill first.</string>
-    <string name="permanent_island_screen_desc">When enabled, an empty Dynamic Island stays posted. The next island updates that pill in place. If another island arrives while the first is still active, it can appear as a separate island. When only one island remains, it is folded back into the permanent pill, collapsed, and expansion stays locked until a new island is posted. It is not shown in the notification shade.</string>
+    <string name="permanent_island_screen_desc">When enabled, an empty Dynamic Island stays posted. The next island updates that pill in place. If another island arrives while the first is still active, it can appear as a separate island. When those islands leave, the empty pill is restored. It is not shown in the notification shade.</string>
     <string name="permanent_island_width">Island Width</string>
     <string name="permanent_island_hide_landscape">Hide in Landscape</string>
 
@@ -732,6 +732,7 @@
     <string name="continue_action">Continue</string>
     <string name="type_screen_recording">Screen recording</string>
     <string name="type_screen_recording_desc">Xiaomi system screen recording sessions</string>
+    <string name="type_native_system">System island</string>
     <string name="screen_recording_title">Screen recording</string>
     <string name="screen_recording_active">Recording..</string>
     <string name="screen_recording_compact">Recording..</string>

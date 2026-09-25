@@ -6,6 +6,7 @@ import androidx.core.app.NotificationCompat
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.models.HyperIslandData
+import com.d4viddf.hyperbridge.models.IslandVisualMetadata
 import com.d4viddf.hyperbridge.island.backend.IslandMetadata
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
@@ -106,10 +107,12 @@ class PermanentIslandManager(
     // transition (screen on / unlock / (re)connect) callers pass refresh=true to re-assert
     // the island even when present; the periodic tick passes false, trusting presence.
     // Bridged islands update 9999 in place instead of hiding it. Extra islands may post with
-    // their own ids while that occupant is still active; the last remaining one folds back.
+    // their own ids while that occupant is still active; when they leave, 9999 restores the stub.
+    // Native ShowOnce islands (charging, …) overlay-dismiss real occupants, but the stub itself
+    // stays posted so they can update 9999 instead of tearing it down.
     private fun desiredActive(): Boolean {
         val isLandscape = context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        return isPermanentIslandEnabled && !hasNativeIsland && !(isHideInLandscapeEnabled && isLandscape)
+        return isPermanentIslandEnabled && !(isHideInLandscapeEnabled && isLandscape)
     }
 
     @Synchronized
@@ -224,7 +227,7 @@ class PermanentIslandManager(
             builder.setEnableFloat(false)
             builder.setIslandConfig(timeout = 86400000, dismissible = false, highlightColor = "#FFFFFF", expandedTimeMs = 0)
             builder.setShowNotification(false)
-            builder.setReopen(true)
+            builder.setReopen(false)
             builder.setIslandFirstFloat(false)
 
             // Only big paramislands with empty values for textonleft and picKey = null
@@ -248,7 +251,20 @@ class PermanentIslandManager(
             notifBuilder.addExtras(data.resources)
 
             val notification = notifBuilder.build()
-            notification.extras.putString("miui.focus.param", data.jsonParam)
+            notification.extras.putString(
+                "miui.focus.param",
+                FocusShadeUpdate.stamp(
+                    IslandVisualMetadata.injectFloatingFlags(
+                        data.jsonParam,
+                        enableFloat = false,
+                        islandFirstFloat = false,
+                        reopen = false,
+                        expandedTimeMs = 0,
+                    ),
+                    FocusShadeUpdate.nextSequence(PERMANENT_LOGICAL_TOKEN),
+                    orderId = FocusShadeUpdate.orderIdFor(PERMANENT_LOGICAL_TOKEN),
+                ),
+            )
 
             backend.post(
                 PERMANENT_BRIDGE_ID,

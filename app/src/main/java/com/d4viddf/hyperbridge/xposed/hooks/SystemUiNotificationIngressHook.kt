@@ -327,13 +327,19 @@ object SystemUiNotificationIngressHook {
     private fun applyCallFocusDecoration(sbn: StatusBarNotification, request: Bundle) {
         val decoration = request.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) ?: return
         sbn.notification.extras.putAll(decoration)
-        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "VOICE_MESSAGE" &&
-            !FocusShadeUpdate.cancels(decoration.getString("miui.focus.param"))
-        ) {
+        sbn.notification.extras.putBoolean("show_notification", false)
+        val cancelling = FocusShadeUpdate.cancels(decoration.getString("miui.focus.param"))
+        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "VOICE_MESSAGE" && !cancelling) {
             // Playback rows are low-importance and silent. Ongoing keeps the island alive.
-            // Leave contentView / bigContentView alone so WhatsApp and Instagram keep
-            // posting their own shade row.
             sbn.notification.flags = sbn.notification.flags or android.app.Notification.FLAG_ONGOING_EVENT
+        }
+        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "CALL" &&
+            !cancelling &&
+            !decoration.getBoolean(IslandProtocol.EXTRA_CALL_CONNECTED, false)
+        ) {
+            // CallStyle enables a chronometer while the row still says Calling. Leave that
+            // extra off until we have connect evidence so HyperOS does not count up the island.
+            sbn.notification.extras.putBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER, false)
         }
     }
 

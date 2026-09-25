@@ -45,10 +45,14 @@ class CallSessionTrackerTest {
     }
 
     @Test
-    fun chronometerAlreadyRunningOnFirstSightIsAnInProgressCall() {
+    fun chronometerAlreadyRunningOnFirstSightWithControlsIsAnInProgressCall() {
         val session = CallSessionTracker().resolve(
             input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                classification(
+                    CallState.OUTGOING_CALLING,
+                    CallActiveEvidence.CHRONOMETER_PRESENT,
+                    hasConnectedControl = true,
+                ),
                 now = 40_000L,
                 showsChronometer = true,
                 base = 10_000L
@@ -110,10 +114,10 @@ class CallSessionTrackerTest {
     }
 
     @Test
-    fun chronometerAppearanceStartsActiveCallAtSourceBase() {
+    fun chronometerAppearanceWhileCallingDoesNotStartTimer() {
         val tracker = CallSessionTracker()
         val calling = tracker.resolve(input(classification(CallState.OUTGOING_CALLING), 10_000L))
-        val active = tracker.resolve(
+        val stillCalling = tracker.resolve(
             input(
                 classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
                 12_000L,
@@ -122,16 +126,14 @@ class CallSessionTrackerTest {
             )
         )
 
-        assertEquals(calling.logicalCallId, active.logicalCallId)
-        assertEquals(CallState.ACTIVE, active.state)
-        assertEquals(11_500L, active.connectedAt)
-        assertEquals(ConnectedAtSource.SOURCE_CHRONOMETER, active.connectedAtSource)
-        assertEquals(CallActiveEvidence.CHRONOMETER_STARTED, active.activeEvidence)
-        assertEquals(11_500L, CallTimerPolicy.connectedAtForTimer(active))
+        assertEquals(calling.logicalCallId, stillCalling.logicalCallId)
+        assertEquals(CallState.OUTGOING_CALLING, stillCalling.state)
+        assertNull(stillCalling.connectedAt)
+        assertNull(CallTimerPolicy.connectedAtForTimer(stillCalling))
     }
 
     @Test
-    fun materialChronometerBaseResetStartsActiveCallAtNewBase() {
+    fun materialChronometerBaseResetWhileCallingDoesNotStartTimer() {
         val tracker = CallSessionTracker()
         tracker.resolve(
             input(
@@ -141,7 +143,7 @@ class CallSessionTrackerTest {
                 base = 9_000L
             )
         )
-        val active = tracker.resolve(
+        val stillCalling = tracker.resolve(
             input(
                 classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
                 15_000L,
@@ -150,9 +152,8 @@ class CallSessionTrackerTest {
             )
         )
 
-        assertEquals(CallState.ACTIVE, active.state)
-        assertEquals(14_000L, active.connectedAt)
-        assertEquals(CallActiveEvidence.CHRONOMETER_BASE_RESET, active.activeEvidence)
+        assertEquals(CallState.OUTGOING_CALLING, stillCalling.state)
+        assertNull(stillCalling.connectedAt)
     }
 
     @Test
@@ -225,12 +226,7 @@ class CallSessionTrackerTest {
         val tracker = CallSessionTracker()
         tracker.resolve(input(classification(CallState.OUTGOING_CALLING), 10_000L))
         val active = tracker.resolve(
-            input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
-                12_000L,
-                showsChronometer = true,
-                base = 11_500L
-            )
+            input(classification(CallState.OUTGOING_CALLING, hasConnectedControl = true), 12_000L)
         )
         val noisy = tracker.resolve(
             input(classification(CallState.OUTGOING_CALLING, presentation = CallPresentationType.ONGOING), 15_000L)
@@ -253,11 +249,9 @@ class CallSessionTrackerTest {
         )
         val active = tracker.resolve(
             input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                classification(CallState.OUTGOING_CALLING, hasConnectedControl = true),
                 12_000L,
-                participant = "visible-person",
-                showsChronometer = true,
-                base = 11_500L
+                participant = "visible-person"
             )
         )
 
@@ -444,18 +438,16 @@ class CallSessionTrackerTest {
         )
         val active = tracker.resolve(
             input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                classification(CallState.OUTGOING_CALLING, hasConnectedControl = true),
                 52_000L,
                 sourceKey = "new",
-                notificationId = 99,
-                showsChronometer = true,
-                base = 51_900L
+                notificationId = 99
             )
         )
 
         assertEquals(first.logicalCallId, active.logicalCallId)
         assertEquals(CallState.ACTIVE, active.state)
-        assertEquals(51_900L, active.connectedAt)
+        assertEquals(52_000L, active.connectedAt)
     }
 
     @Test
@@ -540,10 +532,8 @@ class CallSessionTrackerTest {
         tracker.resolve(input(classification(CallState.OUTGOING_CALLING), 58_000L, isVideo = true))
         val connected = tracker.resolve(
             input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                classification(CallState.OUTGOING_CALLING, hasConnectedControl = true),
                 59_000L,
-                showsChronometer = true,
-                base = 58_900L,
                 isVideo = true
             )
         )
@@ -575,12 +565,10 @@ class CallSessionTrackerTest {
         )
         val active = tracker.resolve(
             input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                classification(CallState.OUTGOING_CALLING, hasConnectedControl = true),
                 63_000L,
                 sourceKey = "audio-source",
-                participant = "audio-person",
-                showsChronometer = true,
-                base = 62_900L
+                participant = "audio-person"
             )
         )
 
@@ -611,11 +599,9 @@ class CallSessionTrackerTest {
         )
         val active = tracker.resolve(
             input(
-                classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
+                classification(CallState.OUTGOING_CALLING, hasConnectedControl = true),
                 63_000L,
                 sourceKey = "connected-a",
-                showsChronometer = true,
-                base = 62_900L,
                 isVideo = true
             )
         )

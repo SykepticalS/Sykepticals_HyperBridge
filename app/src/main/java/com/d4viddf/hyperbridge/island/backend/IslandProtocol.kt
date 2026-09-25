@@ -18,6 +18,7 @@ object IslandProtocol {
     const val ACTION_RELOAD_ENGINE = "$APP_PACKAGE.action.RELOAD_ENGINE"
     const val ACTION_CANCEL_SOURCE = "$APP_PACKAGE.action.CANCEL_SOURCE"
     const val ACTION_REPLY_COMPOSER = "$APP_PACKAGE.action.REPLY_COMPOSER"
+    const val ACTION_NATIVE_SYSTEM_ISLAND = "$APP_PACKAGE.action.NATIVE_SYSTEM_ISLAND"
 
     const val EXTRA_PROTOCOL = "hyperbridge.protocol"
     const val EXTRA_NOTIFICATION = "hyperbridge.notification"
@@ -38,6 +39,8 @@ object IslandProtocol {
     /** Source call notification is carrying the island focus payload instead of a SystemUI proxy. */
     const val EXTRA_CALL_FOCUS = "hyperbridge.call_focus"
     const val EXTRA_CALL_FOCUS_DECORATION = "hyperbridge.call_focus_decoration"
+    /** True once the remote party has answered; the source CallStyle chronometer may run. */
+    const val EXTRA_CALL_CONNECTED = "hyperbridge.call_connected"
     /** Call island is showing, so the source shade entry must stay user-dismissable. */
     const val EXTRA_CALL_SHADE_DISMISSIBLE = "hyperbridge.call_shade_dismissible"
     const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"
@@ -55,6 +58,11 @@ object IslandProtocol {
     const val EXTRA_UPDATABLE = "hyperbridge.updatable"
     const val EXTRA_TEXT_UPDATE_ANIMATION = "hyperbridge.text_update_animation"
     const val EXTRA_REPLY_COMPOSER_OPEN = "hyperbridge.reply_composer_open"
+    const val EXTRA_NATIVE_NOTIFY_ID = "hyperbridge.native_system.notify_id"
+    const val EXTRA_NATIVE_LEFT = "hyperbridge.native_system.left"
+    const val EXTRA_NATIVE_RIGHT = "hyperbridge.native_system.right"
+    const val EXTRA_NATIVE_DURATION = "hyperbridge.native_system.duration"
+    const val EXTRA_NATIVE_HIDE = "hyperbridge.native_system.hide"
     const val MIUI_SBN = "miui.sbn"
     const val MIUI_BIG_ISLAND_EFFECT = "miui.bigIsland.effect.src"
     const val MIUI_EFFECT = "miui.effect.src"

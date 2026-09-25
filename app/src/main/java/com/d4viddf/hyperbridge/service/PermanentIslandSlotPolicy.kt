@@ -2,9 +2,9 @@ package com.d4viddf.hyperbridge.service
 
 /**
  * Permanent island slot: incoming islands update the posted 9999 pill first. A second island
- * may use its own id only while that occupant is still active. When extras leave, the last
- * remaining island is folded back onto 9999, collapsed, and expansion stays locked until a
- * new island occupies the slot.
+ * may use its own id only while that occupant is still active. When the occupant leaves,
+ * remaining extras keep their own ids and 9999 restores the empty stub. A live occupant
+ * stays on 9999 without being re-posted; expansion stays locked until a new island occupies it.
  */
 data class PermanentSlotPostPlan(
     val usePermanentSlot: Boolean,
@@ -94,24 +94,27 @@ object PermanentIslandSlotPolicy {
     ): PermanentSlotRemovalPlan {
         if (!slotAvailable) return PermanentSlotRemovalPlan(PermanentSlotAfterRemoval.NONE)
         if (remaining.isEmpty()) {
-            return PermanentSlotRemovalPlan(PermanentSlotAfterRemoval.RESTORE_STUB)
+            return if (NativeSystemIslandPolicy.isSoftOccupant(occupyingLogicalId)) {
+                PermanentSlotRemovalPlan(PermanentSlotAfterRemoval.NONE)
+            } else {
+                PermanentSlotRemovalPlan(PermanentSlotAfterRemoval.RESTORE_STUB)
+            }
         }
         val occupant = occupyingLogicalId?.let { occupied ->
             remaining.firstOrNull { it.logicalId == occupied }
         }
         if (occupant != null) {
+            // Occupant is still live on 9999. Lock expansion; do not re-post its payload,
+            // which left the last island expandable on the stub.
             return PermanentSlotRemovalPlan(
                 PermanentSlotAfterRemoval.COLLAPSE_LAST_ON_PERMANENT,
                 occupant.logicalId,
                 occupant.bridgeId,
             )
         }
-        val last = remaining.maxBy { it.postTime }
-        return PermanentSlotRemovalPlan(
-            PermanentSlotAfterRemoval.ADOPT_LAST_ONTO_PERMANENT,
-            last.logicalId,
-            last.bridgeId,
-        )
+        // Remaining extras already have their own ids. Copying the last one onto 9999 left
+        // that island's content expandable on the stub. Restore the empty pill instead.
+        return PermanentSlotRemovalPlan(PermanentSlotAfterRemoval.RESTORE_STUB)
     }
 
     fun logicalToken(bridgeId: Int): String =
@@ -120,4 +123,21 @@ object PermanentIslandSlotPolicy {
         } else {
             bridgeId.toString()
         }
+
+    /**
+     * Call and voice islands normally ride on the source notification so HyperOS can match
+     * the return-to-app animation. That Focus identity is a different island from 9999, so
+     * it must not be used while the permanent slot is available — those islands occupy 9999
+     * like any other incoming island.
+     */
+    fun useSourceFocus(
+        preferSourceFocus: Boolean,
+        usePermanentSlot: Boolean,
+        slotAvailable: Boolean,
+    ): Boolean = preferSourceFocus && !usePermanentSlot && !slotAvailable
+
+    fun eligibleForPermanentSlot(
+        preferSourceFocus: Boolean,
+        slotAvailable: Boolean,
+    ): Boolean = !preferSourceFocus || slotAvailable
 }
