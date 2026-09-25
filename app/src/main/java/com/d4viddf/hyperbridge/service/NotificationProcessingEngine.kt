@@ -2407,6 +2407,11 @@ class NotificationProcessingEngine private constructor(
         session: CallSession,
         previous: ActiveIsland?
     ) {
+        if (previous?.sourceFocus == true && session.state == CallState.ENDED) {
+            // The shade row is the focus snapshot. A hang-up that only rewrites the dialer
+            // notification is ignored until a newer payload sets cancel.
+            attachSourceFocusCancellation(sbn, NotificationType.CALL)
+        }
         if (previous?.type == NotificationType.CALL) {
             activeTranslations[logicalKey]?.let { bridgeId ->
                 try {
@@ -2714,7 +2719,12 @@ class NotificationProcessingEngine private constructor(
         // notification's package. The exit animation matches that name to the closing app.
         decoration.putString("miui.pkg.name", sbn.packageName)
         decoration.putString(IslandProtocol.EXTRA_SEMANTIC_TYPE, semanticType.name)
-        if (decoration.getString("miui.focus.param").isNullOrBlank()) return false
+        val focusParam = decoration.getString("miui.focus.param")
+        if (focusParam.isNullOrBlank()) return false
+        decoration.putString(
+            "miui.focus.param",
+            FocusShadeUpdate.stamp(focusParam, FocusShadeUpdate.nextSequence(sbn.key)),
+        )
         val size = runCatching { bundleSize(decoration) }.getOrElse { return false }
         if (size > SOURCE_FOCUS_DECORATION_LIMIT) {
             Log.w(TAG, "Call focus decoration is $size bytes; keeping the SystemUI proxy")
@@ -2722,6 +2732,27 @@ class NotificationProcessingEngine private constructor(
         }
         sbn.notification.extras.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
         return true
+    }
+
+    /**
+     * Asks HyperOS to drop the focus shade row and island for this source notification.
+     * The source notification itself is what the shade is showing, so a proxy cancel cannot
+     * reach it.
+     */
+    private fun attachSourceFocusCancellation(
+        sbn: StatusBarNotification,
+        semanticType: NotificationType,
+    ) {
+        val decoration = Bundle()
+        decoration.putString(
+            "miui.focus.param",
+            FocusShadeUpdate.cancelParam(FocusShadeUpdate.nextSequence(sbn.key)),
+        )
+        decoration.putBoolean(IslandProtocol.EXTRA_CALL_FOCUS, true)
+        decoration.putString(IslandProtocol.EXTRA_SOURCE_PACKAGE, sbn.packageName)
+        decoration.putString("miui.pkg.name", sbn.packageName)
+        decoration.putString(IslandProtocol.EXTRA_SEMANTIC_TYPE, semanticType.name)
+        sbn.notification.extras.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
     }
 
     private fun isSourceFocusExtra(key: String): Boolean {
