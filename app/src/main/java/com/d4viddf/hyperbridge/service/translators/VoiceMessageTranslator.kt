@@ -3,13 +3,8 @@ package com.d4viddf.hyperbridge.service.translators
 import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.drawable.Icon
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.graphics.toColorInt
 import android.service.notification.StatusBarNotification
@@ -26,7 +21,8 @@ import com.d4viddf.hyperbridge.service.voice.VoicePlaybackDetector
 import com.d4viddf.hyperbridge.service.voice.VoicePlaybackRole
 import io.github.d4viddf.hyperisland_kit.HyperAction
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
-import io.github.d4viddf.hyperisland_kit.HyperPicture
+import io.github.d4viddf.hyperisland_kit.models.CircularProgressInfo
+import io.github.d4viddf.hyperisland_kit.models.ProgressTextInfo
 
 class VoiceMessageTranslator(
     context: Context,
@@ -41,9 +37,14 @@ class VoiceMessageTranslator(
         config: IslandConfig,
         theme: HyperTheme?,
         isUpdate: Boolean,
+        compactDuration: Boolean = false,
     ): HyperIslandData {
         val extras = sbn.notification.extras
-        val remote = NotificationRemoteViewsParser.collect(sbn.notification)
+        val remote = NotificationRemoteViewsParser.collect(
+            sbn.notification,
+            context = context,
+            packageName = sbn.packageName,
+        )
         val extrasMax = extras.getInt(android.app.Notification.EXTRA_PROGRESS_MAX, 0)
         val extrasProgress = extras.getInt(android.app.Notification.EXTRA_PROGRESS, 0)
         val progress = if (extrasMax > 0) extrasProgress else remote.progress
@@ -87,21 +88,27 @@ class VoiceMessageTranslator(
             expandedTimeMs = floatPresentation.expandedTimeMs(config.floatTimeout),
         )
 
-        val iconKey = "${picKey}_lead"
-        builder.addPicture(micInFrontOfApp(sbn.packageName, iconKey))
+        builder.addPicture(resolveVoicePicture(sbn, picKey, R.drawable.ic_call_microphone_live))
         builder.setIconTextInfo(
-            picKey = iconKey,
+            picKey = picKey,
             title = expandedTitle,
             content = clock,
         )
-        builder.setBigIslandInfo(
-            left = IslandCompactLayout.left(iconKey, plan.compactLeft),
-            right = IslandCompactLayout.right(clock),
-        )
-        builder.setSmallIsland(iconKey)
-        plan.expandedBarPercent?.let { bar ->
-            builder.setProgressBar(bar, themeProgressColor)
+        if (compactDuration) {
+            builder.setBigIslandInfo(
+                left = IslandCompactLayout.left(picKey, plan.compactLeft),
+                right = IslandCompactLayout.right(clock),
+            )
+        } else {
+            builder.setBigIslandInfo(
+                left = IslandCompactLayout.left(picKey, plan.compactLeft),
+                progressText = ProgressTextInfo(
+                    progressInfo = CircularProgressInfo(progress = plan.percent),
+                    textInfo = IslandCompactLayout.text(""),
+                ),
+            )
         }
+        builder.setSmallIsland(picKey)
 
         pendingIntent?.let { intent ->
             playbackAction(sbn, picKey, intent, role, themeProgressColor)?.let { bridge ->
@@ -128,7 +135,7 @@ class VoiceMessageTranslator(
         if (role == null) return null
         val isPause = role == VoicePlaybackRole.PAUSE
         val label = context.getString(if (isPause) R.string.voice_action_pause else R.string.voice_action_play)
-        val iconRes = if (isPause) R.drawable.ic_media_pause else R.drawable.ic_media_play
+        val iconRes = if (isPause) R.drawable.ic_voice_pause else R.drawable.ic_voice_play
         val key = "voice_${picKey.removePrefix("pic_")}"
         val iconKey = "${key}_icon"
         val picture = getColoredPicture(iconKey, iconRes, "#FFFFFF")
@@ -142,33 +149,6 @@ class VoiceMessageTranslator(
             titleColor = "#FFFFFF",
         )
         return BridgeAction(action, picture)
-    }
-
-    private fun micInFrontOfApp(packageName: String, key: String): HyperPicture {
-        val size = 128
-        val gap = 16
-        val output = createBitmap(size * 2 + gap, size)
-        val canvas = Canvas(output)
-        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = "#2C2C2E".toColorInt() }
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, background)
-        val mic = ContextCompat.getDrawable(context, R.drawable.ic_call_microphone_live)?.mutate()
-        mic?.setTint(Color.WHITE)
-        val inset = 30
-        mic?.setBounds(inset, inset, size - inset, size - inset)
-        mic?.draw(canvas)
-        val appIcon = runCatching {
-            context.packageManager.getApplicationIcon(packageName).toBitmap(size, size)
-        }.getOrNull()
-        if (appIcon != null) {
-            val left = size + gap
-            canvas.drawBitmap(
-                appIcon,
-                null,
-                Rect(left, 0, left + size, size),
-                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
-            )
-        }
-        return HyperPicture(key, output)
     }
 
     private fun playbackGlyph(resId: Int): Bitmap {

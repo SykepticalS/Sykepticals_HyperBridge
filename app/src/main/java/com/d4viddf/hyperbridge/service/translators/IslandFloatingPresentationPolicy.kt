@@ -16,7 +16,19 @@ data class IslandFloatingPresentation(
  * enabled on an update can therefore re-expand an island the user already collapsed.
  */
 object IslandFloatingPresentationPolicy {
-    fun resolve(firstFloat: Boolean, floatOnUpdate: Boolean, isUpdate: Boolean): IslandFloatingPresentation {
+    fun resolve(
+        firstFloat: Boolean,
+        floatOnUpdate: Boolean,
+        isUpdate: Boolean,
+        expansionLocked: Boolean = false,
+    ): IslandFloatingPresentation {
+        if (expansionLocked) {
+            return IslandFloatingPresentation(
+                enableFloat = false,
+                islandFirstFloat = false,
+                reopen = false,
+            )
+        }
         val mayAutoExpand = if (isUpdate) floatOnUpdate else firstFloat
         return IslandFloatingPresentation(
             enableFloat = mayAutoExpand,

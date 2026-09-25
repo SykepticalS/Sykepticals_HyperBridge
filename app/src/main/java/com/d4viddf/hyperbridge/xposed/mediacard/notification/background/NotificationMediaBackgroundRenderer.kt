@@ -45,7 +45,15 @@ internal data class RenderedNotificationMediaBackground(
     val bitmap: Bitmap,
     val colors: NotificationMediaColorConfig,
     val artworkFingerprint: Long
-)
+) {
+    /** Upload pixels before the UI thread swaps the background, so that frame does not hitch. */
+    fun preparedForDisplay(): RenderedNotificationMediaBackground {
+        if (bitmap.isRecycled || bitmap.config == Bitmap.Config.HARDWARE) return this
+        val gpu = runCatching { bitmap.copy(Bitmap.Config.HARDWARE, false) }.getOrNull() ?: return this
+        if (gpu !== bitmap) bitmap.recycle()
+        return copy(bitmap = gpu)
+    }
+}
 
 internal class NotificationMediaBackgroundRenderer(
     private val classLoader: ClassLoader

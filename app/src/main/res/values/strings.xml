@@ -53,8 +53,8 @@
 
     <!-- Permanent Island -->
     <string name="permanent_island_title">Permanent Island</string>
-    <string name="permanent_island_desc">Keep the Dynamic Island permanently visible on screen when there are no active notifications.</string>
-    <string name="permanent_island_screen_desc">When enabled, an empty Dynamic Island will be shown permanently on your screen. It will automatically hide when real notifications arrive and reappear when all notifications are cleared. It will not be visible in your notification shade.</string>
+    <string name="permanent_island_desc">Keep a Dynamic Island pill on screen. Incoming islands update that pill first.</string>
+    <string name="permanent_island_screen_desc">When enabled, an empty Dynamic Island stays posted. The next island updates that pill in place. If another island arrives while the first is still active, it can appear as a separate island. When only one island remains, it is folded back into the permanent pill, collapsed, and expansion stays locked until a new island is posted. It is not shown in the notification shade.</string>
     <string name="permanent_island_width">Island Width</string>
     <string name="permanent_island_hide_landscape">Hide in Landscape</string>
 
@@ -582,8 +582,8 @@
     <string name="type_timer_desc">Active timers and stopwatches</string>
     <string name="type_voice_message_desc">Voice notes while they play, with progress</string>
     <string name="voice_message_title">Voice message</string>
-    <string name="voice_focus_replacement">Replace voice notification with focus notification</string>
-    <string name="voice_focus_replacement_desc">Use the app\'s own playback notification as the island</string>
+    <string name="voice_compact_duration">Duration on the small island</string>
+    <string name="voice_compact_duration_desc">Show the playback time on the right. Off keeps a progress circle.</string>
     <string name="voice_action_play">Play</string>
     <string name="voice_action_pause">Pause</string>
     <string name="select_triggered_events">Select triggered events</string>

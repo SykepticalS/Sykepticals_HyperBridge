@@ -13,6 +13,7 @@ import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.processing.INotificationProcessingService
 import com.d4viddf.hyperbridge.processing.IIslandDispatcher
 import com.d4viddf.hyperbridge.xposed.dispatch.SystemUiDispatcher
+import com.d4viddf.hyperbridge.service.FocusShadeUpdate
 import com.d4viddf.hyperbridge.service.NotificationProcessingService
 import com.d4viddf.hyperbridge.service.NotificationLifecyclePolicy
 import com.d4viddf.hyperbridge.service.ShadeEntryIdentity
@@ -326,13 +327,13 @@ object SystemUiNotificationIngressHook {
     private fun applyCallFocusDecoration(sbn: StatusBarNotification, request: Bundle) {
         val decoration = request.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) ?: return
         sbn.notification.extras.putAll(decoration)
-        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "VOICE_MESSAGE") {
-            // The playback notification is low-importance and silent. Mark it ongoing so
-            // HyperOS will keep the focus island, and drop the custom shade layout so the
-            // original player row does not stay beside that island.
+        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "VOICE_MESSAGE" &&
+            !FocusShadeUpdate.cancels(decoration.getString("miui.focus.param"))
+        ) {
+            // Playback rows are low-importance and silent. Ongoing keeps the island alive.
+            // Leave contentView / bigContentView alone so WhatsApp and Instagram keep
+            // posting their own shade row.
             sbn.notification.flags = sbn.notification.flags or android.app.Notification.FLAG_ONGOING_EVENT
-            sbn.notification.contentView = null
-            sbn.notification.bigContentView = null
         }
     }
 

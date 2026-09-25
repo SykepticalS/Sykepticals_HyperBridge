@@ -385,7 +385,7 @@ internal object IslandExpandedMediaBackgroundController {
                     )
                 }.onFailure { error ->
                     MediaCardLog.e(TAG, "渲染展开态媒体背景失败", error)
-                }.getOrNull()
+                }.getOrNull()?.preparedForDisplay()
                 if (rendered == null) {
                     clearPendingOnMain(binder, binderState, listOf(prepared), api)
                     return@forEach

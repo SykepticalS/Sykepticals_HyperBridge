@@ -66,4 +66,17 @@ class IslandFloatingPresentationPolicyTest {
         assertFalse(presentation.reopen)
     }
 
+    @Test
+    fun expansionLockSuppressesFloatEvenForNewEvents() {
+        val presentation = IslandFloatingPresentationPolicy.resolve(
+            firstFloat = true,
+            floatOnUpdate = true,
+            isUpdate = false,
+            expansionLocked = true,
+        )
+        assertFalse(presentation.enableFloat)
+        assertFalse(presentation.islandFirstFloat)
+        assertFalse(presentation.reopen)
+        assertEquals(0, presentation.expandedTimeMs(2_000))
+    }
 }

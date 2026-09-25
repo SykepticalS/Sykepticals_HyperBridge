@@ -53,6 +53,26 @@ object VoicePlaybackDetector {
         return instagramLike || whatsappLike
     }
 
+    /**
+     * Caption-only rows such as Instagram's "Audio message from …" that are not the live
+     * player. They would otherwise become a bare title island beside the real voice island.
+     */
+    fun isVoicePlaybackShell(signals: VoicePlaybackSignals): Boolean {
+        if (isVoicePlayback(signals) || signals.isMediaTransport || signals.isDownload) return false
+        val lines = buildList {
+            add(signals.title)
+            add(signals.text)
+            add(signals.ticker)
+            addAll(signals.remoteTexts)
+        }
+        return lines.any(::isPlaybackCaptionLine)
+    }
+
+    private fun isPlaybackCaptionLine(line: String): Boolean {
+        val value = line.trim()
+        return value.isNotBlank() && fromSender.matches(value)
+    }
+
     /** The line that should be the island title, such as "Voice message from Test". */
     fun playbackCaption(candidates: List<String>): String? {
         return candidates.map { it.trim() }.firstOrNull { line ->
@@ -85,9 +105,13 @@ object VoicePlaybackDetector {
 
     fun roleFor(label: String): VoicePlaybackRole? {
         val value = label.lowercase()
-        if (pauseKeywords.any { value.contains(it) }) return VoicePlaybackRole.PAUSE
-        if (playKeywords.any { value.contains(it) }) return VoicePlaybackRole.PLAY
-        return null
+        val pause = pauseKeywords.any { value.contains(it) }
+        val play = playKeywords.any { value.contains(it) }
+        return when {
+            pause && !play -> VoicePlaybackRole.PAUSE
+            play && !pause -> VoicePlaybackRole.PLAY
+            else -> null
+        }
     }
 
     /** First labeled click that is actually play or pause. Unlabeled clicks are ignored. */

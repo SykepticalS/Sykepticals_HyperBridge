@@ -129,12 +129,69 @@ class VoicePlaybackDetectorTest {
         assertEquals(VoicePlaybackRole.PAUSE, plan.playbackRole)
         assertEquals(VoicePlaybackRole.PAUSE, VoicePlaybackDetector.roleFor("Pause voice"))
         assertEquals(VoicePlaybackRole.PLAY, VoicePlaybackDetector.roleFor("Play voice"))
+        assertEquals(VoicePlaybackRole.PAUSE, VoicePlaybackDetector.roleFor("wa_ic_pause_filled"))
+        assertEquals(VoicePlaybackRole.PLAY, VoicePlaybackDetector.roleFor("vec_ic_play_arrow_filled"))
+        assertNull(VoicePlaybackDetector.roleFor("play_pause"))
     }
 
     @Test
     fun pauseLabelSelectsPause() {
         assertEquals(VoicePlaybackRole.PAUSE, VoicePlaybackDetector.roleFor("Pause"))
         assertEquals(VoicePlaybackRole.PLAY, VoicePlaybackDetector.selectControl(listOf("Reply", "Play")))
+    }
+
+    @Test
+    fun instagramCaptionShellWithoutProgressIsIgnored() {
+        val shell = VoicePlaybackSignals(
+            isMediaTransport = false,
+            isDownload = false,
+            isMessage = false,
+            progress = 0,
+            progressMax = 0,
+            title = "Audio message from atahan.",
+            text = "",
+            ticker = "",
+            remoteTexts = emptyList(),
+            channelId = "ig_direct",
+            hasCustomView = false,
+        )
+        assertTrue(VoicePlaybackDetector.isVoicePlaybackShell(shell))
+    }
+
+    @Test
+    fun liveInstagramPlaybackIsNotAShell() {
+        val player = VoicePlaybackSignals(
+            isMediaTransport = false,
+            isDownload = false,
+            isMessage = false,
+            progress = 35268,
+            progressMax = 40635,
+            title = "Audio message from atahan.",
+            text = "",
+            ticker = "",
+            remoteTexts = emptyList(),
+            channelId = "ig_direct",
+            hasCustomView = false,
+        )
+        assertFalse(VoicePlaybackDetector.isVoicePlaybackShell(player))
+    }
+
+    @Test
+    fun unreadVoiceChatNoteIsNotAShell() {
+        val message = VoicePlaybackSignals(
+            isMediaTransport = false,
+            isDownload = false,
+            isMessage = true,
+            progress = 0,
+            progressMax = 0,
+            title = "sykeptical: atahan.",
+            text = "Sent you a voice message",
+            ticker = "Sent you a voice message",
+            remoteTexts = emptyList(),
+            channelId = "ig_direct",
+            hasCustomView = false,
+        )
+        assertFalse(VoicePlaybackDetector.isVoicePlaybackShell(message))
     }
 
     private fun baseSignals(

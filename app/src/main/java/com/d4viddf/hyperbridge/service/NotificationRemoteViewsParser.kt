@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.drawable.Icon
+import android.view.View
 import android.widget.RemoteViews
 import java.util.ArrayList
 import java.lang.reflect.Modifier
@@ -29,6 +31,7 @@ object NotificationRemoteViewsParser {
         notification: Notification,
         context: Context? = null,
         recoverIfMissing: Boolean = false,
+        packageName: String? = null,
     ): NotificationRemoteViewsExtract {
         val views = linkedSetOf<RemoteViews>()
         listOfNotNull(
@@ -53,6 +56,17 @@ object NotificationRemoteViewsParser {
             collectFromActions(remoteViews, texts, bitmaps)
             readStructuredActions(remoteViews, viewStates)
         }
+        if (context != null && !packageName.isNullOrBlank()) {
+            viewStates.forEach { (viewId, state) ->
+                resourceName(context, packageName, viewId)?.let { state.viewName = it }
+                state.imageRes?.let { resId ->
+                    resourceName(context, packageName, resId)?.let { name ->
+                        state.imageName = name
+                        state.descriptions += name
+                    }
+                }
+            }
+        }
         val progress = bestProgress(
             viewStates.values.mapNotNull { state ->
                 val max = state.max ?: return@mapNotNull null
@@ -74,6 +88,10 @@ object NotificationRemoteViewsParser {
         var progress: Int? = null
         var max: Int? = null
         var click: PendingIntent? = null
+        var imageRes: Int? = null
+        var imageName: String? = null
+        var viewName: String? = null
+        var visibility: Int = View.VISIBLE
         val texts = mutableListOf<String>()
         val descriptions = mutableListOf<String>()
     }
@@ -84,6 +102,7 @@ object NotificationRemoteViewsParser {
      */
     internal fun playbackClicks(states: Map<Int, RemoteViewState>): List<RemoteViewClick> {
         val labeled = states.mapNotNull { (viewId, state) ->
+            if (state.visibility == View.GONE || state.visibility == View.INVISIBLE) return@mapNotNull null
             val intent = state.click ?: return@mapNotNull null
             viewId to RemoteViewClick(
                 intent,
@@ -132,6 +151,11 @@ object NotificationRemoteViewsParser {
             "setMax" -> if (value is Int) state.max = value
             "setText" -> if (value is CharSequence) state.texts += value.toString()
             "setContentDescription" -> if (value is CharSequence) state.descriptions += value.toString()
+            "setImageResource" -> if (value is Int) state.imageRes = value
+            "setVisibility" -> if (value is Int) state.visibility = value
+        }
+        if (value is Icon) {
+            runCatching { value.resId }.getOrNull()?.takeIf { it != 0 }?.let { state.imageRes = it }
         }
         intField(action, "progress")?.let { state.progress = it }
         intField(action, "max")?.let { if (it > 0) state.max = it }
@@ -165,6 +189,13 @@ object NotificationRemoteViewsParser {
             }
             type = type.superclass
         }
+    }
+
+    private fun resourceName(context: Context, packageName: String, id: Int): String? {
+        if (id == 0) return null
+        return runCatching {
+            context.packageManager.getResourcesForApplication(packageName).getResourceEntryName(id)
+        }.getOrNull()
     }
 
     private fun intField(target: Any, name: String): Int? {

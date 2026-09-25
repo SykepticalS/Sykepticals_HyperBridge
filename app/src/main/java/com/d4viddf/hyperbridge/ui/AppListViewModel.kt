@@ -203,7 +203,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         val isManagedByTheme: Boolean,
         val activeTypes: Set<String>,
         val activeCallStages: Set<com.d4viddf.hyperbridge.models.CallStage>,
-        val replaceVoiceWithFocus: Boolean,
+        val voiceCompactDuration: Boolean,
         val useNativeEngine: Boolean,
         val navigationOverride: NavigationModule?,
         val localNavContent: Pair<NavContent, NavContent> // Added for the bottom sheet
@@ -219,9 +219,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             preferences.globalCallStagesFlow
         ) { appStages, globalStages -> appStages ?: globalStages }
         val voiceFocusFlow = combine(
-            preferences.getAppVoiceFocusReplacementFlow(packageName),
-            preferences.globalVoiceFocusReplacementFlow
-        ) { appFocus, globalFocus -> appFocus ?: globalFocus }
+            preferences.getAppVoiceCompactDurationFlow(packageName),
+            preferences.globalVoiceCompactDurationFlow
+        ) { appDuration, globalDuration -> appDuration ?: globalDuration }
         val callOptionsFlow = combine(
             effectiveCallStagesFlow,
             voiceFocusFlow,
@@ -233,7 +233,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             preferences.getEffectiveNavLayout(packageName), // Gets the fallback-resolved NavContent
             activeTheme
         ) { appPrefTypes, globalTypes, callOptions, effectiveNavContent, theme ->
-            val (effectiveCallStages, replaceVoiceWithFocus) = callOptions
+            val (effectiveCallStages, voiceCompactDuration) = callOptions
 
             val themeOverride = theme?.apps?.get(packageName)
             val isManaged = themeOverride != null
@@ -258,7 +258,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 isManagedByTheme = isManaged,
                 activeTypes = effectiveTypes,
                 activeCallStages = effectiveCallStages,
-                replaceVoiceWithFocus = replaceVoiceWithFocus,
+                voiceCompactDuration = voiceCompactDuration,
                 useNativeEngine = effectiveEngine,
                 navigationOverride = effectiveNavVisuals,
                 localNavContent = effectiveNavContent
@@ -354,9 +354,9 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateAppVoiceFocus(pkg: String, enabled: Boolean) {
+    fun updateAppVoiceCompactDuration(pkg: String, enabled: Boolean) {
         viewModelScope.launch {
-            preferences.setAppVoiceFocusReplacement(pkg, enabled)
+            preferences.setAppVoiceCompactDuration(pkg, enabled)
         }
     }
 

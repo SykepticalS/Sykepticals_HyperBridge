@@ -158,7 +158,7 @@ fun AppConfigScreen(
     val effectiveConfig by viewModel.getEffectiveAppConfigFlow(packageName).collectAsState(initial = null)
     val activeTypes = effectiveConfig?.activeTypes ?: emptySet()
     val activeCallStages = effectiveConfig?.activeCallStages ?: CallStage.entries.toSet()
-    val replaceVoiceWithFocus = effectiveConfig?.replaceVoiceWithFocus == true
+    val voiceCompactDuration = effectiveConfig?.voiceCompactDuration == true
     val isManagedByTheme = effectiveConfig?.isManagedByTheme == true
 
     val appIslandConfig by viewModel.getAppIslandConfig(packageName).collectAsState(initial = IslandConfig())
@@ -237,7 +237,7 @@ fun AppConfigScreen(
             isManagedByTheme = isManagedByTheme,
             activeTypes = activeTypes,
             activeCallStages = activeCallStages,
-            replaceVoiceWithFocus = replaceVoiceWithFocus,
+            voiceCompactDuration = voiceCompactDuration,
             appIslandConfig = appIslandConfig,
             globalConfig = globalConfig,
             blockedTerms = blockedTerms,
@@ -249,7 +249,7 @@ fun AppConfigScreen(
             onToggleBridged = { enabled -> viewModel.toggleApp(packageName, enabled) },
             onToggleType = { type, enabled -> viewModel.updateAppConfig(packageName, type, enabled) },
             onToggleCallStage = { stage, enabled -> viewModel.updateAppCallStage(packageName, stage, enabled) },
-            onToggleVoiceFocus = { enabled -> viewModel.updateAppVoiceFocus(packageName, enabled) },
+            onToggleVoiceDuration = { enabled -> viewModel.updateAppVoiceCompactDuration(packageName, enabled) },
             onUpdateIslandConfig = { config -> viewModel.updateAppIslandConfig(packageName, config) },
             onUpdateBlockedTerms = { terms -> viewModel.updateAppBlockedTerms(packageName, terms) },
             onNavConfigClick = { onNavConfigClick(packageName) },
@@ -334,7 +334,7 @@ fun AppConfigContent(
     isManagedByTheme: Boolean,
     activeTypes: Set<String>,
     activeCallStages: Set<CallStage>,
-    replaceVoiceWithFocus: Boolean = false,
+    voiceCompactDuration: Boolean = false,
     appIslandConfig: IslandConfig,
     globalConfig: IslandConfig,
     blockedTerms: Set<String>,
@@ -346,7 +346,7 @@ fun AppConfigContent(
     onToggleBridged: (Boolean) -> Unit,
     onToggleType: (NotificationType, Boolean) -> Unit,
     onToggleCallStage: (CallStage, Boolean) -> Unit,
-    onToggleVoiceFocus: (Boolean) -> Unit = {},
+    onToggleVoiceDuration: (Boolean) -> Unit = {},
     onUpdateIslandConfig: (IslandConfig) -> Unit,
     onUpdateBlockedTerms: (Set<String>) -> Unit,
     onNavConfigClick: () -> Unit,
@@ -575,8 +575,8 @@ fun AppConfigContent(
                             onToggleCallStage = onToggleCallStage,
                             onNavConfigClick = onNavConfigClick,
                             navEditDesc = navEditDesc,
-                            replaceVoiceWithFocus = replaceVoiceWithFocus,
-                            onToggleVoiceFocus = onToggleVoiceFocus,
+                            voiceCompactDuration = voiceCompactDuration,
+                            onToggleVoiceDuration = onToggleVoiceDuration,
                         )
                     }
                 }
@@ -946,8 +946,8 @@ fun AppNotificationTypesContent(
     onToggleCallStage: (CallStage, Boolean) -> Unit,
     onNavConfigClick: () -> Unit,
     navEditDesc: String,
-    replaceVoiceWithFocus: Boolean = false,
-    onToggleVoiceFocus: (Boolean) -> Unit = {},
+    voiceCompactDuration: Boolean = false,
+    onToggleVoiceDuration: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1045,25 +1045,25 @@ fun AppNotificationTypesContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onToggleVoiceFocus(!replaceVoiceWithFocus) }
+                        .clickable { onToggleVoiceDuration(!voiceCompactDuration) }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = stringResource(R.string.voice_focus_replacement),
+                            text = stringResource(R.string.voice_compact_duration),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = stringResource(R.string.voice_focus_replacement_desc),
+                            text = stringResource(R.string.voice_compact_duration_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
-                        checked = replaceVoiceWithFocus,
-                        onCheckedChange = onToggleVoiceFocus
+                        checked = voiceCompactDuration,
+                        onCheckedChange = onToggleVoiceDuration
                     )
                 }
             }

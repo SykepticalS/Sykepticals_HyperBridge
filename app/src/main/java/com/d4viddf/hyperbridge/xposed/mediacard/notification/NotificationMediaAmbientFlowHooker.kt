@@ -773,8 +773,7 @@ object NotificationMediaAmbientFlowHooker {
         private val resumeMethod: Method,
         private val pauseMethod: Method,
         private val getMainColorMethod: Method,
-        private val getPaletteColorMethod: Method,
-        private val drawableToBitmapMethod: Method
+        private val getPaletteColorMethod: Method
     ) {
         fun createView(context: Context): View = constructor.newInstance(context) as View
 
@@ -796,10 +795,14 @@ object NotificationMediaAmbientFlowHooker {
             pauseMethod.invoke(view)
         }
 
-        fun extractSystemPalette(drawable: Drawable): MediaAmbientFlowPalette {
-            val bitmap = drawableToBitmapMethod.invoke(null, drawable) as Bitmap
-            val mainColor = getMainColorMethod.invoke(null, bitmap) as Int
-            return createPalette(mainColor)
+        fun extractSystemPalette(drawable: Drawable): MediaAmbientFlowPalette? {
+            val bitmap = MediaArtworkSampler.sample(drawable) ?: return null
+            return try {
+                val mainColor = getMainColorMethod.invoke(null, bitmap) as Int
+                createPalette(mainColor)
+            } finally {
+                bitmap.recycle()
+            }
         }
 
         fun createPalette(mainColor: Int): MediaAmbientFlowPalette {
@@ -830,13 +833,6 @@ object NotificationMediaAmbientFlowHooker {
                 val resume = viewClass.getDeclaredMethod("resume").apply { isAccessible = true }
                 val pause = viewClass.getDeclaredMethod("pause").apply { isAccessible = true }
 
-                val drawableUtils = classLoader.loadClass("com.miui.utils.DrawableUtils")
-                val drawableToBitmap = drawableUtils.declaredMethods.single { method ->
-                    method.name == "drawable2Bitmap" &&
-                            method.parameterTypes.contentEquals(arrayOf(Drawable::class.java)) &&
-                            method.returnType == Bitmap::class.java
-                }.apply { isAccessible = true }
-
                 val miPalette = classLoader.loadClass("miuix.mipalette.MiPalette")
                 miPalette.declaredMethods.firstOrNull { method ->
                     method.name == "init" && method.parameterCount == 0
@@ -860,8 +856,7 @@ object NotificationMediaAmbientFlowHooker {
                     resumeMethod = resume,
                     pauseMethod = pause,
                     getMainColorMethod = getMainColor,
-                    getPaletteColorMethod = getPaletteColor,
-                    drawableToBitmapMethod = drawableToBitmap
+                    getPaletteColorMethod = getPaletteColor
                 )
             }
         }

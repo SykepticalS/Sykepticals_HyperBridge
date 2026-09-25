@@ -132,7 +132,7 @@ fun NotificationTypesContent() {
     val enabledCallStages by preferences.globalCallStagesFlow.collectAsState(
         initial = com.d4viddf.hyperbridge.models.CallStage.entries.toSet()
     )
-    val replaceVoiceWithFocus by preferences.globalVoiceFocusReplacementFlow.collectAsState(initial = false)
+    val voiceCompactDuration by preferences.globalVoiceCompactDurationFlow.collectAsState(initial = false)
 
     Column(
         Modifier
@@ -239,27 +239,27 @@ fun NotificationTypesContent() {
                         .fillMaxWidth()
                         .padding(start = 24.dp, top = 8.dp, bottom = 8.dp)
                         .clickable {
-                            scope.launch { preferences.setGlobalVoiceFocusReplacement(!replaceVoiceWithFocus) }
+                            scope.launch { preferences.setGlobalVoiceCompactDuration(!voiceCompactDuration) }
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = stringResource(R.string.voice_focus_replacement),
+                            text = stringResource(R.string.voice_compact_duration),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = stringResource(R.string.voice_focus_replacement_desc),
+                            text = stringResource(R.string.voice_compact_duration_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Spacer(Modifier.width(8.dp))
                     Switch(
-                        checked = replaceVoiceWithFocus,
+                        checked = voiceCompactDuration,
                         onCheckedChange = { enabled ->
-                            scope.launch { preferences.setGlobalVoiceFocusReplacement(enabled) }
+                            scope.launch { preferences.setGlobalVoiceCompactDuration(enabled) }
                         }
                     )
                 }

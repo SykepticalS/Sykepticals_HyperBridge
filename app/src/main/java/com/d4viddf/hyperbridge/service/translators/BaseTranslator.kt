@@ -226,6 +226,31 @@ abstract class BaseTranslator(
         }?.value
     }
 
+    /**
+     * Person photo first. The badge row on that photo is the source app icon, then a
+     * microphone icon in the same slot regular islands use for the app badge.
+     */
+    protected fun resolveVoicePicture(
+        sbn: StatusBarNotification,
+        picKey: String,
+        micRes: Int,
+    ): HyperPicture {
+        val visual = resolveAvatarVisual(sbn)
+        var bitmap = compositeVoiceBadges(
+            source = visual.bitmap,
+            packageName = sbn.packageName,
+            includeAppIcon = visual.shouldShowAppBadge,
+            micRes = micRes,
+        )
+        if ((visual.source == NotificationVisualSource.SMALL_ICON ||
+                visual.source == NotificationVisualSource.FALLBACK) &&
+            isBitmapDarkAndMonochrome(bitmap)
+        ) {
+            bitmap = tintBitmap(bitmap, Color.WHITE)
+        }
+        return HyperPicture(picKey, bitmap)
+    }
+
     protected fun resolveIcon(
         sbn: StatusBarNotification,
         picKey: String,
@@ -1010,6 +1035,58 @@ abstract class BaseTranslator(
         } catch (_: Exception) {
             source
         }
+    }
+
+    private fun compositeVoiceBadges(
+        source: Bitmap,
+        packageName: String,
+        includeAppIcon: Boolean,
+        micRes: Int,
+    ): Bitmap {
+        if (!isUsableBitmap(source)) return source
+        val appIcon = if (includeAppIcon) getAppIconBitmap(packageName) else null
+        return try {
+            val width = source.width.coerceAtLeast(1)
+            val height = source.height.coerceAtLeast(1)
+            val output = createBitmap(width, height)
+            val canvas = Canvas(output)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(source, null, Rect(0, 0, width, height), paint)
+
+            val minSide = minOf(width, height)
+            val badge = (minSide * 0.36f).roundToInt().coerceIn(18, minSide)
+            val appDest = RectF(
+                (width - badge).toFloat(),
+                (height - badge).toFloat(),
+                width.toFloat(),
+                height.toFloat(),
+            )
+            if (appIcon != null && isUsableBitmap(appIcon)) {
+                drawNormalizedBitmap(canvas, appIcon, appDest, paint)
+            }
+            val mic = (badge * 0.62f).roundToInt().coerceAtLeast(12)
+            val micLeft = (width - mic).toFloat()
+            val micTop = (height - mic).toFloat()
+            drawMicBadge(canvas, micRes, RectF(micLeft, micTop, width.toFloat(), height.toFloat()))
+            output
+        } catch (_: Exception) {
+            source
+        }
+    }
+
+    private fun drawMicBadge(canvas: Canvas, micRes: Int, dest: RectF) {
+        val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = "#2C2C2E".toColorInt() }
+        canvas.drawOval(dest, plate)
+        val mic = ContextCompat.getDrawable(context, micRes)?.mutate() ?: return
+        mic.setTint(Color.WHITE)
+        val inset = dest.width() * 0.22f
+        mic.setBounds(
+            (dest.left + inset).roundToInt(),
+            (dest.top + inset).roundToInt(),
+            (dest.right - inset).roundToInt(),
+            (dest.bottom - inset).roundToInt(),
+        )
+        mic.draw(canvas)
     }
 
     protected fun extractTextPercentage(title: String?, text: String?): Int? {

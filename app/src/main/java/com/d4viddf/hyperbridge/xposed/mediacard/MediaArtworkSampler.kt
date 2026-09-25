@@ -2,9 +2,16 @@ package com.d4viddf.hyperbridge.xposed.mediacard
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.HardwareRenderer
+import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.RenderNode
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.hardware.HardwareBuffer
+import android.media.ImageReader
 import kotlin.math.sqrt
 
 /**
@@ -21,15 +28,9 @@ internal object MediaArtworkSampler {
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return null
         val (width, height) = targetSize(bitmap.width, bitmap.height, maxPixels)
         if (bitmap.config == Bitmap.Config.HARDWARE) {
-            // Reading the full texture back stalls composition. Scale on the GPU
-            // first, then copy only the tiny result.
-            val scaled = runCatching {
-                Bitmap.createScaledBitmap(bitmap, width, height, true)
-            }.getOrNull() ?: return null
-            if (scaled.config != Bitmap.Config.HARDWARE) return ensureArgb(scaled)
-            val copy = runCatching { scaled.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
-            if (copy != null && copy !== scaled) scaled.recycle()
-            return copy
+            // createScaledBitmap copies the full hardware texture first. Draw only
+            // the tiny destination so song changes do not stall composition.
+            return rasterize(bitmap, width, height)
         }
         if (width == bitmap.width && height == bitmap.height) {
             return runCatching { bitmap.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
@@ -78,6 +79,66 @@ internal object MediaArtworkSampler {
             }
         }
         return hash
+    }
+
+    private fun rasterize(bitmap: Bitmap, width: Int, height: Int): Bitmap? {
+        var reader: ImageReader? = null
+        var renderer: HardwareRenderer? = null
+        return try {
+            reader = ImageReader.newInstance(
+                width,
+                height,
+                PixelFormat.RGBA_8888,
+                1,
+                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_CPU_READ_OFTEN,
+            )
+            val node = RenderNode("hyperbridge-artwork-sample")
+            node.setPosition(0, 0, width, height)
+            val canvas = node.beginRecording()
+            canvas.drawBitmap(
+                bitmap,
+                null,
+                RectF(0f, 0f, width.toFloat(), height.toFloat()),
+                Paint(Paint.FILTER_BITMAP_FLAG),
+            )
+            node.endRecording()
+            renderer = HardwareRenderer().apply {
+                setContentRoot(node)
+                setSurface(reader.surface)
+                isOpaque = false
+            }
+            // Waiting for present blocks the display queue. Draw without waiting
+            // and pick up the tiny result on this worker.
+            renderer.createRenderRequest().setWaitForPresent(false).syncAndDraw()
+            var image = reader.acquireNextImage()
+            var tries = 0
+            while (image == null && tries < 6) {
+                Thread.sleep(2)
+                image = reader.acquireNextImage()
+                tries++
+            }
+            val frame = image ?: return null
+            try {
+                val buffer = frame.hardwareBuffer ?: return null
+                try {
+                    val hardware = Bitmap.wrapHardwareBuffer(buffer, null) ?: return null
+                    try {
+                        hardware.copy(Bitmap.Config.ARGB_8888, false)
+                    } finally {
+                        hardware.recycle()
+                    }
+                } finally {
+                    buffer.close()
+                }
+            } finally {
+                frame.close()
+            }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            renderer?.destroy()
+            reader?.close()
+        }
     }
 
     private fun targetSize(width: Int, height: Int, maxPixels: Int): Pair<Int, Int> {

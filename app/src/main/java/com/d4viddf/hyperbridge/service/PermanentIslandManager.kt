@@ -29,6 +29,7 @@ class PermanentIslandManager(
 
     companion object {
         const val PERMANENT_BRIDGE_ID = 9999
+        const val PERMANENT_LOGICAL_TOKEN = "permanent"
         // The dismiss path posts 9999 right after cancelling the previous focus
         // island. Delaying the post lets HyperOS finish tearing that island down,
         // otherwise it can swallow the re-post and leave 9999 posted but hidden.
@@ -38,8 +39,14 @@ class PermanentIslandManager(
     private var isPermanentIslandEnabled = false
     private var isIslandActive = false
     private var currentRealNotifications = 0
+    private var occupyingLogicalId: String? = null
+    private var expansionLocked = true
 
-    fun isIslandActive(): Boolean = isIslandActive
+    fun isIslandActive(): Boolean = synchronized(this) { isIslandActive }
+    fun occupyingLogicalId(): String? = synchronized(this) { occupyingLogicalId }
+    fun isExpansionLocked(): Boolean = synchronized(this) { expansionLocked }
+    @Synchronized
+    fun isSlotAvailable(): Boolean = desiredActive()
     private var hasNativeIsland = false
     private var currentWidth = 0
     private var isHideInLandscapeEnabled = false
@@ -71,7 +78,7 @@ class PermanentIslandManager(
                 synchronized(this@PermanentIslandManager) {
                     if (currentWidth != width) {
                         currentWidth = width
-                        if (isIslandActive) {
+                        if (isIslandActive && occupyingLogicalId == null) {
                             dispatchPermanentIsland()
                         }
                     }
@@ -98,12 +105,50 @@ class PermanentIslandManager(
     // superseded it, or a re-post landed too soon after a cancel). So on a discrete
     // transition (screen on / unlock / (re)connect) callers pass refresh=true to re-assert
     // the island even when present; the periodic tick passes false, trusting presence.
-    // Bridged islands deliberately do NOT hide the permanent island: HyperOS shows the newest
-    // focus island on top, so keeping 9999 posted makes the permanent island reappear instantly
-    // when a bridged island collapses or expires (removing it would leave a gap until the TTL).
+    // Bridged islands update 9999 in place instead of hiding it. Extra islands may post with
+    // their own ids while that occupant is still active; the last remaining one folds back.
     private fun desiredActive(): Boolean {
         val isLandscape = context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         return isPermanentIslandEnabled && !hasNativeIsland && !(isHideInLandscapeEnabled && isLandscape)
+    }
+
+    @Synchronized
+    fun occupy(logicalId: String, unlockExpansion: Boolean) {
+        val jobToCancel = pendingDispatchJob
+        pendingDispatchJob = null
+        jobToCancel?.cancel()
+        occupyingLogicalId = logicalId
+        isIslandActive = true
+        if (unlockExpansion) expansionLocked = false
+    }
+
+    @Synchronized
+    fun lockExpansion() {
+        expansionLocked = true
+    }
+
+    @Synchronized
+    fun markPostedAbsent() {
+        isIslandActive = false
+    }
+
+    @Synchronized
+    fun restoreStub() {
+        occupyingLogicalId = null
+        expansionLocked = true
+        if (desiredActive()) {
+            val jobToCancel = pendingDispatchJob
+            pendingDispatchJob = null
+            jobToCancel?.cancel()
+            if (isIslandActive) {
+                dispatchPermanentIsland()
+            } else {
+                isIslandActive = true
+                scheduleDispatchLocked()
+            }
+        } else {
+            updateStateLocked()
+        }
     }
 
     @Synchronized
@@ -112,6 +157,10 @@ class PermanentIslandManager(
         hasNativeIsland = hasNative
         val shouldShow = desiredActive()
         val isLandscape = context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (shouldShow && occupyingLogicalId != null) {
+            isIslandActive = true
+            return
+        }
         if (shouldShow && isIslandPresent && refresh) {
             // Present but maybe not visible: re-assert in place (no remove first, so no
             // rapid cancel->post to swallow). Same id + content updates the residual island.
@@ -129,11 +178,17 @@ class PermanentIslandManager(
 
     private fun updateStateLocked() {
         if (desiredActive()) {
+            if (occupyingLogicalId != null) {
+                isIslandActive = true
+                return
+            }
             if (!isIslandActive) {
                 isIslandActive = true
                 scheduleDispatchLocked()
             }
         } else {
+            occupyingLogicalId = null
+            expansionLocked = true
             if (isIslandActive) {
                 isIslandActive = false
                 val jobToCancel = pendingDispatchJob
@@ -153,7 +208,7 @@ class PermanentIslandManager(
             synchronized(this@PermanentIslandManager) {
                 pendingDispatchJob = null
                 // Re-check under the lock: the desired state may have flipped during the delay.
-                if (desiredActive()) {
+                if (desiredActive() && occupyingLogicalId == null) {
                     dispatchPermanentIsland()
                 }
             }
@@ -195,7 +250,11 @@ class PermanentIslandManager(
             val notification = notifBuilder.build()
             notification.extras.putString("miui.focus.param", data.jsonParam)
 
-            backend.post(PERMANENT_BRIDGE_ID, notification, IslandMetadata("permanent", semanticType = "PERMANENT"))
+            backend.post(
+                PERMANENT_BRIDGE_ID,
+                notification,
+                IslandMetadata(PERMANENT_LOGICAL_TOKEN, semanticType = "PERMANENT"),
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Error dispatching permanent island", e)
         }
@@ -204,7 +263,7 @@ class PermanentIslandManager(
     private fun removePermanentIsland() {
         try {
             Log.d(TAG, "Removing permanent island")
-            backend.cancel(PERMANENT_BRIDGE_ID, "permanent")
+            backend.cancel(PERMANENT_BRIDGE_ID, PERMANENT_LOGICAL_TOKEN)
         } catch (e: Exception) {
             Log.e(TAG, "Error removing permanent island", e)
         }

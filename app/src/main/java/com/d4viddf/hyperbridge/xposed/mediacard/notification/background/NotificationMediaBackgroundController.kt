@@ -117,7 +117,7 @@ internal object NotificationMediaBackgroundController {
                 )
             }.onFailure { error ->
                 MediaCardLog.e(TAG, "渲染通知中心媒体背景失败", error)
-            }.getOrNull()
+            }.getOrNull()?.preparedForDisplay()
             if (rendered == null) {
                 mediaBg.post {
                     if (states[controller] === state && state.request.get() == request) {

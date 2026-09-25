@@ -151,6 +151,7 @@ object IslandVisualMetadata {
         enableFloat: Boolean,
         islandFirstFloat: Boolean = enableFloat,
         reopen: Boolean = enableFloat,
+        expandedTimeMs: Int? = null,
     ): String {
         return runCatching {
             val root = JsonParser.parseString(jsonParam).asJsonObject
@@ -158,6 +159,9 @@ object IslandVisualMetadata {
             paramV2.addProperty("enableFloat", enableFloat)
             paramV2.addProperty("islandFirstFloat", islandFirstFloat)
             paramV2.addProperty("reopen", reopen)
+            if (expandedTimeMs != null) {
+                paramV2.addProperty("expandedTime", expandedTimeMs)
+            }
             Gson().toJson(root)
         }.getOrDefault(jsonParam)
     }

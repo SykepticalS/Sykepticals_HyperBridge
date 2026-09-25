@@ -77,7 +77,7 @@ fun AppConfigBottomSheet(
     val effectiveConfig by viewModel.getEffectiveAppConfigFlow(app.packageName).collectAsState(initial = null)
     val activeTypes = effectiveConfig?.activeTypes ?: emptySet()
     val activeCallStages = effectiveConfig?.activeCallStages ?: com.d4viddf.hyperbridge.models.CallStage.entries.toSet()
-    val replaceVoiceWithFocus = effectiveConfig?.replaceVoiceWithFocus == true
+    val voiceCompactDuration = effectiveConfig?.voiceCompactDuration == true
     val isManagedByTheme = effectiveConfig?.isManagedByTheme == true
 
     val appIslandConfig by viewModel.getAppIslandConfig(app.packageName).collectAsState(initial = IslandConfig())
@@ -182,7 +182,7 @@ fun AppConfigBottomSheet(
                         app = app,
                         activeTypes = activeTypes,
                         activeCallStages = activeCallStages,
-                        replaceVoiceWithFocus = replaceVoiceWithFocus,
+                        voiceCompactDuration = voiceCompactDuration,
                         viewModel = viewModel,
                         onNavConfigClick = { onDismiss(); onNavConfigClick() },
                         navEditDesc = navEditDesc
@@ -251,7 +251,7 @@ fun NotificationTypesContent(
     app: AppInfo,
     activeTypes: Set<String>,
     activeCallStages: Set<com.d4viddf.hyperbridge.models.CallStage>,
-    replaceVoiceWithFocus: Boolean = false,
+    voiceCompactDuration: Boolean = false,
     viewModel: AppListViewModel,
     onNavConfigClick: () -> Unit,
     navEditDesc: String
@@ -345,26 +345,26 @@ fun NotificationTypesContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { viewModel.updateAppVoiceFocus(app.packageName, !replaceVoiceWithFocus) }
+                        .clickable { viewModel.updateAppVoiceCompactDuration(app.packageName, !voiceCompactDuration) }
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = stringResource(R.string.voice_focus_replacement),
+                            text = stringResource(R.string.voice_compact_duration),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = stringResource(R.string.voice_focus_replacement_desc),
+                            text = stringResource(R.string.voice_compact_duration_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Spacer(Modifier.width(8.dp))
                     Switch(
-                        checked = replaceVoiceWithFocus,
-                        onCheckedChange = { viewModel.updateAppVoiceFocus(app.packageName, it) }
+                        checked = voiceCompactDuration,
+                        onCheckedChange = { viewModel.updateAppVoiceCompactDuration(app.packageName, it) }
                     )
                 }
             }

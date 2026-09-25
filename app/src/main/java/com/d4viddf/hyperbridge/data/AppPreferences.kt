@@ -751,28 +751,28 @@ class AppPreferences internal constructor(
     // ========================================================================
 
     val GLOBAL_CALL_STAGES_KEY = "global_call_stages"
-    val GLOBAL_VOICE_FOCUS_REPLACEMENT_KEY = "global_voice_focus_replacement"
+    val GLOBAL_VOICE_COMPACT_DURATION_KEY = "global_voice_compact_duration"
 
-    val globalVoiceFocusReplacementFlow: Flow<Boolean> =
-        dao.getSettingFlow(GLOBAL_VOICE_FOCUS_REPLACEMENT_KEY).map { it.toBoolean(false) }
+    val globalVoiceCompactDurationFlow: Flow<Boolean> =
+        dao.getSettingFlow(GLOBAL_VOICE_COMPACT_DURATION_KEY).map { it.toBoolean(false) }
 
-    suspend fun setGlobalVoiceFocusReplacement(enabled: Boolean) {
-        save(GLOBAL_VOICE_FOCUS_REPLACEMENT_KEY, enabled.toString())
+    suspend fun setGlobalVoiceCompactDuration(enabled: Boolean) {
+        save(GLOBAL_VOICE_COMPACT_DURATION_KEY, enabled.toString())
     }
 
-    fun getAppVoiceFocusReplacementFlow(packageName: String): Flow<Boolean?> {
-        return dao.getSettingFlow("config_${packageName}_voice_focus_replacement")
+    fun getAppVoiceCompactDurationFlow(packageName: String): Flow<Boolean?> {
+        return dao.getSettingFlow("config_${packageName}_voice_compact_duration")
             .map { it?.toBooleanStrictOrNull() }
     }
 
-    suspend fun setAppVoiceFocusReplacement(packageName: String, enabled: Boolean) {
-        save("config_${packageName}_voice_focus_replacement", enabled.toString())
+    suspend fun setAppVoiceCompactDuration(packageName: String, enabled: Boolean) {
+        save("config_${packageName}_voice_compact_duration", enabled.toString())
     }
 
-    fun getEffectiveVoiceFocusReplacementSync(packageName: String): Boolean {
-        val appValue = memoryCache["config_${packageName}_voice_focus_replacement"]?.toBooleanStrictOrNull()
+    fun getEffectiveVoiceCompactDurationSync(packageName: String): Boolean {
+        val appValue = memoryCache["config_${packageName}_voice_compact_duration"]?.toBooleanStrictOrNull()
         if (appValue != null) return appValue
-        return memoryCache[GLOBAL_VOICE_FOCUS_REPLACEMENT_KEY].toBoolean(false)
+        return memoryCache[GLOBAL_VOICE_COMPACT_DURATION_KEY].toBoolean(false)
     }
 
     val globalCallStagesFlow: Flow<Set<CallStage>> = dao.getSettingFlow(GLOBAL_CALL_STAGES_KEY).map { raw ->

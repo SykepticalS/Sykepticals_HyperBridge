@@ -28,6 +28,9 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -68,6 +71,7 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmRestart by remember { mutableStateOf(false) }
+    var section by remember { mutableIntStateOf(0) }
 
     fun sync() = (context.applicationContext as? HyperBridgeApplication)?.syncHookConfig()
     fun saveBool(key: String, value: Boolean) {
@@ -148,7 +152,7 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Notification media") },
+                title = { Text("Media cards") },
                 navigationIcon = {
                     FilledTonalIconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -168,6 +172,24 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = section == 0,
+                    onClick = { section = 0 },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                ) { Text("Notification") }
+                SegmentedButton(
+                    selected = section == 1,
+                    onClick = { section = 1 },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                ) { Text("Island") }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (section == 1) {
+                IslandExpandedMediaSettings()
+                Spacer(Modifier.height(24.dp))
+                return@Column
+            }
             MediaCardPreview(preview)
             Text(
                 "Options that do not apply to the current style stay hidden. Use the restart icon after you are done.",
