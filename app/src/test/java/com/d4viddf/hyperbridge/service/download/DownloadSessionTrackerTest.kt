@@ -99,6 +99,31 @@ class DownloadSessionTrackerTest {
     }
 
     @Test
+    fun pausedRepostKeepsTheFocusDownloadAndFrozenProgress() {
+        val tracker = DownloadSessionTracker()
+        val active = tracker.resolve(
+            input(sourceKey = "chrome:1", notificationId = 1, title = "clip.mp4", now = 1_000L, progressPercent = 42),
+        )
+        tracker.markSourceRemoved("chrome:1", 1_050L)
+        val paused = tracker.resolve(
+            input(
+                sourceKey = "chrome:2",
+                notificationId = 2,
+                title = "clip.mp4",
+                text = "Download paused",
+                now = 1_200L,
+                paused = true,
+            ),
+        )
+
+        assertEquals(active.logicalId, paused.logicalId)
+        assertTrue(paused.paused)
+        assertEquals(42, paused.progressPercent)
+        assertTrue(tracker.matchesLiveDownload("com.android.chrome", "other", "clip.mp4", "Download paused"))
+        assertFalse(tracker.matchesLiveDownload("com.android.chrome", "other", "notes.txt", "Download paused"))
+    }
+
+    @Test
     fun unfinishedRepostKeepsTheDownloadAlive() {
         val tracker = DownloadSessionTracker()
         val first = tracker.resolve(input(sourceKey = "chrome:1", notificationId = 1, title = "clip.mp4", now = 1_000L))
@@ -115,6 +140,8 @@ class DownloadSessionTrackerTest {
         title: String = "file.bin",
         text: String = "1 MB / 2 MB",
         now: Long = 1_000L,
+        progressPercent: Int? = null,
+        paused: Boolean = false,
     ) = DownloadSessionInput(
         sourceKey = sourceKey,
         packageName = packageName,
@@ -123,5 +150,7 @@ class DownloadSessionTrackerTest {
         title = title,
         text = text,
         observedAt = now,
+        progressPercent = progressPercent,
+        paused = paused,
     )
 }

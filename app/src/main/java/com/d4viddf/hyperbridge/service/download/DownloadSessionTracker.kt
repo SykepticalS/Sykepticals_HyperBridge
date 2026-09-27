@@ -15,6 +15,8 @@ data class DownloadSessionInput(
     val text: String,
     val observedAt: Long,
     val finished: Boolean = false,
+    val progressPercent: Int? = null,
+    val paused: Boolean = false,
 )
 
 data class DownloadSession(
@@ -25,6 +27,8 @@ data class DownloadSession(
     val slotId: String,
     val lastSeen: Long,
     val finished: Boolean,
+    val progressPercent: Int? = null,
+    val paused: Boolean = false,
     val replacementDeadline: Long? = null,
     val sourceReplacement: Boolean = false,
 )
@@ -56,6 +60,8 @@ class DownloadSessionTracker(
                         slotId = slotId,
                         lastSeen = input.observedAt,
                         finished = input.finished,
+                        progressPercent = input.progressPercent ?: current.progressPercent,
+                        paused = input.paused,
                         replacementDeadline = null,
                         sourceReplacement = current.replacementDeadline != null,
                     )
@@ -83,6 +89,8 @@ class DownloadSessionTracker(
                 slotId = slotId,
                 lastSeen = input.observedAt,
                 finished = input.finished,
+                progressPercent = input.progressPercent ?: matched.progressPercent,
+                paused = input.paused,
                 replacementDeadline = null,
                 sourceReplacement = matched.sourceKey != input.sourceKey,
             )
@@ -100,6 +108,8 @@ class DownloadSessionTracker(
                 slotId = slotId,
                 lastSeen = input.observedAt,
                 finished = input.finished,
+                progressPercent = input.progressPercent,
+                paused = input.paused,
             )
         }
         return bind(session)
@@ -118,6 +128,22 @@ class DownloadSessionTracker(
 
     @Synchronized
     fun isFinished(logicalId: String): Boolean = sessions[logicalId]?.finished == true
+
+    /**
+     * Chrome removes the progress bar when a download is paused and may repost the same file.
+     * That follow-up still belongs to the live download, so it must refresh the focus island.
+     */
+    @Synchronized
+    fun matchesLiveDownload(packageName: String, sourceKey: String, title: String, text: String): Boolean {
+        logicalIdForSource(sourceKey)?.let { id ->
+            if (sessions[id]?.finished == false) return true
+        }
+        val label = DownloadIdentity.stableLabel(title, text)
+        if (label.isBlank()) return false
+        return sessions.values.any { session ->
+            session.packageName == packageName && session.stableLabel == label && !session.finished
+        }
+    }
 
     /**
      * True when a still-running download took over after [removedSourceKey] was cleared.

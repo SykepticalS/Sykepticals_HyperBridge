@@ -1,5 +1,6 @@
 package com.d4viddf.hyperbridge.models
 
+import com.google.gson.JsonParser
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -193,6 +194,18 @@ class IslandPresentationTest {
         val plan = IslandVisualMetadata.plan(IslandConfig(islandGlowMode = GlowMode.OFF), explicitOff, false, true)
         assertNull(plan.islandEffect)
         assertFalse(plan.glow.forceIsland)
+    }
+
+    @Test fun pinnedLifetimeReplacesTheConfiguredAutoCloseOnBothClocks() {
+        val pinned = IslandVisualMetadata.pinIslandLifetime(
+            """{"param_v2":{"timeout":8,"param_island":{"islandTimeout":8,"expandedTime":2}}}""",
+            Int.MAX_VALUE,
+        )
+        val paramV2 = JsonParser.parseString(pinned).asJsonObject.getAsJsonObject("param_v2")
+        val island = paramV2.getAsJsonObject("param_island")
+        assertEquals(Int.MAX_VALUE, paramV2.get("timeout").asInt)
+        assertEquals(Int.MAX_VALUE, island.get("islandTimeout").asInt)
+        assertEquals(2, island.get("expandedTime").asInt)
     }
 
     @Test fun marqueeOverrideUsesMaxTimeoutButOngoingFallsBack() {

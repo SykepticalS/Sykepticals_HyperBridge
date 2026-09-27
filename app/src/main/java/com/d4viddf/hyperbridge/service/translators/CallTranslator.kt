@@ -126,8 +126,10 @@ class CallTranslator(
         builder.setSmallIsland(picKey)
 
         val highlight = resolveColor(theme, sbn.packageName, "#FFFFFF")
+        val persistentTimeout = CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS
+        builder.setTimeout(persistentTimeout.toLong())
         builder.setIslandConfig(
-            timeout = CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS,
+            timeout = persistentTimeout,
             dismissible = false,
             highlightColor = highlight,
             expandedTimeMs = config.floatTimeout
@@ -147,16 +149,19 @@ class CallTranslator(
             )
         }
 
-        val jsonParam = builder.buildJsonParam().let { raw ->
-            if (!isIncoming && connectedAtForTimer != null) {
-                IslandVisualMetadata.injectCompactLeftTitle(
-                    raw,
-                    IslandCompactLayout.compactLeftText(title),
-                )
-            } else {
-                raw
-            }
-        }
+        val jsonParam = IslandVisualMetadata.pinIslandLifetime(
+            builder.buildJsonParam().let { raw ->
+                if (!isIncoming && connectedAtForTimer != null) {
+                    IslandVisualMetadata.injectCompactLeftTitle(
+                        raw,
+                        IslandCompactLayout.compactLeftText(title),
+                    )
+                } else {
+                    raw
+                }
+            },
+            CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS,
+        )
         return HyperIslandData(builder.buildResourceBundle(), jsonParam)
     }
 

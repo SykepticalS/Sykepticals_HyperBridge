@@ -4,6 +4,7 @@ import android.app.Notification
 import android.content.Context
 import android.service.notification.StatusBarNotification
 import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.service.download.DownloadPausePolicy
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
@@ -29,7 +30,8 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         picKey: String,
         config: IslandConfig,
         theme: HyperTheme?,
-        isUpdate: Boolean
+        isUpdate: Boolean,
+        retainedPercent: Int? = null,
     ): HyperIslandData {
 
         val themeProgressColor = theme?.defaultProgress?.activeColor
@@ -55,14 +57,28 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         val textContent = (extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: "")
 
         val textPercent = extractTextPercentage(title, textContent)
-        val percent = (if (max > 0) {
-            ((current.toFloat() / max.toFloat()) * 100).toInt()
-        } else {
-            textPercent ?: 0
-        }).coerceIn(0, 100)
-        val isIndeterminate = indeterminate && textPercent == null
-        val isTextFinished = finishKeywords.any { textContent.contains(it, ignoreCase = true) }
-        val isFinished = percent >= 100 || isTextFinished
+        val reportedPercent = when {
+            max > 0 -> ((current.toFloat() / max.toFloat()) * 100).toInt().coerceIn(0, 100)
+            textPercent != null -> textPercent
+            else -> null
+        }
+        val actionTitles = sbn.notification.actions?.map { it.title?.toString().orEmpty() }.orEmpty()
+        val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+        val paused = DownloadPausePolicy.isPaused(
+            isDownload = true,
+            title = title,
+            text = textContent,
+            actionTitles = actionTitles,
+            extraText = subText,
+            finished = finishKeywords.any { textContent.contains(it, ignoreCase = true) },
+            groupSummary = sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+        )
+        val percent = (reportedPercent ?: retainedPercent ?: 0).coerceIn(0, 100)
+        val isIndeterminate = !paused && indeterminate && textPercent == null
+        val isTextFinished = !paused && finishKeywords.any { textContent.contains(it, ignoreCase = true) }
+        val isFinished = !paused && (percent >= 100 || isTextFinished)
+        val showMeter = !isFinished && !isIndeterminate &&
+            (reportedPercent != null || (paused && retainedPercent != null))
 
         val tickKey = "${picKey}_tick"
         val hiddenKey = "hidden_pixel"
@@ -84,13 +100,19 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             theme = theme,
             actionKeyPrefix = "act_${picKey.removePrefix("pic_")}",
             fallbackActionGlyphs = true,
+            transportControls = true,
         )
+        val pausedDetail = textContent.ifBlank { context.getString(R.string.download_paused) }
         val expanded = ExpandedFocusContent.transfer(
             title = title,
-            detail = if (isFinished) context.getString(R.string.download_complete) else textContent,
+            detail = when {
+                isFinished -> context.getString(R.string.download_complete)
+                paused -> pausedDetail
+                else -> textContent
+            },
             pictureKey = picKey,
             percent = percent,
-            showProgress = !isFinished && !isIndeterminate,
+            showProgress = showMeter,
             progressColor = themeProgressColor,
             actionKeys = actions.map { it.action.key },
         )
@@ -115,7 +137,13 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             )
             builder.setSmallIsland(tickKey)
         } else {
-            if (isIndeterminate) {
+            if (paused && !showMeter) {
+                builder.setBigIslandInfo(
+                    left = IslandCompactLayout.left(picKey, title),
+                    right = IslandCompactLayout.right(pausedDetail),
+                )
+                builder.setSmallIsland(picKey)
+            } else if (isIndeterminate) {
                 val presentation = resolveIslandText(
                     sbn = sbn,
                     title = title,
@@ -142,8 +170,10 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         }
 
         val highlight = resolveColor(theme, sbn.packageName, themeProgressColor)
+        val islandTimeout = if (paused) Int.MAX_VALUE else config.timeout
+        if (paused) builder.setTimeout(Int.MAX_VALUE.toLong())
         builder.setIslandConfig(
-            timeout = config.timeout,
+            timeout = islandTimeout,
             highlightColor = highlight,
             dismissible = isFinished,
             expandedTimeMs = if (isFloatEnabled) config.floatTimeout else null,
@@ -159,6 +189,11 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             IslandVisualMetadata.injectUpdatable(builder.buildJsonParam(), updatable = !isFinished),
             themeProgressColor,
         )
-        return HyperIslandData(builder.buildResourceBundle(), json, highlight)
+        val lifetime = if (paused) {
+            IslandVisualMetadata.pinIslandLifetime(json, Int.MAX_VALUE)
+        } else {
+            json
+        }
+        return HyperIslandData(builder.buildResourceBundle(), lifetime, highlight)
     }
 }

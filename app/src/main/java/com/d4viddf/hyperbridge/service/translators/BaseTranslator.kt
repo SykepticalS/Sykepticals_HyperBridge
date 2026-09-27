@@ -28,6 +28,7 @@ import androidx.core.graphics.scale
 import androidx.core.graphics.toColorInt
 import androidx.graphics.shapes.toPath
 import androidx.palette.graphics.Palette
+import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.BridgeAction
 import com.d4viddf.hyperbridge.models.IslandConfig
@@ -39,6 +40,7 @@ import com.d4viddf.hyperbridge.models.theme.ActionConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.models.theme.ResourceType
 import com.d4viddf.hyperbridge.models.theme.ThemeResource
+import com.d4viddf.hyperbridge.service.download.DownloadTransportControls
 import com.d4viddf.hyperbridge.service.visual.IconGeometry
 import com.d4viddf.hyperbridge.service.visual.LargeIconRole
 import com.d4viddf.hyperbridge.service.visual.NotificationVisualPlanner
@@ -407,6 +409,7 @@ abstract class BaseTranslator(
         mode: ActionDisplayMode = ActionDisplayMode.BOTH,
         actionKeyPrefix: String? = null,
         fallbackActionGlyphs: Boolean = false,
+        transportControls: Boolean = false,
     ): List<BridgeAction> {
         val bridgeActions = mutableListOf<BridgeAction>()
         val actions = sbn.notification.actions ?: return emptyList()
@@ -455,19 +458,42 @@ abstract class BaseTranslator(
             var actionIcon: Icon? = null
             var hyperPic: HyperPicture? = null
 
-            val finalTitle = if (effectiveMode == ActionDisplayMode.ICON) "" else rawTitle
+            val transportGlyph = if (transportControls) {
+                DownloadTransportControls.glyph(
+                    rawTitle,
+                    isDelete = androidAction.semanticAction == Notification.Action.SEMANTIC_ACTION_DELETE,
+                )
+            } else {
+                null
+            }
+            // Finished focus buttons already include their plate and a small glyph. Keep the
+            // label off the button so HyperOS does not stretch them into a text action.
+            val finalTitle = if (
+                effectiveMode == ActionDisplayMode.ICON ||
+                (transportGlyph != null && effectiveMode != ActionDisplayMode.TEXT)
+            ) {
+                ""
+            } else {
+                rawTitle
+            }
             val shouldLoadIcon = (effectiveMode != ActionDisplayMode.TEXT)
 
             var bitmapToUse: Bitmap? = null
+            var finishedTransportButton = false
             val configIconRes = actionConfig?.icon
             if (configIconRes != null && configIconRes.type == ResourceType.LOCAL_FILE && repository != null) {
                 bitmapToUse = repository.getResourceBitmap(configIconRes)
             }
 
+            if (bitmapToUse == null && transportGlyph != null && shouldLoadIcon) {
+                bitmapToUse = renderFocusControl(transportGlyphDrawable(transportGlyph))
+                finishedTransportButton = bitmapToUse != null
+            }
+
             if (bitmapToUse == null && shouldLoadIcon) {
                 val originalIcon = androidAction.getIcon()
                 if (originalIcon != null) {
-                    bitmapToUse = loadIconBitmap(originalIcon, sbn.packageName)
+                    bitmapToUse = loadIconBitmap(originalIcon, sbn.packageName, width = 96, height = 96)
                 }
             }
             if ((bitmapToUse == null || !isUsableBitmap(bitmapToUse)) && fallbackActionGlyphs && shouldLoadIcon) {
@@ -476,13 +502,26 @@ abstract class BaseTranslator(
                 }
             }
 
-            if (bitmapToUse != null) {
-                val processedBitmap = if (theme != null) {
-                    // [FIX] Pass package name to respect app-specific shape overrides
-                    applyThemeToActionIcon(bitmapToUse, theme, sbn.packageName, finalBgColorInt)
+            val sourceBitmap = bitmapToUse
+            if (sourceBitmap != null) {
+                val processedBitmap = if (finishedTransportButton) {
+                    sourceBitmap
+                } else if (theme != null || transportControls) {
+                    val padding = if (transportControls) {
+                        resolvePadding(theme, sbn.packageName).coerceAtLeast(34)
+                    } else {
+                        resolvePadding(theme, sbn.packageName)
+                    }
+                    applyThemeToActionIcon(
+                        sourceBitmap,
+                        resolveShape(theme, sbn.packageName),
+                        padding,
+                        finalBgColorInt,
+                    )
                 } else {
-                    createRoundedIconWithBackground(bitmapToUse, finalBgColorInt, 12)
+                    createRoundedIconWithBackground(sourceBitmap, finalBgColorInt, 12)
                 }
+                processedBitmap.density = context.resources.displayMetrics.densityDpi
 
                 actionIcon = Icon.createWithBitmap(processedBitmap)
                 hyperPic = HyperPicture("${uniqueKey}_icon", processedBitmap)
@@ -503,14 +542,18 @@ abstract class BaseTranslator(
                 androidAction.actionIntent
             }
 
-            val appliedBgColor = if (effectiveMode == ActionDisplayMode.TEXT) null else finalBgColorHex
+            val appliedBgColor = if (effectiveMode == ActionDisplayMode.TEXT || finishedTransportButton) {
+                null
+            } else {
+                finalBgColorHex
+            }
 
             val hyperAction = HyperAction(
                 key = uniqueKey,
                 title = finalTitle,
                 icon = actionIcon,
                 pendingIntent = finalIntent,
-                actionIntentType = 1,
+                actionIntentType = FocusActionIntentTypes.of(finalIntent),
                 actionBgColor = appliedBgColor,
                 titleColor = finalTintColorHex
             )
@@ -977,6 +1020,29 @@ abstract class BaseTranslator(
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun transportGlyphDrawable(glyph: DownloadTransportControls.Glyph): Int {
+        return when (glyph) {
+            DownloadTransportControls.Glyph.PAUSE -> R.drawable.ic_focus_pause
+            DownloadTransportControls.Glyph.RESUME -> R.drawable.ic_focus_resume
+            DownloadTransportControls.Glyph.CANCEL -> R.drawable.ic_island_download_cancel
+        }
+    }
+
+    /**
+     * Draws a 48dp focus button at the device density. HyperOS sizes these bitmaps from their
+     * density, so a 96px plate left at the default mdpi density renders about three times too big.
+     */
+    private fun renderFocusControl(resId: Int): Bitmap? {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate() ?: return null
+        val metrics = context.resources.displayMetrics
+        val size = (48f * metrics.density).roundToInt().coerceAtLeast(48)
+        val bitmap = createBitmap(size, size)
+        bitmap.density = metrics.densityDpi
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        return bitmap
     }
 
     private fun fallbackActionGlyphRes(title: String): Int? {

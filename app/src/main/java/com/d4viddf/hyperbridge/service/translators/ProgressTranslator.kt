@@ -86,6 +86,7 @@ class ProgressTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             theme = theme,
             actionKeyPrefix = "act_${picKey.removePrefix("pic_")}",
             fallbackActionGlyphs = true,
+            transportControls = true,
         )
         val expanded = ExpandedFocusContent.transfer(
             title = title,

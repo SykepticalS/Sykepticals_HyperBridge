@@ -53,9 +53,16 @@ data class CallSession(
     val transitionReason: String = "pre-connected-no-active-evidence"
 )
 
-/** HyperOS expires a missing islandTimeout; call sessions own their own lifecycle. */
+/**
+ * HyperOS drops an island when `islandTimeout` elapses, and a missing value falls back to a
+ * short default. Live calls ignore the configured auto-close. [Int.MAX_VALUE] is the sentinel
+ * this protocol already treats as no expiry. The session removes the island when an incoming
+ * call is answered or rejected, or when the ongoing call ends.
+ */
 object CallIslandTimeoutPolicy {
-    const val PERSISTENT_TIMEOUT_MILLIS = 86_400_000
+    const val PERSISTENT_TIMEOUT_MILLIS = Int.MAX_VALUE
+
+    fun ignoresConfiguredExpiry(semanticType: String?): Boolean = semanticType == "CALL"
 }
 
 /** The translator must never create a timer for a pre-connected call state. */

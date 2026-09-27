@@ -143,6 +143,24 @@ object IslandVisualMetadata {
     }
 
     /**
+     * Writes the same lifetime onto both clocks HyperOS consults. `param_v2.timeout` and
+     * `param_island.islandTimeout` are independent; leaving either at the configured auto-close
+     * removes a call island before the session ends.
+     */
+    fun pinIslandLifetime(jsonParam: String, timeout: Int): String {
+        return runCatching {
+            val root = JsonParser.parseString(jsonParam).asJsonObject
+            val paramV2 = root.getAsJsonObject("param_v2") ?: return jsonParam
+            paramV2.addProperty("timeout", timeout)
+            val island = paramV2.getAsJsonObject("param_island") ?: JsonObject().also {
+                paramV2.add("param_island", it)
+            }
+            island.addProperty("islandTimeout", timeout)
+            Gson().toJson(root)
+        }.getOrDefault(jsonParam)
+    }
+
+    /**
      * HyperOS reads these from `param_v2`. Kit defaults and omitted-false values otherwise
      * re-expand an already visible island on the next notify().
      */

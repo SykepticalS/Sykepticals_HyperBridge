@@ -80,6 +80,8 @@ import com.d4viddf.hyperbridge.service.call.CallState
 import com.d4viddf.hyperbridge.service.call.CallSessionTracker
 import com.d4viddf.hyperbridge.service.call.CallStageVisibilityPolicy
 import com.d4viddf.hyperbridge.service.diagnostics.DiagnosticsStore
+import com.d4viddf.hyperbridge.service.download.ChromeNotificationPolicy
+import com.d4viddf.hyperbridge.service.download.DownloadPausePolicy
 import com.d4viddf.hyperbridge.service.download.DownloadReplacementPolicy
 import com.d4viddf.hyperbridge.service.download.DownloadSessionInput
 import com.d4viddf.hyperbridge.service.download.DownloadSessionTracker
@@ -1641,6 +1643,7 @@ class NotificationProcessingEngine private constructor(
             var effectiveKey = sbn.key
             var messageEventFingerprint: MessageEventFingerprint? = null
             var callSession: CallSession? = null
+            var retainedDownloadPercent: Int? = null
             var screenRecordingSession: ScreenRecordingSession? = null
 
             if (isSavedScreenRecording) {
@@ -1732,9 +1735,12 @@ class NotificationProcessingEngine private constructor(
                         text = effectiveText,
                         observedAt = System.currentTimeMillis(),
                         finished = isFinishedProgress(sbn),
+                        progressPercent = reportedDownloadPercent(sbn, effectiveTitle, effectiveText),
+                        paused = isPausedDownloadNotification(sbn, effectiveTitle, effectiveText),
                     )
                 )
                 effectiveKey = session.logicalId
+                retainedDownloadPercent = session.progressPercent
             }
 
             if (isMessagingLifecycle) {
@@ -2049,7 +2055,10 @@ class NotificationProcessingEngine private constructor(
                 }
                 NotificationType.TIMER -> timerTranslator.translate(sbn, picKey, translationConfig, activeTheme, isUpdate)
                 NotificationType.PROGRESS -> progressTranslator.translate(sbn, effectiveTitle, picKey, translationConfig, activeTheme, isUpdate)
-                NotificationType.DOWNLOAD -> downloadTranslator.translate(sbn, effectiveTitle, picKey, translationConfig, activeTheme, isUpdate)
+                NotificationType.DOWNLOAD -> downloadTranslator.translate(
+                    sbn, effectiveTitle, picKey, translationConfig, activeTheme, isUpdate,
+                    retainedPercent = retainedDownloadPercent,
+                )
                 NotificationType.MEDIA -> mediaTranslator.translate(sbn, picKey, translationConfig, isUpdate)
                 NotificationType.SCREEN_RECORDING -> screenRecordingTranslator.translate(
                     requireNotNull(screenRecordingSession),
@@ -2290,7 +2299,10 @@ class NotificationProcessingEngine private constructor(
         val textLower = text.lowercase()
         val channelId = sbn.notification.channelId?.lowercase() ?: ""
         
-        val isMatch = if (pkg.contains("download") || pkg.contains("downloader") || pkg.contains("chrome") || 
+        if (ChromeNotificationPolicy.isIncognito(sbn.packageName, sbn.notification.channelId)) {
+            return false
+        }
+        val isMatch = if (pkg.contains("download") || pkg.contains("downloader") ||
             pkg.contains("browser") || pkg.contains("firefox") || pkg.contains("market") || 
             pkg.contains("vending") || pkg.contains("play.store") || pkg.contains("playstore") || 
             pkg.contains("store") || pkg.contains("fdroid") || pkg.contains("samsungapps") || 
@@ -2328,13 +2340,44 @@ class NotificationProcessingEngine private constructor(
     }
 
     private fun hasProgressNotification(sbn: StatusBarNotification, title: String, text: String): Boolean {
+        if (ChromeNotificationPolicy.isIncognito(sbn.packageName, sbn.notification.channelId)) return false
         val extras = sbn.notification.extras
         val isDownload = isDownloadNotification(sbn, title, text)
         val isOngoing = (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0
-        return extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0 ||
+        val structural = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0 ||
                 extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) ||
                 (isDownload && extractTextPercentage(title, text) != null) ||
                 (isDownload && isOngoing)
+        if (structural) return true
+        if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return false
+        return isPausedDownloadNotification(sbn, title, text) ||
+            downloadSessionTracker.matchesLiveDownload(sbn.packageName, sbn.key, title, text)
+    }
+
+    private fun reportedDownloadPercent(sbn: StatusBarNotification, title: String, text: String): Int? {
+        val extras = sbn.notification.extras
+        val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        if (max > 0) {
+            val current = extras.getInt(Notification.EXTRA_PROGRESS, 0)
+            return ((current.toFloat() / max.toFloat()) * 100).toInt().coerceIn(0, 100)
+        }
+        return extractTextPercentage(title, text)
+    }
+
+    private fun isPausedDownloadNotification(sbn: StatusBarNotification, title: String, text: String): Boolean {
+        val extras = sbn.notification.extras
+        val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+        val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString().orEmpty()
+        val actionTitles = sbn.notification.actions?.map { it.title?.toString().orEmpty() }.orEmpty()
+        return DownloadPausePolicy.isPaused(
+            isDownload = isDownloadNotification(sbn, title, text),
+            title = title,
+            text = text,
+            actionTitles = actionTitles,
+            extraText = "$subText $infoText",
+            finished = isFinishedProgress(sbn),
+            groupSummary = sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+        )
     }
 
     private fun extractTextPercentage(title: String?, text: String?): Int? {
@@ -2506,8 +2549,11 @@ class NotificationProcessingEngine private constructor(
         
         val title = resolveTitle(sbn)
         val text = resolveText(extras)
-        val isDownload = isDownloadNotification(sbn, title, text)
-        val hasProgress = hasProgressNotification(sbn, title, text)
+        val continuesDownload = !ChromeNotificationPolicy.isIncognito(sbn.packageName, n.channelId) &&
+            sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 &&
+            downloadSessionTracker.matchesLiveDownload(sbn.packageName, sbn.key, title, text)
+        val isDownload = isDownloadNotification(sbn, title, text) || continuesDownload
+        val hasProgress = hasProgressNotification(sbn, title, text) || continuesDownload
         val signals = voicePlaybackSignals(sbn, title, text)
         val isVoice = VoicePlaybackDetector.isVoicePlayback(signals)
         val isScreenRecording = ScreenRecordingClassifier.isScreenRecording(

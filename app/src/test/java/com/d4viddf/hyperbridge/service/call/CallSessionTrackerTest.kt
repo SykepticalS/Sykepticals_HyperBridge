@@ -9,8 +9,11 @@ import org.junit.Test
 
 class CallSessionTrackerTest {
     @Test
-    fun callIslandsUseAPersistentHyperOsTimeout() {
-        assertEquals(86_400_000, CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS)
+    fun callIslandsIgnoreConfiguredExpiry() {
+        assertEquals(Int.MAX_VALUE, CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS)
+        assertTrue(CallIslandTimeoutPolicy.ignoresConfiguredExpiry("CALL"))
+        assertEquals(false, CallIslandTimeoutPolicy.ignoresConfiguredExpiry("VOICE_MESSAGE"))
+        assertEquals(false, CallIslandTimeoutPolicy.ignoresConfiguredExpiry(null))
     }
 
     @Test

@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
+import com.d4viddf.hyperbridge.service.call.CallIslandTimeoutPolicy
 import com.d4viddf.hyperbridge.models.MarqueeDismissMode
 import com.d4viddf.hyperbridge.models.MarqueeMotion
 import com.d4viddf.hyperbridge.models.MarqueeTimeoutPolicy
@@ -149,7 +150,13 @@ object MarqueeHook {
                     } else {
                         MarqueeDismissMode.OFF
                     }
-                    val originalTimeout = extras.getInt(IslandProtocol.EXTRA_ORIGINAL_TIMEOUT, 10)
+                    val semanticType = extras.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE)
+                    val callLifetime = CallIslandTimeoutPolicy.ignoresConfiguredExpiry(semanticType)
+                    val originalTimeout = if (callLifetime) {
+                        0
+                    } else {
+                        extras.getInt(IslandProtocol.EXTRA_ORIGINAL_TIMEOUT, 10)
+                    }
                     val generation = snapshot.generation
                     if (nativeTextUpdate) {
                         module.log(
@@ -164,7 +171,7 @@ object MarqueeHook {
                         mode = mode,
                         originalTimeoutSecs = originalTimeout,
                         generation = generation,
-                        ongoing = ongoing,
+                        ongoing = ongoing || callLifetime,
                         notification = sbn ?: islandNotifications[island],
                         visualBefore = visualBefore,
                         settleUntilMs = if (nativeTextUpdate && !preserveScroll) {
