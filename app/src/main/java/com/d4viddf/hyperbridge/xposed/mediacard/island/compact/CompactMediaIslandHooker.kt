@@ -25,6 +25,7 @@ import io.github.libxposed.api.XposedInterface.Hooker
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.Optional
 import java.util.WeakHashMap
@@ -419,6 +420,11 @@ internal object CompactMediaIslandHooker {
         primary.clipTo(area)
         ghost.clipTo(area)
         val density = area.resources.displayMetrics.density
+        if (text != null) {
+            val controller = controllers[primary] ?: createController(area, wrapper, primary, ghost)
+                .also { controllers[primary] = it }
+            controller.render(settings, text.title, text.artist, text.identity)
+        }
         val width = if (text == null) {
             CompactMediaIslandPolicy.spacerWidthPx(settings.widthPercent, density, leading)
         } else {
@@ -428,9 +434,12 @@ internal object CompactMediaIslandHooker {
                     CompactMediaIslandPolicy.artistLine(text.artist).takeIf { it.isNotEmpty() }?.let(::add)
                 }
             }
-            CompactMediaIslandPolicy.slotWidthPx(
+            CompactMediaIslandPolicy.displayedSlotWidthPx(
+                percent = settings.widthPercent,
+                displayedLineWidthPx = primary.paint.measureText(primary.text.ifBlank { text.title }),
                 lineWidthsPx = lines.map { primary.paint.measureText(it) },
-                horizontalPaddingPx = primary.insetPx + primary.endPaddingPx,
+                horizontalPaddingPx = primary.insetPx + primary.endPaddingPx +
+                    CompactMediaIslandPolicy.defaultEndClearancePx(settings.widthPercent, density),
                 viewportPx = CompactMediaIslandPolicy.textViewportPx(settings.widthPercent, density, leading),
             )
         }
@@ -450,14 +459,58 @@ internal object CompactMediaIslandHooker {
             ghost.text = ""
             return if (changed) 1 else 0
         }
-        val controller = controllers[primary] ?: CompactMediaTitleController(
+        return if (changed) 1 else 0
+    }
+
+    private fun createController(
+        area: View,
+        wrapper: View,
+        primary: CompactTitleView,
+        ghost: CompactTitleView,
+    ): CompactMediaTitleController {
+        val areaRef = WeakReference(area)
+        val wrapperRef = WeakReference(wrapper)
+        val primaryRef = WeakReference(primary)
+        return CompactMediaTitleController(
             primary = primary,
             ghost = ghost,
             passive = resourceName(area) == FAKE_AREA,
             islandAtRest = ::islandAtRest,
-        ).also { controllers[primary] = it }
-        controller.render(settings, text.title, text.artist, text.identity)
-        return if (changed) 1 else 0
+            onLineChanged = { line ->
+                val liveArea = areaRef.get()
+                val liveWrapper = wrapperRef.get()
+                val livePrimary = primaryRef.get()
+                if (liveArea != null && liveWrapper != null && livePrimary != null) {
+                    resizeDefaultLength(liveArea, liveWrapper, livePrimary, line)
+                }
+            },
+        )
+    }
+
+    private fun resizeDefaultLength(
+        area: View,
+        wrapper: View,
+        primary: CompactTitleView,
+        line: String,
+    ) {
+        val settings = MediaCardRuntimeConfig.current.compactIsland
+        if (!settings.showTitle || settings.widthPercent != 0 || line.isBlank()) return
+        val density = area.resources.displayMetrics.density
+        val leading = leadings[area] ?: 0
+        val width = CompactMediaIslandPolicy.displayedSlotWidthPx(
+            percent = 0,
+            displayedLineWidthPx = primary.paint.measureText(line),
+            lineWidthsPx = emptyList(),
+            horizontalPaddingPx = primary.insetPx + primary.endPaddingPx +
+                CompactMediaIslandPolicy.defaultEndClearancePx(0, density),
+            viewportPx = CompactMediaIslandPolicy.textViewportPx(0, density, leading),
+        )
+        val params = wrapper.layoutParams ?: return
+        if (params.width == width) return
+        params.width = width
+        wrapper.layoutParams = params
+        wrapper.requestLayout()
+        contentHost(area)?.let(::requestIslandWidth)
     }
 
     /**

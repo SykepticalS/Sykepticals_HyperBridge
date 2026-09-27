@@ -19,6 +19,21 @@ object MarqueeMotion {
     }
 
     /**
+     * Returns only the part of the rendered text that is actually beyond the clip edge.
+     * Keeping both values in the same coordinate space accounts for TextView gravity,
+     * asymmetric island slots, and parent clipping without estimating a viewport width.
+     */
+    fun clippedRightOverflow(
+        renderedTextRightPx: Float,
+        clipRightPx: Float,
+        tolerancePx: Float = 0f,
+    ): Float {
+        if (!renderedTextRightPx.isFinite() || !clipRightPx.isFinite()) return 0f
+        val overflow = (renderedTextRightPx - clipRightPx).coerceAtLeast(0f)
+        return overflow.takeIf { it > tolerancePx.coerceAtLeast(0f) } ?: 0f
+    }
+
+    /**
      * Advance width includes the empty tail after the last glyph (right side bearing and
      * letter spacing). Scrolling to that tail leaves a blank strip and nudges text that
      * already fits. A much smaller ink measurement is ignored so a bad bounds result cannot

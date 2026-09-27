@@ -135,4 +135,18 @@ class CompactMediaIslandPolicyTest {
         assertEquals(300, CompactMediaIslandPolicy.slotWidthPx(listOf(80f, 900f), 4, 300))
         assertEquals(1, CompactMediaIslandPolicy.slotWidthPx(emptyList(), 0, 300))
     }
+
+    @Test fun defaultLengthFollowsTheDisplayedLineButExplicitLengthStaysStable() {
+        val lines = listOf(80.2f, 119.4f)
+        assertEquals(85, CompactMediaIslandPolicy.displayedSlotWidthPx(0, 80.2f, lines, 4, 300))
+        assertEquals(124, CompactMediaIslandPolicy.displayedSlotWidthPx(0, 119.4f, lines, 4, 300))
+        assertEquals(124, CompactMediaIslandPolicy.displayedSlotWidthPx(15, 80.2f, lines, 4, 300))
+        assertEquals(124, CompactMediaIslandPolicy.displayedSlotWidthPx(15, 119.4f, lines, 4, 300))
+    }
+
+    @Test fun onlyDefaultLengthAddsCameraFadeClearance() {
+        assertEquals(12, CompactMediaIslandPolicy.defaultEndClearancePx(0, density = 3f))
+        assertEquals(0, CompactMediaIslandPolicy.defaultEndClearancePx(1, density = 3f))
+        assertEquals(0, CompactMediaIslandPolicy.defaultEndClearancePx(30, density = 3f))
+    }
 }

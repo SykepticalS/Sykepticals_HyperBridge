@@ -22,6 +22,7 @@ object CompactMediaIslandPolicy {
     const val LIMITED_LEFT_DP = 114f
     const val UNLIMITED_LEFT_DP = 170f
     const val MIN_TEXT_DP = 40f
+    const val DEFAULT_END_CLEARANCE_DP = 4f
     const val ARTIST_PREFIX = "By: "
 
     /** Xiaomi's TextSwitcherAnimator: FolmeEase.spring(0.75, 0.35) settled over 550 ms. */
@@ -163,6 +164,34 @@ object CompactMediaIslandPolicy {
         val wanted = ceil(widest).toInt() + horizontalPaddingPx.coerceAtLeast(0)
         return wanted.coerceIn(1, viewportPx.coerceAtLeast(1))
     }
+
+    /**
+     * Default length follows the line currently on screen. A raised length slider reserves one
+     * stable slot for every line in the cycle so explicit user sizing never jumps.
+     */
+    fun displayedSlotWidthPx(
+        percent: Int,
+        displayedLineWidthPx: Float,
+        lineWidthsPx: List<Float>,
+        horizontalPaddingPx: Int,
+        viewportPx: Int,
+    ): Int = slotWidthPx(
+        lineWidthsPx = if (normalizeWidth(percent) == 0) {
+            listOf(displayedLineWidthPx)
+        } else {
+            lineWidthsPx
+        },
+        horizontalPaddingPx = horizontalPaddingPx,
+        viewportPx = viewportPx,
+    )
+
+    /** Keeps the final glyph just outside the camera-side fade in dynamic Default mode. */
+    fun defaultEndClearancePx(percent: Int, density: Float): Int =
+        if (normalizeWidth(percent) == 0) {
+            (DEFAULT_END_CLEARANCE_DP * density.coerceAtLeast(0.5f)).toInt()
+        } else {
+            0
+        }
 
     private fun extraDp(width: Int): Float = (UNLIMITED_LEFT_DP - LIMITED_LEFT_DP) * (width / 100f)
 }

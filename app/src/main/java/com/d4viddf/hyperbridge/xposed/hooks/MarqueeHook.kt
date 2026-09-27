@@ -565,13 +565,7 @@ object MarqueeHook {
             return
         }
         if (full != clean) view.text = clean
-        val available = availableTextWidth(view)
-        if (available <= 0) return
-        val overflow = MarqueeMotion.overflowDistance(
-            textWidthPx = scrollingTextWidth(view, clean),
-            availableWidthPx = available,
-            tolerancePx = overflowTolerancePx(view),
-        ) > 0f
+        val overflow = marqueeOverflowDistance(view, clean) > 0f
         noteRightOverflow(view, overflow)
         if (!overflow) {
             stopMarquee(view)
@@ -887,6 +881,47 @@ object MarqueeHook {
         )
     }
 
+    /**
+     * Measure the rendered line against its real visible right edge. The old
+     * textWidth - availableWidth calculation assumed that the line started at the
+     * clip's left edge. Xiaomi's area_right can offset the line inside a wider
+     * TextView, which made that estimate scroll past the final glyph.
+     */
+    private fun marqueeOverflowDistance(view: TextView, text: String): Float {
+        if (view.width <= 0 || text.isEmpty()) return 0f
+
+        val visible = Rect()
+        if (!view.getGlobalVisibleRect(visible) || visible.width() <= 0) return 0f
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val clipRightInView = (visible.right - location[0]).toFloat()
+            .coerceAtMost(view.width.toFloat())
+
+        val layout = view.layout
+        val renderedRightInView = if (layout != null && layout.lineCount > 0) {
+            var widestRight = Float.NEGATIVE_INFINITY
+            for (line in 0 until layout.lineCount) {
+                val advanceWidth = layout.getLineWidth(line)
+                val visibleWidth = if (line == 0 && layout.lineCount == 1) {
+                    scrollingTextWidth(view, text)
+                } else {
+                    advanceWidth
+                }
+                val trailingAdvance = (advanceWidth - visibleWidth).coerceAtLeast(0f)
+                widestRight = maxOf(widestRight, layout.getLineRight(line) - trailingAdvance)
+            }
+            view.compoundPaddingLeft + widestRight
+        } else {
+            view.compoundPaddingLeft + scrollingTextWidth(view, text)
+        }
+
+        return MarqueeMotion.clippedRightOverflow(
+            renderedTextRightPx = renderedRightInView,
+            clipRightPx = clipRightInView,
+            tolerancePx = overflowTolerancePx(view),
+        )
+    }
+
     private fun laidOutTextWidth(view: TextView, fallbackText: String): Float {
         val layout = view.layout
         if (layout != null && layout.lineCount > 0) {
@@ -897,59 +932,6 @@ object MarqueeHook {
             if (widest > 0f) return widest
         }
         return view.paint.measureText(fallbackText)
-    }
-
-    // TEMP-DEBUG-MARQUEE-END
-    private fun debugEndGeometry(view: TextView, text: String, maxScroll: Float) {
-        runCatching {
-            val loc = IntArray(2)
-            view.getLocationInWindow(loc)
-            val layout = view.layout
-            val bounds = Rect()
-            view.paint.getTextBounds(text, 0, text.length, bounds)
-            val sb = StringBuilder()
-            sb.append("area=").append(compactAreaName(view))
-                .append(" cls=").append(view.javaClass.name)
-                .append(" winL=").append(loc[0]).append(" w=").append(view.width)
-                .append(" pad=").append(view.paddingLeft).append('/').append(view.paddingRight)
-                .append(" cpad=").append(view.compoundPaddingLeft).append('/').append(view.compoundPaddingRight)
-                .append(" grav=").append(Integer.toHexString(view.gravity))
-                .append(" scrollX=").append(view.scrollX).append(" max=").append(maxScroll)
-                .append(" avail=").append(availableTextWidth(view))
-                .append(" advance=").append(laidOutTextWidth(view, text))
-                .append(" ink=").append(bounds.left).append('/').append(bounds.right)
-                .append(" measure=").append(view.paint.measureText(text))
-                .append(" lsp=").append(view.letterSpacing)
-                .append(" fade=").append(view.horizontalFadingEdgeLength)
-            if (layout != null) {
-                sb.append(" lay.w=").append(layout.width)
-                    .append(" lineL=").append(layout.getLineLeft(0))
-                    .append(" lineR=").append(layout.getLineRight(0))
-                    .append(" lineMax=").append(layout.getLineMax(0))
-                    .append(" align=").append(layout.getParagraphAlignment(0))
-            }
-            val vis = Rect()
-            val shown = view.getGlobalVisibleRect(vis)
-            sb.append(" globalVis=").append(shown).append(':').append(vis.toShortString())
-            var parent = view.parent
-            var depth = 0
-            while (parent is ViewGroup && depth < 8) {
-                val pl = IntArray(2)
-                parent.getLocationInWindow(pl)
-                val name = runCatching { parent.resources.getResourceEntryName(parent.id) }.getOrNull()
-                sb.append("\n  ^").append(parent.javaClass.simpleName).append('#').append(name)
-                    .append(" winL=").append(pl[0]).append(" w=").append(parent.width)
-                    .append(" pad=").append(parent.paddingLeft).append('/').append(parent.paddingRight)
-                    .append(" clipC=").append(parent.clipChildren)
-                    .append(" clipP=").append(parent.clipToPadding)
-                    .append(" clipB=").append(parent.clipBounds?.toShortString())
-                    .append(" outlineClip=").append(parent.clipToOutline)
-                if (islandEnabled.containsKey(parent)) break
-                parent = parent.parent
-                depth++
-            }
-            Log.i("HyperBridge", "HyperBridge: MARQUEE-END $sb")
-        }
     }
 
     private fun normalize(text: String): String = text
@@ -1006,11 +988,7 @@ object MarqueeHook {
                 startNanos = frameTimeNanos
                 lastNanos = frameTimeNanos
             }
-            val maxScroll = MarqueeMotion.overflowDistance(
-                textWidthPx = scrollingTextWidth(view, text),
-                availableWidthPx = availableTextWidth(view),
-                tolerancePx = overflowTolerancePx(view),
-            )
+            val maxScroll = marqueeOverflowDistance(view, text)
             if (maxScroll <= 0f) {
                 unregisterScrolling(view)
                 stop()
@@ -1037,7 +1015,6 @@ object MarqueeHook {
                         state = 2
                         startNanos = frameTimeNanos
                         onRightForwardComplete(view)
-                        debugEndGeometry(view, text, maxScroll)
                     }
                     view.scrollTo(scrollX.toInt(), 0)
                     view.invalidate()

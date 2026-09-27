@@ -28,6 +28,8 @@ internal class CompactMediaTitleController(
     private val passive: Boolean,
     /** False while the island is inside an app, expanded, or animating between states. */
     private val islandAtRest: (View) -> Boolean,
+    /** Re-measures the default-length island whenever the displayed line changes. */
+    private val onLineChanged: (String) -> Unit,
 ) : Choreographer.FrameCallback {
     private val primaryRef = WeakReference(primary)
     private val ghostRef = WeakReference(ghost)
@@ -58,6 +60,7 @@ internal class CompactMediaTitleController(
         if (passive) {
             view.text = sharedLine?.takeIf { it.first == identity }?.second ?: title
             view.offset = 0f
+            onLineChanged(view.text)
             return
         }
         val key = listOf(
@@ -202,6 +205,7 @@ internal class CompactMediaTitleController(
         turn?.cancel()
         identity?.let { sharedLine = it to text }
         if (animate) startTurn(view, text) else view.text = text
+        onLineChanged(text)
         view.offset = 0f
         completedLoops = 0
         state = if (turn != null) State.TURN else State.WAIT

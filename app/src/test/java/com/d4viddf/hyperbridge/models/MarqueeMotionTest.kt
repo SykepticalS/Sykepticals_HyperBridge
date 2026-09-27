@@ -36,6 +36,24 @@ class MarqueeMotionTest {
         )
     }
 
+    @Test fun renderedRightEdgeControlsWhetherAndHowFarTextScrolls() {
+        assertEquals(
+            0f,
+            MarqueeMotion.clippedRightOverflow(248f, 250f, tolerancePx = 1f),
+            0.001f,
+        )
+        assertEquals(
+            0f,
+            MarqueeMotion.clippedRightOverflow(250.8f, 250f, tolerancePx = 1f),
+            0.001f,
+        )
+        assertEquals(
+            18f,
+            MarqueeMotion.clippedRightOverflow(268f, 250f, tolerancePx = 1f),
+            0.001f,
+        )
+    }
+
     @Test fun endPaddingIsVisibleRoomNotABlankStop() {
         assertEquals(
             200,
