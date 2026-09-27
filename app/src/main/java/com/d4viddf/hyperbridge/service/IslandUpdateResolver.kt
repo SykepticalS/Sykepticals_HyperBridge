@@ -166,19 +166,6 @@ class InternalBridgeReplacementRegistry(
     fun clear() = entries.clear()
 }
 
-object PermanentIslandVisibilityPolicy {
-    fun desiredActive(
-        enabled: Boolean,
-        realNotificationCount: Int,
-        hasNativeIsland: Boolean,
-        hideInLandscape: Boolean,
-        isLandscape: Boolean
-    ): Boolean = enabled &&
-            realNotificationCount == 0 &&
-            !hasNativeIsland &&
-            !(hideInLandscape && isLandscape)
-}
-
 object NotificationLifecyclePolicy {
     const val REASON_CLICK = 1
     const val REASON_CANCEL = 2
@@ -201,6 +188,18 @@ object NotificationLifecyclePolicy {
         type == NotificationType.DOWNLOAD ||
             type == NotificationType.PROGRESS ||
             type == NotificationType.VOICE_MESSAGE
+
+    /**
+     * These sessions stay on the source notification and show HyperBridge's expanded Focus
+     * card in its place. Cancelling that source would remove the card.
+     */
+    fun carriesVisibleSourceFocus(type: NotificationType?): Boolean = when (type) {
+        NotificationType.CALL,
+        NotificationType.VOICE_MESSAGE,
+        NotificationType.DOWNLOAD,
+        NotificationType.PROGRESS -> true
+        else -> false
+    }
 
     /**
      * Call/media/nav/recording islands outlive the source FLAG_ONGOING_EVENT. Outgoing

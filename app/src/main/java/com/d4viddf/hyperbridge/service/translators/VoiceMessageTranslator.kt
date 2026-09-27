@@ -67,11 +67,22 @@ class VoiceMessageTranslator(
         val role = control?.let { VoicePlaybackDetector.roleFor(it.label) }
             ?: notificationControl?.let { VoicePlaybackDetector.roleFor(it.title?.toString().orEmpty()) }
         val pendingIntent = control?.pendingIntent ?: notificationControl?.actionIntent
-        val plan = VoiceIslandPlanner.plan(sender, percent, role)
-
         val themeProgressColor = theme?.defaultProgress?.activeColor
             ?: resolveColor(theme, sbn.packageName, "#007AFF")
         val highlightColor = resolveColor(theme, sbn.packageName, themeProgressColor)
+        val plan = VoiceIslandPlanner.plan(sender, percent, role)
+        val expanded = ExpandedFocusContent.voice(
+            title = expandedTitle,
+            detail = clock,
+            pictureKey = picKey,
+            progressPercent = plan.expandedBarPercent ?: percent,
+            progressColor = themeProgressColor,
+            actionKeys = if (pendingIntent != null && role != null) {
+                listOf("voice_${picKey.removePrefix("pic_")}")
+            } else {
+                emptyList()
+            },
+        )
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), sender)
         builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
@@ -80,7 +91,7 @@ class VoiceMessageTranslator(
             config.floatOnUpdate ?: false,
             isUpdate,
         )
-        builder.setShowNotification(config.isShowShade ?: false)
+        builder.setShowNotification(expanded.showInShade)
         builder.setIslandConfig(
             timeout = config.timeout,
             highlightColor = highlightColor,
@@ -90,10 +101,13 @@ class VoiceMessageTranslator(
 
         builder.addPicture(resolveVoicePicture(sbn, picKey, R.drawable.ic_call_microphone_live))
         builder.setIconTextInfo(
-            picKey = picKey,
-            title = expandedTitle,
-            content = clock,
+            picKey = expanded.pictureKey,
+            title = expanded.title,
+            content = expanded.detail,
         )
+        expanded.progressPercent?.let { progress ->
+            builder.setProgressBar(progress, expanded.progressColor ?: themeProgressColor)
+        }
         if (compactDuration) {
             builder.setBigIslandInfo(
                 left = IslandCompactLayout.left(picKey, plan.compactLeft),
@@ -111,7 +125,8 @@ class VoiceMessageTranslator(
         builder.setSmallIsland(picKey)
 
         pendingIntent?.let { intent ->
-            playbackAction(sbn, picKey, intent, role, themeProgressColor)?.let { bridge ->
+            val actionKey = expanded.actionKeys.firstOrNull() ?: return@let
+            playbackAction(actionKey, intent, role, themeProgressColor)?.let { bridge ->
                 bridge.actionImage?.let(builder::addPicture)
                 builder.addAction(bridge.action)
                 builder.addHiddenAction(bridge.action)
@@ -126,8 +141,7 @@ class VoiceMessageTranslator(
     }
 
     private fun playbackAction(
-        sbn: StatusBarNotification,
-        picKey: String,
+        actionKey: String,
         pendingIntent: PendingIntent,
         role: VoicePlaybackRole?,
         colorHex: String,
@@ -136,11 +150,10 @@ class VoiceMessageTranslator(
         val isPause = role == VoicePlaybackRole.PAUSE
         val label = context.getString(if (isPause) R.string.voice_action_pause else R.string.voice_action_play)
         val iconRes = if (isPause) R.drawable.ic_voice_pause else R.drawable.ic_voice_play
-        val key = "voice_${picKey.removePrefix("pic_")}"
-        val iconKey = "${key}_icon"
+        val iconKey = "${actionKey}_icon"
         val picture = getColoredPicture(iconKey, iconRes, "#FFFFFF")
         val action = HyperAction(
-            key = key,
+            key = actionKey,
             title = label,
             icon = Icon.createWithBitmap(playbackGlyph(iconRes)),
             pendingIntent = pendingIntent,

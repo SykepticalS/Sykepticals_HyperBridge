@@ -40,12 +40,6 @@
     <string name="group_configuration">êµ¬ì„±</string>
     <string name="system_setup">ì‹œìŠ¤í…œ ì„¤ì •</string>
     <string name="system_setup_subtitle">ê¶Œí•œ ë° ë°°í„°ë¦¬ ë¬¸ì œ í•´ê²°</string>
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">고정 Island</string>
-    <string name="permanent_island_desc">활성 알림이 없을 때도 다이내믹 Island를 화면에 항상 표시합니다.</string>
-    <string name="permanent_island_screen_desc">활성화하면 빈 다이내믹 Island가 화면에 항상 표시됩니다. 실제 알림이 오면 자동으로 숨겨지고, 모든 알림을 지우면 다시 나타납니다. 알림창에는 표시되지 않습니다.</string>
-    <string name="permanent_island_width">Island 너비</string>
-    <string name="permanent_island_hide_landscape">가로 모드에서 숨기기</string>
     <string name="group_about">ì•± ì •ë³´</string>
     <string name="special_thanks">특별 감사</string>
     <string name="xmsf_workaround_credit_title">XMSF 우회책</string>

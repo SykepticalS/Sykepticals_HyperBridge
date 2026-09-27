@@ -23,7 +23,6 @@ import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.NotificationsOff
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -59,8 +58,7 @@ fun GlobalSettingsScreen(
     onIslandSettingsClick: () -> Unit,
     onMediaCardSettingsClick: () -> Unit,
     onEngineSettingsClick: () -> Unit,
-    onDndSettingsClick: () -> Unit,
-    onPermanentIslandClick: () -> Unit
+    onDndSettingsClick: () -> Unit
 ) {
     val context = LocalContext.current
     var suppressSourceFloating by remember {
@@ -89,7 +87,7 @@ fun GlobalSettingsScreen(
                 title = stringResource(R.string.engine),
                 subtitle = stringResource(R.string.engine_desc),
                 icon = Icons.Outlined.Memory,
-                shape = getExpressiveShape(7, 0, ShapeStyle.Large),
+                shape = getExpressiveShape(6, 0, ShapeStyle.Large),
                 onClick = onEngineSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -97,7 +95,7 @@ fun GlobalSettingsScreen(
                 title = stringResource(R.string.island_behavior_title),
                 subtitle = stringResource(R.string.island_behavior_desc),
                 icon = Icons.Outlined.DisplaySettings,
-                shape = getExpressiveShape(7, 1, ShapeStyle.Large),
+                shape = getExpressiveShape(6, 1, ShapeStyle.Large),
                 onClick = onIslandSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -105,7 +103,7 @@ fun GlobalSettingsScreen(
                 title = "Media cards",
                 subtitle = "Edit Island and notification-shade media players",
                 icon = Icons.Outlined.MusicNote,
-                shape = getExpressiveShape(7, 2, ShapeStyle.Large),
+                shape = getExpressiveShape(6, 2, ShapeStyle.Large),
                 onClick = onMediaCardSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -113,7 +111,7 @@ fun GlobalSettingsScreen(
                 title = stringResource(R.string.dnd_mode_title),
                 subtitle = stringResource(R.string.dnd_mode_desc),
                 icon = Icons.Outlined.DoNotDisturbOn,
-                shape = getExpressiveShape(7, 3, ShapeStyle.Large),
+                shape = getExpressiveShape(6, 3, ShapeStyle.Large),
                 onClick = onDndSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -121,7 +119,7 @@ fun GlobalSettingsScreen(
                 title = stringResource(R.string.nav_layout_title),
                 subtitle = stringResource(R.string.nav_layout_desc),
                 icon = Icons.Outlined.Navigation,
-                shape = getExpressiveShape(7, 4, ShapeStyle.Large),
+                shape = getExpressiveShape(6, 4, ShapeStyle.Large),
                 onClick = onNavSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -129,16 +127,8 @@ fun GlobalSettingsScreen(
                 title = stringResource(R.string.inline_reply_title),
                 subtitle = stringResource(R.string.customize_inline_reply),
                 icon = Icons.Outlined.Edit,
-                shape = getExpressiveShape(7, 5, ShapeStyle.Large),
+                shape = getExpressiveShape(6, 5, ShapeStyle.Large),
                 onClick = onInlineReplyClick
-            )
-            Spacer(Modifier.height(2.dp))
-            ListOptionCard(
-                title = stringResource(R.string.permanent_island_title),
-                subtitle = stringResource(R.string.permanent_island_desc),
-                icon = Icons.Outlined.PushPin,
-                shape = getExpressiveShape(7, 6, ShapeStyle.Large),
-                onClick = onPermanentIslandClick
             )
             Spacer(Modifier.height(16.dp))
             SettingsSwitchItem(

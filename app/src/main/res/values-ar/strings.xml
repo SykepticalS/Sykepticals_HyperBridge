@@ -52,12 +52,6 @@ Hyper Bridge</string>
     <string name="system_setup">إعداد النظام</string>
     <string name="system_setup_subtitle">إصلاح الأذونات والبطارية</string>
 
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">الجزيرة الدائمة</string>
-    <string name="permanent_island_desc">إبقاء الجزيرة التفاعلية ظاهرة دائماً على الشاشة حتى عند عدم وجود إشعارات نشطة.</string>
-    <string name="permanent_island_screen_desc">عند التفعيل، ستظهر جزيرة فارغة بشكل دائم على شاشتك. ستختفي تلقائياً عند وصول إشعارات حقيقية وتعاود الظهور عند مسح كافة الإشعارات. لن تظهر في لوحة الإشعارات.</string>
-    <string name="permanent_island_width">عرض الجزيرة</string>
-    <string name="permanent_island_hide_landscape">إخفاء في الوضع الأفقي</string>
 
     <string name="group_about">حول التطبيق</string>
     <string name="special_thanks">شكر خاص</string>

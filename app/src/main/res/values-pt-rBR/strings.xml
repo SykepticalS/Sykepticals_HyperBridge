@@ -40,12 +40,6 @@
     <string name="group_configuration">ConfiguraÃ§Ã£o</string>
     <string name="system_setup">ConfiguraÃ§Ã£o do Sistema</string>
     <string name="system_setup_subtitle">Corrigir permissÃµes e bateria</string>
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">Ilha Permanente</string>
-    <string name="permanent_island_desc">Manter a Dynamic Island permanentemente visível na tela quando não houver notificações ativas.</string>
-    <string name="permanent_island_screen_desc">Quando ativada, uma Dynamic Island vazia será exibida permanentemente na sua tela. Ela se ocultará automaticamente quando chegarem notificações reais e reaparecerá quando todas as notificações forem limpas. Ela não ficará visível na sua cortina de notificações.</string>
-    <string name="permanent_island_width">Largura da Ilha</string>
-    <string name="permanent_island_hide_landscape">Ocultar na Horizontal</string>
     <string name="group_about">Sobre</string>
     <string name="special_thanks">Special Thanks</string>
     <string name="xmsf_workaround_credit_title">XMSF Workaround</string>

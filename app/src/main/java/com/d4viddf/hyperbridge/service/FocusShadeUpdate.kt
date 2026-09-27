@@ -8,11 +8,10 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 
 /**
- * Source call/voice posts keep the app's own shade row. Focus extras are only for the island
- * swipe-up. `isShowNotification` is forced off so HyperOS does not swap that row for a Focus
- * card. `updatable`, a stable `orderId`, and a strictly increasing `sequence` let the island
- * refresh; `cancel` asks Xiaomi to drop it. Some builds read these fields on the root object
- * and some on `param_v2`, so both are written.
+ * Source Focus posts replace the app shade row with the expanded Focus card.
+ * `isShowNotification` stays on while the card is live and turns off when `cancel` drops it.
+ * `updatable`, a stable `orderId`, and a strictly increasing `sequence` let that card refresh.
+ * Some builds read these fields on the root object and some on `param_v2`, so both are written.
  */
 object FocusShadeUpdate {
     private val sequences = ConcurrentHashMap<String, AtomicLong>()
@@ -70,7 +69,7 @@ object FocusShadeUpdate {
 
     private fun write(target: JsonObject, sequence: Long, cancel: Boolean, orderId: String?) {
         target.addProperty("updatable", true)
-        target.addProperty("isShowNotification", false)
+        target.addProperty("isShowNotification", !cancel)
         target.addProperty("sequence", sequence)
         if (!orderId.isNullOrBlank()) target.addProperty("orderId", orderId)
         if (cancel) target.addProperty("cancel", true) else target.remove("cancel")

@@ -40,12 +40,6 @@
     <string name="group_configuration">設定</string>
     <string name="system_setup">系統設定</string>
     <string name="system_setup_subtitle">修正權限 &amp; 電池設定</string>
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">永久超級島</string>
-    <string name="permanent_island_desc">當沒有活動通知時，保持超級島在螢幕上永久可見。</string>
-    <string name="permanent_island_screen_desc">啟用後，螢幕上將永久顯示一個空白的超級島。當收到實際通知時，它會自動隱藏；當所有通知清除後，它會自動重新出現。此超級島不會顯示在通知欄中。</string>
-    <string name="permanent_island_width">超級島寬度</string>
-    <string name="permanent_island_hide_landscape">在橫向中隱藏</string>
     <string name="group_about">關於</string>
     <string name="special_thanks">特別感謝</string>
     <string name="xmsf_workaround_credit_title">小米服務框架解決方法</string>

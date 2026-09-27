@@ -308,7 +308,6 @@ class IslandUpdateResolverTest {
         assertTrue(first < -1_000_000_000)
         assertTrue(second < -1_000_000_000)
         assertEquals(first, second)
-        assertTrue(first != PermanentIslandManager.PERMANENT_BRIDGE_ID)
         assertTrue(first != MessageBridgeIdPolicy.candidate("conversation-b", 2L, 123))
     }
 
@@ -340,15 +339,6 @@ class IslandUpdateResolverTest {
 
         registry.mark(43, "conversation-a", generation = 3L, now = 2_000L)
         assertEquals(null, registry.consume(43, now = 2_101L))
-    }
-
-    @Test
-    fun permanentIslandIsOnlyDesiredWhenNoRealOrNativeIslandExists() {
-        assertTrue(PermanentIslandVisibilityPolicy.desiredActive(true, 0, false, false, false))
-        assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 1, false, false, false))
-        assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 0, true, false, false))
-        assertFalse(PermanentIslandVisibilityPolicy.desiredActive(true, 0, false, true, true))
-        assertFalse(PermanentIslandVisibilityPolicy.desiredActive(false, 0, false, false, false))
     }
 
     @Test

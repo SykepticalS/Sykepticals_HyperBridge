@@ -40,12 +40,6 @@
     <string name="group_configuration">Yapılandırma</string>
     <string name="system_setup">Sistem Ayarları</string>
     <string name="system_setup_subtitle">İzinleri &amp; pili düzelt</string>
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">Kalıcı ada</string>
-    <string name="permanent_island_desc">\"Aktif bildirim yokken Dinamik Ada\'nın ekranda sürekli görünmesini sağlar.</string>
-    <string name="permanent_island_screen_desc">Etkinleştirildiğinde, ekranınızda kalıcı olarak boş bir Dinamik Ada gösterilir. Gerçek bildirimler geldiğinde otomatik olarak gizlenir ve tüm bildirimler temizlendiğinde yeniden görünür. Bildirim panelinizde ise görünmez.</string>
-    <string name="permanent_island_width">Ada Genişliği</string>
-    <string name="permanent_island_hide_landscape">Hide in Landscape</string>
     <string name="group_about">Hakkında</string>
     <string name="special_thanks">Special Thanks</string>
     <string name="xmsf_workaround_credit_title">XMSF Workaround</string>

@@ -56,7 +56,7 @@ class VpnTranslator(
             priority = ISLAND_PRIORITY,
             // A missing islandTimeout makes HyperOS apply its roughly 30-second default. The
             // controller owns this Island's lifecycle and cancels it when the VPN session ends,
-            // so use the same effectively-permanent timeout strategy as PermanentIslandManager.
+            // so use a one-day timeout as a guard against ordinary controller refreshes.
             timeout = PERSISTENT_ISLAND_TIMEOUT_MILLIS,
             dismissible = false,
             highlightColor = highlight,
@@ -179,8 +179,7 @@ class VpnTranslator(
         const val PIC_POWER = "vpn_power"
         const val PIC_MANAGE = "vpn_manage"
         const val TIMER_TYPE_COUNT_UP = 1
-        // HyperOS interprets islandTimeout as milliseconds. Match PermanentIslandManager's
-        // proven one-day value so ordinary controller refreshes cannot visibly expire the pill.
+        // HyperOS interprets islandTimeout as milliseconds.
         const val PERSISTENT_ISLAND_TIMEOUT_MILLIS = 86_400_000
         const val ISLAND_PRIORITY = 1
         const val ACTION_ORIENTED_ISLAND_PROPERTY = 2

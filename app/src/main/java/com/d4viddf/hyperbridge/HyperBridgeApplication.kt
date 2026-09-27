@@ -31,31 +31,35 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
         getSharedPreferences(IslandProtocol.REMOTE_PREFS, MODE_PRIVATE)
     }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> syncHookConfig() }
+    private val configSyncStarted = AtomicBoolean(false)
     private val policySyncStarted = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
         XposedServiceHelper.registerListener(this)
-        config.registerOnSharedPreferenceChangeListener(listener)
-        HookConfigSync.initialize(this)
 
-        startPolicySyncWhenUnlocked()
+        startCredentialProtectedStateWhenUnlocked()
         scope.launch {
             val rootAvailable = RootShellService.isAvailable()
             EnvironmentRuntime.setRootAvailable(rootAvailable)
         }
     }
 
-    private fun startPolicySyncWhenUnlocked() {
+    private fun startCredentialProtectedStateWhenUnlocked() {
         if (getSystemService(UserManager::class.java)?.isUserUnlocked == false) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
                     unregisterReceiver(this)
-                    startPolicySyncWhenUnlocked()
+                    startCredentialProtectedStateWhenUnlocked()
                 }
             }
             registerReceiver(receiver, IntentFilter(Intent.ACTION_USER_UNLOCKED), Context.RECEIVER_NOT_EXPORTED)
             return
+        }
+        if (configSyncStarted.compareAndSet(false, true)) {
+            config.registerOnSharedPreferenceChangeListener(listener)
+            HookConfigSync.initialize(this)
+            syncHookConfig()
         }
         if (!policySyncStarted.compareAndSet(false, true)) return
         val preferences = AppPreferences(this)
@@ -108,6 +112,7 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
     }
 
     fun syncHookConfig() {
+        if (getSystemService(UserManager::class.java)?.isUserUnlocked == false) return
         val service = xposedService ?: return
         runCatching {
             val remote = service.getRemotePreferences(IslandProtocol.REMOTE_PREFS)

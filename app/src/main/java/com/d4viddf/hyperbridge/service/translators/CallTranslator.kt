@@ -67,7 +67,6 @@ class CallTranslator(
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
         builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
-        builder.setShowNotification(config.isShowShade ?: true)
 
         val hiddenKey = "hidden_pixel"
         builder.addPicture(resolveIcon(sbn, picKey, preferNativeAppBadge = false))
@@ -106,11 +105,18 @@ class CallTranslator(
             it.actionImage?.let { pic -> builder.addPicture(pic) }
         }
 
-        builder.setChatInfo(
+        val expanded = ExpandedFocusContent.call(
             title = title,
-            content = rightText,
+            detail = rightText,
             pictureKey = picKey,
             actionKeys = actionKeys,
+        )
+        builder.setShowNotification(expanded.showInShade)
+        builder.setChatInfo(
+            title = expanded.title,
+            content = expanded.detail,
+            pictureKey = expanded.pictureKey,
+            actionKeys = expanded.actionKeys,
             // The avatar already carries the composited app badge. A real package here makes
             // Xiaomi draw a second native badge beside it.
             appPkg = hiddenKey,

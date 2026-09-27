@@ -1,10 +1,14 @@
 package com.d4viddf.hyperbridge.service
 
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Binder
 import android.os.Bundle
 import android.os.IBinder
+import android.os.UserManager
 import android.service.notification.StatusBarNotification
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
@@ -21,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap
 class NotificationProcessingService : Service() {
     private val activeSources = ConcurrentHashMap<String, StatusBarNotification>()
     private lateinit var engine: NotificationProcessingEngine
+    private var unlockReceiver: BroadcastReceiver? = null
+    @Volatile private var pendingPreserveVisibleIslands = false
 
     private val binder = object : INotificationProcessingService.Stub() {
         override fun attachDispatcher(dispatcher: IIslandDispatcher?) {
@@ -34,10 +40,11 @@ class NotificationProcessingService : Service() {
             val sbn = posted.statusBarNotification() ?: return false
             sbn.notification.extras.remove(IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP)
             activeSources[sbn.key] = sbn
+            if (!::engine.isInitialized) return false
             engine.onNotificationPosted(sbn)
-            sbn.notification.extras.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION)?.let { decoration ->
-                posted.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
-                sbn.notification.extras.remove(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION)
+            sbn.notification.extras.getBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION)?.let { decoration ->
+                posted.putBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION, decoration)
+                sbn.notification.extras.remove(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION)
             }
             if (sbn.notification.extras.getBoolean(IslandProtocol.EXTRA_CALL_SHADE_DISMISSIBLE, false)) {
                 posted.putBoolean(IslandProtocol.EXTRA_CALL_SHADE_DISMISSIBLE, true)
@@ -55,6 +62,7 @@ class NotificationProcessingService : Service() {
             activeSources.computeIfPresent(sbn.key) { _, current ->
                 current.takeUnless { it.postTime == sbn.postTime }
             }
+            if (!::engine.isInitialized) return
             engine.onNotificationRemoved(sbn, request.getInt(KEY_REASON, 0))
         }
 
@@ -63,30 +71,59 @@ class NotificationProcessingService : Service() {
             val snapshot = request?.statusBarNotifications().orEmpty()
             activeSources.clear()
             snapshot.forEach { activeSources[it.key] = it }
+            pendingPreserveVisibleIslands =
+                request?.getBoolean(KEY_PRESERVE_VISIBLE_ISLANDS, false) == true
+            if (!::engine.isInitialized) return
             engine.onIngressConnected(
-                preserveVisibleIslands = request?.getBoolean(KEY_PRESERVE_VISIBLE_ISLANDS, false) == true,
+                preserveVisibleIslands = pendingPreserveVisibleIslands,
             )
         }
 
         override fun reload() {
             enforceSystemUiCaller()
+            if (!::engine.isInitialized) return
             engine.handleCommand(Intent(NotificationProcessingEngine.ACTION_RELOAD_THEME))
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        if (getSystemService(UserManager::class.java)?.isUserUnlocked == false) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    unlockReceiver?.let { runCatching { unregisterReceiver(it) } }
+                    unlockReceiver = null
+                    initializeEngine()
+                }
+            }
+            unlockReceiver = receiver
+            registerReceiver(
+                receiver,
+                IntentFilter(Intent.ACTION_USER_UNLOCKED),
+                Context.RECEIVER_NOT_EXPORTED,
+            )
+        } else {
+            initializeEngine()
+        }
+    }
+
+    @Synchronized
+    private fun initializeEngine() {
+        if (::engine.isInitialized) return
         engine = NotificationProcessingEngine.create(
             appContext = this,
             activeNotificationsProvider = { activeSources.values.toTypedArray() },
             cancelSourceNotificationByKey = ::requestSourceCancellation,
             islandBackend = SystemUiIslandBackend.get(this),
         )
+        engine.onIngressConnected(preserveVisibleIslands = pendingPreserveVisibleIslands)
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        unlockReceiver?.let { runCatching { unregisterReceiver(it) } }
+        unlockReceiver = null
         if (::engine.isInitialized) engine.shutdown()
         super.onDestroy()
     }

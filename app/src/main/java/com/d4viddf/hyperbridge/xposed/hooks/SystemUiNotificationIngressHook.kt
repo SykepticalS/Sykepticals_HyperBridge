@@ -15,6 +15,7 @@ import com.d4viddf.hyperbridge.processing.IIslandDispatcher
 import com.d4viddf.hyperbridge.xposed.dispatch.SystemUiDispatcher
 import com.d4viddf.hyperbridge.service.FocusShadeUpdate
 import com.d4viddf.hyperbridge.service.NotificationProcessingService
+import com.d4viddf.hyperbridge.service.SourceFocusShadePolicy
 import com.d4viddf.hyperbridge.service.NotificationLifecyclePolicy
 import com.d4viddf.hyperbridge.service.ShadeEntryIdentity
 import com.d4viddf.hyperbridge.service.ShadeReplayPolicy
@@ -282,7 +283,7 @@ object SystemUiNotificationIngressHook {
             }
             val replaced = remote.processPosted(request)
             resident[sbn.key] = incoming
-            applyCallFocusDecoration(sbn, request)
+            applySourceFocusDecoration(sbn, request)
             allowCallShadeDismissal(sbn, request)
             if (replaced) markSourceHeadsUpSuppressed(sbn)
             if (replaced) module.log(
@@ -312,7 +313,7 @@ object SystemUiNotificationIngressHook {
                 }
                 val replaced = remote.processPosted(request)
                 resident[key] = incoming
-                applyCallFocusDecoration(sbn, request)
+                applySourceFocusDecoration(sbn, request)
                 allowCallShadeDismissal(sbn, request)
                 if (replaced) markSourceHeadsUpSuppressed(sbn)
             }.onSuccess {
@@ -324,16 +325,29 @@ object SystemUiNotificationIngressHook {
         }
     }
 
-    private fun applyCallFocusDecoration(sbn: StatusBarNotification, request: Bundle) {
-        val decoration = request.getBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) ?: return
+    private fun applySourceFocusDecoration(sbn: StatusBarNotification, request: Bundle) {
+        val decoration = request.getBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION) ?: return
+        val cancelling = FocusShadeUpdate.cancels(decoration.getString("miui.focus.param"))
+        val clearShadeViews = SourceFocusShadePolicy.clearCustomShadeViews(
+            replacingShade = decoration.getBoolean(IslandProtocol.EXTRA_SOURCE_FOCUS_REPLACE_SHADE, false),
+            cancelling = cancelling,
+        )
         sbn.notification.extras.putAll(decoration)
-        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "VOICE_MESSAGE" &&
-            !FocusShadeUpdate.cancels(decoration.getString("miui.focus.param"))
-        ) {
-            // Playback rows are low-importance and silent. Ongoing keeps the island alive.
-            // Leave contentView / bigContentView alone so WhatsApp and Instagram keep
-            // posting their own shade row.
-            sbn.notification.flags = sbn.notification.flags or android.app.Notification.FLAG_ONGOING_EVENT
+        if (clearShadeViews) {
+            // The app's custom shade layout is what HyperOS would otherwise keep. The Focus
+            // card is the expanded-island presentation and has to be the only shade row.
+            sbn.notification.contentView = null
+            sbn.notification.bigContentView = null
+            sbn.notification.headsUpContentView = null
+        }
+        if (decoration.containsKey(IslandProtocol.EXTRA_SOURCE_FOCUS_ONGOING) && !cancelling) {
+            val ongoing = decoration.getBoolean(IslandProtocol.EXTRA_SOURCE_FOCUS_ONGOING, false)
+            val flag = android.app.Notification.FLAG_ONGOING_EVENT
+            sbn.notification.flags = if (ongoing) {
+                sbn.notification.flags or flag
+            } else {
+                sbn.notification.flags and flag.inv()
+            }
         }
     }
 

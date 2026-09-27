@@ -3,6 +3,7 @@ package com.d4viddf.hyperbridge.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.UserManager
 import android.util.Log
 
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,10 @@ class BootReceiver : BroadcastReceiver() {
         val isTest = action == "com.d4viddf.hyperbridge.ACTION_TEST_MIGRATION"
 
         if (!isMajor && !isMinor && !isTest) return
+        if (context.getSystemService(UserManager::class.java)?.isUserUnlocked == false) {
+            Log.d("HyperBridge", "Deferring credential-protected migration until user unlock")
+            return
+        }
 
         Log.d("HyperBridge", "Trigger event detected: $action")
 
@@ -35,8 +40,8 @@ class BootReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 2. Migration Logic (Major or Test only)
-                if (isMajor || isTest) {
+                // USER_UNLOCKED performs work deferred from LOCKED_BOOT_COMPLETED.
+                if (isMajor || action == Intent.ACTION_USER_UNLOCKED || isTest) {
                     Log.d("HyperBridge", "Major trigger: Performing database migration.")
                     AppDatabase.performMigration(context) { progress ->
                         Log.d("HyperBridge", "Migration progress: $progress%")

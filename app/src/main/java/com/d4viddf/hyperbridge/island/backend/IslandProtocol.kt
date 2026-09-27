@@ -35,9 +35,18 @@ object IslandProtocol {
     // Keep this identical to HyperIsland's IslandDispatchContract so the source marker and the
     // copied SystemUI suppression hook share the same proven contract.
     const val EXTRA_SUPPRESS_SOURCE_HEADS_UP = "hyperisland.suppress_source_heads_up"
-    /** Source call notification is carrying the island focus payload instead of a SystemUI proxy. */
-    const val EXTRA_CALL_FOCUS = "hyperbridge.call_focus"
-    const val EXTRA_CALL_FOCUS_DECORATION = "hyperbridge.call_focus_decoration"
+    /**
+     * The source notification carries the island Focus payload instead of a SystemUI proxy.
+     * The wire values stay call-named so decorations already in flight still match.
+     */
+    const val EXTRA_SOURCE_FOCUS = "hyperbridge.call_focus"
+    const val EXTRA_SOURCE_FOCUS_DECORATION = "hyperbridge.call_focus_decoration"
+    const val EXTRA_CALL_FOCUS = EXTRA_SOURCE_FOCUS
+    const val EXTRA_CALL_FOCUS_DECORATION = EXTRA_SOURCE_FOCUS_DECORATION
+    /** Replace the app's shade row with the expanded Focus card. */
+    const val EXTRA_SOURCE_FOCUS_REPLACE_SHADE = "hyperbridge.source_focus_replace_shade"
+    /** Whether this source must stay ongoing so a low-priority Focus card is not dropped. */
+    const val EXTRA_SOURCE_FOCUS_ONGOING = "hyperbridge.source_focus_ongoing"
     /** Call island is showing, so the source shade entry must stay user-dismissable. */
     const val EXTRA_CALL_SHADE_DISMISSIBLE = "hyperbridge.call_shade_dismissible"
     const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"

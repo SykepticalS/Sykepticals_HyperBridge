@@ -8,7 +8,7 @@ Do NOT use:
 adb install ...
 ```
 
-Do NOT switch to USB debugging just because a normal ADB install fails.
+
 
 Assume the device is rooted and wireless ADB is already connected unless the connection itself is unavailable.
 
@@ -43,3 +43,4 @@ adb shell su -c "rm -f /data/local/tmp/__codex_install.apk"
 If installing multiple APK files individually, repeat the same push → root install → cleanup sequence for each APK.
 
 When an APK is built as part of the current task and needs to be installed on the device, automatically use this installation method rather than asking how it should be installed.
+

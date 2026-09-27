@@ -92,8 +92,7 @@ object ScreenRecordingSavedPayloadFactory {
                     dismissIsland = true,
                     expandedTime = expandedTime,
                     highlightColor = highlightColor,
-                    // Keep the proven Permanent Island big-area anchor, but populate its two
-                    // visual slots. With no content intent and no expanded content this remains
+                    // Populate both big-area visual slots. With no content intent and no expanded content this remains
                     // non-touchable while HyperOS still renders it around the camera cutout.
                     bigIslandArea = BigIslandArea(
                         imageTextInfoLeft = ImageTextInfoLeft(

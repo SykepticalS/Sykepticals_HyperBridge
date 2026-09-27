@@ -183,9 +183,7 @@ class NotificationProcessingEngine private constructor(
     private val messageFamilyTracker = MessagePresentationFamilyTracker()
     private val expiredIslands = ExpiredIslandRegistry()
     private val timeoutJobs = ConcurrentHashMap<String, Job>()
-    private val lastPostedIslands = ConcurrentHashMap<String, Notification>()
     private val removalJobs = ConcurrentHashMap<String, Job>()
-    private lateinit var permanentIslandManager: PermanentIslandManager
     @Volatile private var vpnIslandActive = false
     private lateinit var vpnIslandController: VpnIslandController
     private val intentionallyRemovedKeys = ConcurrentHashMap<String, Long>()
@@ -332,7 +330,6 @@ class NotificationProcessingEngine private constructor(
             WidgetManager.init(this)
         }
 
-        permanentIslandManager = PermanentIslandManager(this, serviceScope, preferences)
         vpnIslandController = VpnIslandController(
             this,
             serviceScope,
@@ -341,7 +338,7 @@ class NotificationProcessingEngine private constructor(
             initialNotifications = activeNotificationsProvider,
             onIslandActiveChanged = { active ->
                 vpnIslandActive = active
-                updatePermanentIsland()
+                updateIslandDiagnostics()
             }
         )
         vpnIslandController.start()
@@ -523,7 +520,7 @@ class NotificationProcessingEngine private constructor(
         sbn?.let {
             if (::vpnIslandController.isInitialized) vpnIslandController.onSourceNotificationRemoved(it)
             if (nativeIslands.remove(it.key)) {
-                updatePermanentIsland()
+                updateIslandDiagnostics()
             }
 
             val isOwnedBridge = isOwnedBridgeNotification(it)
@@ -617,24 +614,12 @@ class NotificationProcessingEngine private constructor(
                     val widgetId = notifId - WIDGET_ID_BASE
                     dismissedWidgetIds.add(widgetId)
                     activeWidgets.remove(widgetId)
-                    updatePermanentIsland()
+                    updateIslandDiagnostics()
                     return
                 }
                 if (notifId == VpnIslandController.NOTIFICATION_ID) {
                     return
                 }
-                if (notifId == PermanentIslandManager.PERMANENT_BRIDGE_ID) {
-                    val occupant = permanentIslandManager.occupyingLogicalId()
-                    if (occupant == null) {
-                        return
-                    }
-                    permanentIslandManager.markPostedAbsent()
-                    val island = activeIslands[occupant]
-                    retireFromRecovery(island)
-                    cleanupCache(occupant)
-                    return
-                }
-
                 var originalKey = reverseTranslations[notifId]
                 if (originalKey == null) {
                     originalKey = it.notification.extras.getString(EXTRA_ORIGINAL_KEY)
@@ -753,9 +738,11 @@ class NotificationProcessingEngine private constructor(
                                 return@withLock
                             }
                             timeoutJobs.remove(logicalKey)?.cancel()
-                            try {
-                                islandBackend.cancel(hyperId)
-                            } catch (_: Exception) {}
+                            if (current.sourceFocus != true) {
+                                try {
+                                    islandBackend.cancel(hyperId)
+                                } catch (_: Exception) {}
+                            }
                             Log.d(
                                 TAG,
                                 "${islandType?.name ?: "UNKNOWN"} REMOVE reason=$reason " +
@@ -837,8 +824,6 @@ class NotificationProcessingEngine private constructor(
         val island = activeIslands.remove(originalKey)
         activeTranslations.remove(originalKey)
         timeoutJobs.remove(originalKey)?.cancel()
-        cancelPermanentSlotAutoExpand(originalKey)
-        lastPostedIslands.remove(originalKey)
         if (island?.type == NotificationType.CALL && !preserveCallSession) {
             callSessionTracker.end(island.logicalId)
         }
@@ -855,8 +840,7 @@ class NotificationProcessingEngine private constructor(
             reverseTranslations.remove(hyperId)
         }
         sourceToLogicalKeys.entries.removeIf { it.value == originalKey }
-        updatePermanentIsland()
-        schedulePermanentSlotReconcile()
+        updateIslandDiagnostics()
     }
 
     private fun handlePostNotificationSideEffects(
@@ -871,8 +855,11 @@ class NotificationProcessingEngine private constructor(
         text: String = "",
         forceLifecycleTimeout: Boolean = false
     ) {
-        // 1. Remove original if enabled (EXCEPT for Media and Call)
-        if (config.removeOriginalNotification == true && type != NotificationType.MEDIA && type != NotificationType.CALL) {
+        // 1. Remove original if enabled. Source-focus types must stay posted: they carry the card.
+        if (config.removeOriginalNotification == true &&
+            type != NotificationType.MEDIA &&
+            !NotificationLifecyclePolicy.carriesVisibleSourceFocus(type)
+        ) {
             if (sbn != null && !isLiveUpdate && (type == NotificationType.MESSAGE || type == NotificationType.STANDARD)) {
                 postWatchRelayNotification(sbn, title, text)
             }
@@ -908,9 +895,7 @@ class NotificationProcessingEngine private constructor(
                     current ?: return@withLock
                     Log.d(TAG, "${type.name} TIMEOUT bridgeId=$bridgeId logicalId=${originalKey.hashCode()}")
                     retireFromRecovery(current)
-                    if (bridgeId != PermanentIslandManager.PERMANENT_BRIDGE_ID) {
-                        islandBackend.cancel(bridgeId, PermanentIslandSlotPolicy.logicalToken(bridgeId))
-                    }
+                    islandBackend.cancel(bridgeId)
                     cleanupCache(originalKey)
                 }
             }
@@ -1028,268 +1013,23 @@ class NotificationProcessingEngine private constructor(
 
     private fun logStateChange(isLandscape: Boolean) {
         val orientation = if (isLandscape) "Landscape" else "Portrait"
-        val isIslandExhibited = activeIslands.isNotEmpty() || activeWidgets.isNotEmpty() || vpnIslandActive || nativeIslands.isNotEmpty() || permanentIslandManager.isIslandActive()
+        val isIslandExhibited = activeIslands.isNotEmpty() || activeWidgets.isNotEmpty() ||
+            vpnIslandActive || nativeIslands.isNotEmpty()
         val islandState = if (isIslandExhibited) "Showing Island" else "No Island"
         Log.d(TAG, "State: $orientation | $islandState")
     }
 
-    private fun updatePermanentIsland() {
-        permanentIslandManager.onActiveNotificationsChanged(activeIslandCount(), nativeIslands.isNotEmpty())
+    private fun updateIslandDiagnostics() {
         DiagnosticsStore.setActiveIslands(activeIslands.size + if (vpnIslandActive) 1 else 0)
         val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         logStateChange(isLandscape)
-    }
-
-    private data class PermanentSlotRepublish(
-        val lockExpansion: Boolean,
-        val autoExpand: Boolean = false,
-    )
-
-    @Volatile private var permanentSlotRepublishInFlight = false
-    private val permanentAutoExpandJobs = ConcurrentHashMap<String, Job>()
-
-    private fun planPermanentSlot(
-        logicalId: String,
-        previous: ActiveIsland?,
-        alreadyPosted: Boolean,
-        eligible: Boolean,
-        republish: PermanentSlotRepublish?,
-    ): PermanentSlotPostPlan {
-        val occupant = permanentIslandManager.occupyingLogicalId()
-        return PermanentIslandSlotPolicy.postPlan(
-            slotAvailable = permanentIslandManager.isSlotAvailable(),
-            occupyingLogicalId = occupant,
-            occupantStillActive = occupant != null && activeIslands.containsKey(occupant),
-            expansionLocked = permanentIslandManager.isExpansionLocked(),
-            permanentPosted = permanentIslandManager.isIslandActive(),
-            logicalId = logicalId,
-            alreadyPosted = alreadyPosted,
-            previousBridgeId = previous?.id,
-            eligible = eligible,
-            forcePermanent = republish != null,
-            forceLockExpansion = republish?.lockExpansion == true,
-            forceUnlockExpansion = republish?.autoExpand == true,
-        )
-    }
-
-    private fun rememberPermanentOccupancy(
-        logicalId: String,
-        bridgeId: Int,
-        isNewIsland: Boolean,
-        lockExpansion: Boolean,
-        autoExpand: Boolean = false,
-    ) {
-        if (bridgeId != PermanentIslandManager.PERMANENT_BRIDGE_ID) return
-        permanentIslandManager.occupy(
-            logicalId,
-            unlockExpansion = autoExpand || (isNewIsland && !lockExpansion),
-        )
-        if (lockExpansion && !autoExpand) permanentIslandManager.lockExpansion()
-    }
-
-    private fun collapsePermanentSlotPresentation(
-        slotPlan: PermanentSlotPostPlan,
-        republish: PermanentSlotRepublish?,
-    ): Boolean = republish?.autoExpand != true && (slotPlan.lockExpansion || slotPlan.deferAutoExpand)
-
-    private fun finishPermanentSlotPost(
-        logicalId: String,
-        postedId: Int,
-        isNewIsland: Boolean,
-        slotPlan: PermanentSlotPostPlan,
-        republish: PermanentSlotRepublish?,
-        mayAutoExpand: Boolean,
-    ) {
-        val collapse = collapsePermanentSlotPresentation(slotPlan, republish)
-        rememberPermanentOccupancy(
-            logicalId,
-            postedId,
-            isNewIsland,
-            collapse,
-            autoExpand = republish?.autoExpand == true,
-        )
-        if (
-            postedId == PermanentIslandManager.PERMANENT_BRIDGE_ID &&
-            slotPlan.deferAutoExpand &&
-            mayAutoExpand &&
-            republish == null
-        ) {
-            schedulePermanentSlotAutoExpand(logicalId)
-        }
     }
 
     private fun releasePreviousBridgeIfMoved(previous: ActiveIsland?, postedId: Int) {
         val previousId = previous?.id ?: return
         if (previousId == postedId) return
         reverseTranslations.remove(previousId)
-        islandBackend.cancel(previousId, PermanentIslandSlotPolicy.logicalToken(previousId))
-    }
-
-    private fun eligiblePermanentSlotIslands(): List<PermanentSlotIslandRef> =
-        activeIslands.values
-            .filter { !it.sourceFocus }
-            .map { PermanentSlotIslandRef(it.logicalId, it.id, it.postTime) }
-
-    private fun schedulePermanentSlotReconcile() {
-        if (permanentSlotRepublishInFlight) return
-        serviceScope.launch {
-            notificationLifecycleMutex.withLock {
-                reconcilePermanentSlotLocked()
-            }
-        }
-    }
-
-    private suspend fun reconcilePermanentSlotLocked() {
-        val plan = PermanentIslandSlotPolicy.afterRemoval(
-            slotAvailable = permanentIslandManager.isSlotAvailable(),
-            occupyingLogicalId = permanentIslandManager.occupyingLogicalId(),
-            remaining = eligiblePermanentSlotIslands(),
-        )
-        when (plan.action) {
-            PermanentSlotAfterRemoval.NONE -> Unit
-            PermanentSlotAfterRemoval.RESTORE_STUB -> {
-                cancelAllPermanentSlotAutoExpand()
-                permanentIslandManager.restoreStub()
-            }
-            PermanentSlotAfterRemoval.COLLAPSE_LAST_ON_PERMANENT,
-            PermanentSlotAfterRemoval.ADOPT_LAST_ONTO_PERMANENT -> {
-                val logicalId = plan.lastLogicalId ?: return
-                val island = activeIslands[logicalId] ?: return
-                cancelAllPermanentSlotAutoExpand()
-                convertIslandOntoPermanentSlot(island)
-            }
-        }
-    }
-
-    /**
-     * Fold the last remaining island onto 9999 in place, the reverse of occupying the stub:
-     * same Focus identity (`permanent`, 9999), then retire any extra notify id.
-     */
-    private fun convertIslandOntoPermanentSlot(island: ActiveIsland) {
-        val cached = lastPostedIslands[island.logicalId]
-        if (cached == null) {
-            permanentIslandManager.lockExpansion()
-            if (island.id == PermanentIslandManager.PERMANENT_BRIDGE_ID) {
-                permanentIslandManager.occupy(island.logicalId, unlockExpansion = false)
-            }
-            return
-        }
-        val collapsed = collapsedPermanentNotification(cached, island)
-        val inPlace = permanentIslandManager.isIslandActive() ||
-            permanentIslandManager.occupyingLogicalId() != null
-        val posted = postIsland(
-            PermanentIslandManager.PERMANENT_BRIDGE_ID,
-            collapsed,
-            PermanentIslandManager.PERMANENT_LOGICAL_TOKEN,
-            source = null,
-            semanticType = island.type,
-            generation = System.currentTimeMillis(),
-            inPlaceUpdate = inPlace,
-        )
-        if (!posted) {
-            permanentIslandManager.lockExpansion()
-            return
-        }
-        lastPostedIslands[island.logicalId] = collapsed
-        rememberPermanentOccupancy(
-            island.logicalId,
-            PermanentIslandManager.PERMANENT_BRIDGE_ID,
-            isNewIsland = false,
-            lockExpansion = true,
-        )
-        if (island.id != PermanentIslandManager.PERMANENT_BRIDGE_ID) {
-            reverseTranslations.remove(island.id)
-            islandBackend.cancel(island.id, PermanentIslandSlotPolicy.logicalToken(island.id))
-        }
-        activeTranslations[island.logicalId] = PermanentIslandManager.PERMANENT_BRIDGE_ID
-        reverseTranslations[PermanentIslandManager.PERMANENT_BRIDGE_ID] = island.logicalId
-        activeIslands[island.logicalId] = island.copy(id = PermanentIslandManager.PERMANENT_BRIDGE_ID)
-        updatePermanentIsland()
-    }
-
-    private fun collapsedPermanentNotification(
-        notification: Notification,
-        island: ActiveIsland,
-    ): Notification {
-        val collapsedFlags = IslandFloatingPresentationPolicy.resolve(
-            firstFloat = false,
-            floatOnUpdate = false,
-            isUpdate = true,
-            expansionLocked = true,
-        )
-        notification.extras.getString("miui.focus.param")?.let { json ->
-            val sequenceKey = island.sourceKey.ifBlank { island.logicalId }
-            notification.extras.putString(
-                "miui.focus.param",
-                FocusShadeUpdate.stamp(
-                    injectPresentationFloat(json, collapsedFlags, lockExpansion = true),
-                    FocusShadeUpdate.nextSequence(sequenceKey),
-                    orderId = FocusShadeUpdate.orderIdFor(sequenceKey),
-                ),
-            )
-        }
-        notification.extras.putBoolean("miui.enableFloat", false)
-        notification.extras.putBoolean("miui.island.updateNoFloat", true)
-        return notification
-    }
-
-    private suspend fun republishOntoPermanentSlot(island: ActiveIsland, autoExpand: Boolean = false) {
-        val sbn = try {
-            activeNotificationsProvider().firstOrNull { it.key == island.sourceKey }
-        } catch (_: Exception) {
-            null
-        }
-        if (sbn == null) {
-            if (autoExpand) return
-            permanentIslandManager.lockExpansion()
-            if (island.id == PermanentIslandManager.PERMANENT_BRIDGE_ID) {
-                permanentIslandManager.occupy(island.logicalId, unlockExpansion = false)
-            }
-            return
-        }
-        permanentSlotRepublishInFlight = true
-        try {
-            processStandardNotification(
-                rawSbn = sbn,
-                sbn = sbn,
-                sourceSlot = sourceSlotIdentity(sbn),
-                recovery = !autoExpand,
-                processingGeneration = island.generation,
-                callbackObservedAt = System.currentTimeMillis(),
-                permanentSlotRepublish = PermanentSlotRepublish(
-                    lockExpansion = !autoExpand,
-                    autoExpand = autoExpand,
-                ),
-            )
-        } finally {
-            permanentSlotRepublishInFlight = false
-        }
-    }
-
-    private fun schedulePermanentSlotAutoExpand(logicalId: String) {
-        cancelPermanentSlotAutoExpand(logicalId)
-        val job = serviceScope.launch {
-            delay(PermanentIslandSlotPolicy.AUTO_EXPAND_DELAY_MS.milliseconds)
-            notificationLifecycleMutex.withLock {
-                val island = activeIslands[logicalId] ?: return@withLock
-                if (island.id != PermanentIslandManager.PERMANENT_BRIDGE_ID) return@withLock
-                if (permanentIslandManager.occupyingLogicalId() != logicalId) return@withLock
-                if (!permanentIslandManager.isSlotAvailable()) return@withLock
-                republishOntoPermanentSlot(island, autoExpand = true)
-            }
-        }
-        permanentAutoExpandJobs[logicalId] = job
-        job.invokeOnCompletion { permanentAutoExpandJobs.remove(logicalId, job) }
-    }
-
-    private fun cancelPermanentSlotAutoExpand(logicalId: String) {
-        permanentAutoExpandJobs.remove(logicalId)?.cancel()
-    }
-
-    private fun cancelAllPermanentSlotAutoExpand() {
-        val jobs = permanentAutoExpandJobs.values.toList()
-        permanentAutoExpandJobs.clear()
-        jobs.forEach { it.cancel() }
+        islandBackend.cancel(previousId)
     }
 
     private fun injectPresentationFloat(
@@ -1304,10 +1044,7 @@ class NotificationProcessingEngine private constructor(
         expandedTimeMs = if (lockExpansion) 0 else null,
     )
 
-    private fun activeIslandCount(): Int = activeIslands.size + activeWidgets.size + if (vpnIslandActive) 1 else 0
-
     fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        permanentIslandManager.onOrientationChanged()
         logStateChange(newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
     }
 
@@ -1332,9 +1069,9 @@ class NotificationProcessingEngine private constructor(
                     }
                 }
                 if (isNative) {
-                    if (nativeIslands.add(it.key)) updatePermanentIsland()
+                    if (nativeIslands.add(it.key)) updateIslandDiagnostics()
                 } else {
-                    if (nativeIslands.remove(it.key)) updatePermanentIsland()
+                    if (nativeIslands.remove(it.key)) updateIslandDiagnostics()
                 }
             }
 
@@ -1778,7 +1515,6 @@ class NotificationProcessingEngine private constructor(
         recovery: Boolean = false,
         processingGeneration: Long,
         callbackObservedAt: Long,
-        permanentSlotRepublish: PermanentSlotRepublish? = null,
     ) {
         val manager = getSystemService(NotificationManager::class.java)
         val isSystemDndActive = manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
@@ -2098,24 +1834,13 @@ class NotificationProcessingEngine private constructor(
             val isSummary = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
             val incomingCallBanner = callSession?.state == CallState.INCOMING_RINGING &&
                 sbn.notification.fullScreenIntent != null
-            val replaceCallFocus = callSession != null
-            val replaceVoiceFocus = type == NotificationType.VOICE_MESSAGE
-            val replaceWithSourceFocus = replaceCallFocus || replaceVoiceFocus
+            val replaceWithSourceFocus = NotificationLifecyclePolicy.carriesVisibleSourceFocus(type)
             val actionFingerprint = NotificationActionIdentity.fingerprint(sbn)
             val actionsChanged = NotificationActionIdentity.changed(previous?.actionFingerprint, actionFingerprint)
-            val slotPlan = planPermanentSlot(
-                logicalId = effectiveKey,
-                previous = previous,
-                alreadyPosted = isUpdate,
-                eligible = !replaceWithSourceFocus,
-                republish = permanentSlotRepublish,
-            )
             val actionRefreshBridgeId = if (
-                actionsChanged &&
-                previous?.id != PermanentIslandManager.PERMANENT_BRIDGE_ID &&
-                !slotPlan.usePermanentSlot
+                actionsChanged && previous != null
             ) {
-                NotificationActionIdentity.refreshBridgeId(effectiveKey, actionFingerprint, previous?.id)
+                NotificationActionIdentity.refreshBridgeId(effectiveKey, actionFingerprint, previous.id)
             } else {
                 null
             }
@@ -2200,7 +1925,7 @@ class NotificationProcessingEngine private constructor(
                     actionRefreshBridgeId = actionRefreshBridgeId,
                 )
 
-                if (decision.kind == IslandPresentationKind.UNCHANGED && permanentSlotRepublish == null) {
+                if (decision.kind == IslandPresentationKind.UNCHANGED) {
                     markSourceHeadsUpSuppressed(sbn, incomingCallBanner)
                     return
                 }
@@ -2222,22 +1947,14 @@ class NotificationProcessingEngine private constructor(
                     updatable = NotificationLifecyclePolicy.isProgressLifecycle(type),
                 )
                 IslandVisualExtras.apply(notification.extras, visualPlan)
-                val postedId = when {
-                    slotPlan.usePermanentSlot -> PermanentIslandManager.PERMANENT_BRIDGE_ID
-                    slotPlan.migrateFromPermanent ->
-                        presentationBridgeId.takeUnless { it == PermanentIslandManager.PERMANENT_BRIDGE_ID }
-                            ?: effectiveKey.hashCode()
-                    else -> decision.bridgeId
-                }
-                val collapse = collapsePermanentSlotPresentation(slotPlan, permanentSlotRepublish)
+                val postedId = decision.bridgeId
                 val floatPresentation = IslandFloatingPresentationPolicy.resolve(
                     finalConfig.firstFloat ?: false,
                     finalConfig.floatOnUpdate ?: false,
-                    isUpdate = permanentSlotRepublish?.autoExpand != true &&
-                        decision.kind == IslandPresentationKind.UPDATE,
-                    expansionLocked = collapse,
+                    isUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                    expansionLocked = false,
                 )
-                if (collapse || (decision.kind == IslandPresentationKind.UPDATE && permanentSlotRepublish?.autoExpand != true)) {
+                if (decision.kind == IslandPresentationKind.UPDATE) {
                     notification.extras.putBoolean("miui.island.updateNoFloat", true)
                 }
                 notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
@@ -2247,7 +1964,7 @@ class NotificationProcessingEngine private constructor(
                         injectPresentationFloat(
                             IslandVisualMetadata.injectUpdatable(json, visualPlan.updatable),
                             floatPresentation,
-                            collapse,
+                            lockExpansion = false,
                         ),
                     )
                 }
@@ -2255,7 +1972,7 @@ class NotificationProcessingEngine private constructor(
                 if (decision.cancelBeforeNotify && previous?.id != postedId) {
                     previous?.id?.let { replacedBridgeId ->
                         internalBridgeReplacements.mark(replacedBridgeId, effectiveKey, processingGeneration, System.currentTimeMillis())
-                        islandBackend.cancel(replacedBridgeId, PermanentIslandSlotPolicy.logicalToken(replacedBridgeId))
+                        islandBackend.cancel(replacedBridgeId)
                         reverseTranslations.remove(replacedBridgeId)
                     }
                 }
@@ -2264,14 +1981,13 @@ class NotificationProcessingEngine private constructor(
                 if (!postIsland(
                         postedId,
                         notification,
-                        PermanentIslandSlotPolicy.logicalToken(postedId),
+                        postedId.toString(),
                         sbn,
                         type,
                         islandPostGeneration,
-                        inPlaceUpdate = slotPlan.notifyInPlace,
+                        inPlaceUpdate = isUpdate && !decision.cancelBeforeNotify,
                         incomingCallBanner = incomingCallBanner,
                     )) return
-                lastPostedIslands[effectiveKey] = notification
 
                 expiredIslands.acceptNewGeneration(
                     sbn.key,
@@ -2280,14 +1996,6 @@ class NotificationProcessingEngine private constructor(
                     effectiveKey
                 )
 
-                finishPermanentSlotPost(
-                    effectiveKey,
-                    postedId,
-                    decision.kind == IslandPresentationKind.NEW && permanentSlotRepublish == null,
-                    slotPlan,
-                    permanentSlotRepublish,
-                    finalConfig.firstFloat == true,
-                )
                 releasePreviousBridgeIfMoved(previous, postedId)
 
                 activeTranslations[effectiveKey] = postedId
@@ -2311,7 +2019,7 @@ class NotificationProcessingEngine private constructor(
                     messageEventFingerprint = messageEventFingerprint,
                     deleteIntent = sbn.notification.deleteIntent
                 )
-                updatePermanentIsland()
+                updateIslandDiagnostics()
 
                 handlePostNotificationSideEffects(effectiveKey, postedId, processingGeneration, finalConfig, type, true, sbn, effectiveTitle, effectiveText)
                 return
@@ -2399,22 +2107,17 @@ class NotificationProcessingEngine private constructor(
                 actionRefreshBridgeId = actionRefreshBridgeId,
             )
 
-            val supportsSourceFocus = type == NotificationType.CALL || type == NotificationType.VOICE_MESSAGE
-            val focusSemanticType = if (type == NotificationType.VOICE_MESSAGE) {
-                NotificationType.VOICE_MESSAGE
-            } else {
-                NotificationType.CALL
-            }
+            val supportsSourceFocus = replaceWithSourceFocus
+            val focusSemanticType = type
             val switchingFocusMode = supportsSourceFocus &&
                 previous != null &&
                 previous.sourceFocus != replaceWithSourceFocus
-            if (decision.kind == IslandPresentationKind.UNCHANGED && !switchingFocusMode &&
-                permanentSlotRepublish == null
-            ) {
+            if (decision.kind == IslandPresentationKind.UNCHANGED && !switchingFocusMode) {
                 val focusRefreshed = !replaceWithSourceFocus || !supportsSourceFocus ||
-                    attachSourceCallFocus(
+                    attachSourceFocus(
                         sbn, data, effectiveTitle, effectiveText, finalConfig, inPlaceUpdate = false,
                         semanticType = focusSemanticType,
+                        focusIdentity = effectiveKey,
                     )
                 if (focusRefreshed) {
                     markSourceHeadsUpSuppressed(sbn, incomingCallBanner)
@@ -2423,7 +2126,7 @@ class NotificationProcessingEngine private constructor(
             }
 
             if (replaceWithSourceFocus && supportsSourceFocus &&
-                attachSourceCallFocus(
+                attachSourceFocus(
                     sbn,
                     data,
                     effectiveTitle,
@@ -2431,6 +2134,7 @@ class NotificationProcessingEngine private constructor(
                     finalConfig,
                     inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE,
                     semanticType = focusSemanticType,
+                    focusIdentity = effectiveKey,
                 )
             ) {
                 if (previous != null && !previous.sourceFocus) {
@@ -2473,7 +2177,7 @@ class NotificationProcessingEngine private constructor(
                     deleteIntent = sbn.notification.deleteIntent,
                     sourceFocus = true,
                 )
-                updatePermanentIsland()
+                updateIslandDiagnostics()
                 handlePostNotificationSideEffects(
                     originalKey = effectiveKey,
                     bridgeId = decision.bridgeId,
@@ -2488,20 +2192,14 @@ class NotificationProcessingEngine private constructor(
                 return
             }
 
-            val postedId = when {
-                slotPlan.usePermanentSlot -> PermanentIslandManager.PERMANENT_BRIDGE_ID
-                slotPlan.migrateFromPermanent ->
-                    presentationBridgeId.takeUnless { it == PermanentIslandManager.PERMANENT_BRIDGE_ID }
-                        ?: effectiveKey.hashCode()
-                else -> decision.bridgeId
-            }
+            val postedId = decision.bridgeId
 
             // Same-conversation messages update the existing island in place. A new event from
             // another person still uses a different logical id and presents as NEW.
             if (decision.cancelBeforeNotify && previous?.id != postedId) {
                 previous?.id?.let { replacedBridgeId ->
                     internalBridgeReplacements.mark(replacedBridgeId, effectiveKey, processingGeneration, System.currentTimeMillis())
-                    islandBackend.cancel(replacedBridgeId, PermanentIslandSlotPolicy.logicalToken(replacedBridgeId))
+                    islandBackend.cancel(replacedBridgeId)
                     reverseTranslations.remove(replacedBridgeId)
                 }
             }
@@ -2524,13 +2222,11 @@ class NotificationProcessingEngine private constructor(
                 suppressContentIntent = false,
                 config = finalConfig,
                 updatableOverride = NotificationLifecyclePolicy.isProgressLifecycle(type),
-                inPlaceUpdate = slotPlan.notifyInPlace && !decision.cancelBeforeNotify,
-                floatAsUpdate = permanentSlotRepublish?.autoExpand != true &&
-                    decision.kind == IslandPresentationKind.UPDATE,
-                lockExpansion = collapsePermanentSlotPresentation(slotPlan, permanentSlotRepublish),
+                inPlaceUpdate = isUpdate && !decision.cancelBeforeNotify,
+                floatAsUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                lockExpansion = false,
                 postGeneration = System.currentTimeMillis(),
                 incomingCallBanner = incomingCallBanner,
-                logicalId = effectiveKey,
             )
             if (!posted) return
 
@@ -2541,14 +2237,6 @@ class NotificationProcessingEngine private constructor(
                 effectiveKey
             )
 
-            finishPermanentSlotPost(
-                effectiveKey,
-                postedId,
-                decision.kind == IslandPresentationKind.NEW && permanentSlotRepublish == null,
-                slotPlan,
-                permanentSlotRepublish,
-                finalConfig.firstFloat == true,
-            )
             releasePreviousBridgeIfMoved(previous, postedId)
 
             activeTranslations[effectiveKey] = postedId
@@ -2575,7 +2263,7 @@ class NotificationProcessingEngine private constructor(
                 deleteIntent = sbn.notification.deleteIntent,
                 dismissSourceOnContentClick = isSavedScreenRecording
             )
-            updatePermanentIsland()
+            updateIslandDiagnostics()
 
             handlePostNotificationSideEffects(
                 originalKey = effectiveKey,
@@ -2758,7 +2446,7 @@ class NotificationProcessingEngine private constructor(
         if (previous?.sourceFocus == true && session.state == CallState.ENDED) {
             // The shade row is the focus snapshot. A hang-up that only rewrites the dialer
             // notification is ignored until a newer payload sets cancel.
-            attachSourceFocusCancellation(sbn, NotificationType.CALL)
+            attachSourceFocusCancellation(sbn, NotificationType.CALL, logicalKey)
         }
         if (previous?.type == NotificationType.CALL) {
             activeTranslations[logicalKey]?.let { bridgeId ->
@@ -2890,7 +2578,6 @@ class NotificationProcessingEngine private constructor(
         lockExpansion: Boolean = false,
         postGeneration: Long = System.currentTimeMillis(),
         incomingCallBanner: Boolean = false,
-        logicalId: String? = null,
     ): Boolean {
         val notification = assembleIslandNotification(
             sbn = sbn,
@@ -2907,7 +2594,7 @@ class NotificationProcessingEngine private constructor(
         val posted = postIsland(
             bridgeId,
             notification,
-            PermanentIslandSlotPolicy.logicalToken(bridgeId),
+            bridgeId.toString(),
             sbn,
             detectNotificationType(sbn),
             postGeneration,
@@ -2915,7 +2602,6 @@ class NotificationProcessingEngine private constructor(
             incomingCallBanner = incomingCallBanner,
         )
         if (!posted) return false
-        if (logicalId != null) lastPostedIslands[logicalId] = notification
         return true
     }
 
@@ -3011,12 +2697,12 @@ class NotificationProcessingEngine private constructor(
     }
 
     /**
-     * Attaches island Focus extras to the source notification and leaves that notification posted.
-     * The app's own shade row is not replaced; HyperOS is told not to render a Focus card there.
-     * Returns false when the decoration is too large to travel back over the processing Binder
-     * call; the caller then posts the SystemUI proxy instead.
+     * Attaches the expanded Focus card to the source notification and leaves that notification
+     * posted. HyperOS replaces the app shade row with this card. Returns false when the
+     * decoration is too large to travel back over the processing Binder call; the caller then
+     * posts the SystemUI proxy instead.
      */
-    private fun attachSourceCallFocus(
+    private fun attachSourceFocus(
         sbn: StatusBarNotification,
         data: HyperIslandData,
         title: String,
@@ -3024,6 +2710,7 @@ class NotificationProcessingEngine private constructor(
         config: IslandConfig,
         inPlaceUpdate: Boolean,
         semanticType: NotificationType = NotificationType.CALL,
+        focusIdentity: String = sbn.key,
     ): Boolean {
         val notification = assembleIslandNotification(
             sbn = sbn,
@@ -3049,7 +2736,17 @@ class NotificationProcessingEngine private constructor(
             }
         }
         decoration.remove(IslandProtocol.EXTRA_OWNER)
-        decoration.putBoolean(IslandProtocol.EXTRA_CALL_FOCUS, true)
+        decoration.putBoolean(IslandProtocol.EXTRA_SOURCE_FOCUS, true)
+        decoration.putBoolean(IslandProtocol.EXTRA_SOURCE_FOCUS_REPLACE_SHADE, true)
+        decoration.putBoolean(
+            IslandProtocol.EXTRA_SOURCE_FOCUS_ONGOING,
+            SourceFocusShadePolicy.keepSourceOngoing(
+                type = semanticType,
+                finished = NotificationLifecyclePolicy.isProgressLifecycle(semanticType) &&
+                    isFinishedProgress(sbn),
+                cancelling = false,
+            ),
+        )
         decoration.putString(IslandProtocol.EXTRA_SOURCE_PACKAGE, sbn.packageName)
         // SystemUI names the island with MiuiBaseNotifUtil.getTargetPkg, which is this
         // notification's package. The exit animation matches that name to the closing app.
@@ -3059,40 +2756,41 @@ class NotificationProcessingEngine private constructor(
         if (focusParam.isNullOrBlank()) return false
         decoration.putString(
             "miui.focus.param",
-            FocusShadeUpdate.stampForSource(focusParam, sbn.key),
+            FocusShadeUpdate.stampForSource(focusParam, focusIdentity),
         )
         val size = runCatching { bundleSize(decoration) }.getOrElse { return false }
         if (size > SOURCE_FOCUS_DECORATION_LIMIT) {
-            Log.w(TAG, "Call focus decoration is $size bytes; keeping the SystemUI proxy")
+            Log.w(TAG, "Source focus decoration is $size bytes; keeping the SystemUI proxy")
             return false
         }
-        sbn.notification.extras.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
+        sbn.notification.extras.putBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION, decoration)
         return true
     }
 
     /**
-     * Asks HyperOS to drop the focus shade row and island for this source notification.
+     * Asks HyperOS to drop the Focus shade card and island for this source notification.
      * The source notification itself is what the shade is showing, so a proxy cancel cannot
      * reach it.
      */
     private fun attachSourceFocusCancellation(
         sbn: StatusBarNotification,
         semanticType: NotificationType,
+        focusIdentity: String = sbn.key,
     ) {
         val decoration = Bundle()
         decoration.putString(
             "miui.focus.param",
-            FocusShadeUpdate.cancelForSource(sbn.key),
+            FocusShadeUpdate.cancelForSource(focusIdentity),
         )
-        decoration.putBoolean(IslandProtocol.EXTRA_CALL_FOCUS, true)
+        decoration.putBoolean(IslandProtocol.EXTRA_SOURCE_FOCUS, true)
         decoration.putString(IslandProtocol.EXTRA_SOURCE_PACKAGE, sbn.packageName)
         decoration.putString("miui.pkg.name", sbn.packageName)
         decoration.putString(IslandProtocol.EXTRA_SEMANTIC_TYPE, semanticType.name)
-        sbn.notification.extras.putBundle(IslandProtocol.EXTRA_CALL_FOCUS_DECORATION, decoration)
+        sbn.notification.extras.putBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION, decoration)
     }
 
     private fun isSourceFocusExtra(key: String): Boolean {
-        if (key == IslandProtocol.EXTRA_OWNER || key == IslandProtocol.EXTRA_CALL_FOCUS_DECORATION) return false
+        if (key == IslandProtocol.EXTRA_OWNER || key == IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION) return false
         return key.startsWith("miui.focus") ||
             key.startsWith("miui.island") ||
             key == "miui.enableFloat" ||
@@ -3129,7 +2827,7 @@ class NotificationProcessingEngine private constructor(
             val data = widgetTranslator.translate(widgetId)
             postWidgetNotification(WIDGET_ID_BASE + widgetId, data)
             activeWidgets.add(widgetId)
-            updatePermanentIsland()
+            updateIslandDiagnostics()
         } catch (e: Exception) { Log.e(TAG, "Failed widget $widgetId", e) }
     }
 
@@ -3356,7 +3054,7 @@ class NotificationProcessingEngine private constructor(
                         if (nativeIslands.remove(key)) nativeChanged = true
                     }
                 }
-                if (nativeChanged) updatePermanentIsland()
+                if (nativeChanged) updateIslandDiagnostics()
 
                 if (restoreLiveSources) {
                     for (sbn in currentNotifications) {
@@ -3417,7 +3115,6 @@ class NotificationProcessingEngine private constructor(
                 for (sbn in currentNotifications) {
                     if (sbn.packageName != packageName) continue
                     val id = sbn.id
-                    if (id == PermanentIslandManager.PERMANENT_BRIDGE_ID) continue
                     // The VPN controller deliberately owns its notification outside the ordinary
                     // source-to-translation maps. Do not mistake it for an orphan during the
                     // reconciliation pass and cancel its backing island.
@@ -3433,15 +3130,6 @@ class NotificationProcessingEngine private constructor(
                     } catch (_: Exception) {}
                 }
 
-                val islandPresent = currentNotifications.any {
-                    it.packageName == packageName && it.id == PermanentIslandManager.PERMANENT_BRIDGE_ID
-                }
-                permanentIslandManager.reconcile(
-                    activeIslandCount(),
-                    nativeIslands.isNotEmpty(),
-                    islandPresent,
-                    refresh
-                )
             } catch (e: Exception) {
                 Log.e(TAG, "Error syncing notifications", e)
             }
@@ -3505,10 +3193,12 @@ class NotificationProcessingEngine private constructor(
                 val current = activeIslands[logicalKey] ?: return@withLock
                 if (!NotificationLifecyclePolicy.isProgressLifecycle(current.type)) return@withLock
                 if (progressIslandStillLive(logicalKey, current.sourceKey)) return@withLock
-                activeTranslations[logicalKey]?.let { hyperId ->
-                    try {
-                        islandBackend.cancel(hyperId)
-                    } catch (_: Exception) {}
+                if (current.sourceFocus != true) {
+                    activeTranslations[logicalKey]?.let { hyperId ->
+                        try {
+                            islandBackend.cancel(hyperId)
+                        } catch (_: Exception) {}
+                    }
                 }
                 cleanupCache(logicalKey)
             }
@@ -3568,11 +3258,7 @@ class NotificationProcessingEngine private constructor(
         incomingCallBanner: Boolean = false,
     ): Boolean {
         val metadata = IslandMetadata(
-            logicalToken = if (id == PermanentIslandManager.PERMANENT_BRIDGE_ID) {
-                PermanentIslandManager.PERMANENT_LOGICAL_TOKEN
-            } else {
-                logicalToken
-            },
+            logicalToken = logicalToken,
             sourceKey = source?.key ?: notification.extras.getString(EXTRA_ORIGINAL_KEY),
             sourcePackage = source?.packageName,
             sourceChannel = source?.notification?.channelId,

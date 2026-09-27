@@ -17,12 +17,12 @@ class FocusShadeUpdateTest {
         val root = JsonParser.parseString(stamped).asJsonObject
         val paramV2 = root.getAsJsonObject("param_v2")
         assertTrue(root["updatable"].asBoolean)
-        assertFalse(root["isShowNotification"].asBoolean)
+        assertTrue(root["isShowNotification"].asBoolean)
         assertEquals(2L, root["sequence"].asLong)
         assertEquals("hb-order", root["orderId"].asString)
         assertFalse(root.has("cancel"))
         assertTrue(paramV2["updatable"].asBoolean)
-        assertFalse(paramV2["isShowNotification"].asBoolean)
+        assertTrue(paramV2["isShowNotification"].asBoolean)
         assertEquals(2L, paramV2["sequence"].asLong)
         assertEquals("hb-order", paramV2["orderId"].asString)
         assertEquals("call", paramV2["business"].asString)
@@ -47,12 +47,16 @@ class FocusShadeUpdateTest {
         val ending = FocusShadeUpdate.stamp("""{"param_v2":{"updatable":true}}""", sequence = 4, cancel = true)
         val ended = JsonParser.parseString(ending).asJsonObject
         assertTrue(ended["cancel"].asBoolean)
+        assertFalse(ended["isShowNotification"].asBoolean)
         assertTrue(ended.getAsJsonObject("param_v2")["cancel"].asBoolean)
+        assertFalse(ended.getAsJsonObject("param_v2")["isShowNotification"].asBoolean)
 
         val continued = FocusShadeUpdate.stamp(ending, sequence = 5, cancel = false)
         val live = JsonParser.parseString(continued).asJsonObject
         assertFalse(live.has("cancel"))
+        assertTrue(live["isShowNotification"].asBoolean)
         assertFalse(live.getAsJsonObject("param_v2").has("cancel"))
+        assertTrue(live.getAsJsonObject("param_v2")["isShowNotification"].asBoolean)
         assertEquals(5L, live["sequence"].asLong)
     }
 
@@ -60,6 +64,7 @@ class FocusShadeUpdateTest {
     fun cancelParamIsAnUpdatableFocusPayload() {
         val root = JsonParser.parseString(FocusShadeUpdate.cancelParam(3)).asJsonObject
         assertTrue(root["cancel"].asBoolean)
+        assertFalse(root["isShowNotification"].asBoolean)
         assertTrue(root["updatable"].asBoolean)
         assertEquals(3L, root.getAsJsonObject("param_v2")["sequence"].asLong)
     }
@@ -88,5 +93,28 @@ class FocusShadeUpdateTest {
         assertTrue(a1 >= 1L)
         assertTrue(a2 > a1)
         assertTrue(b1 >= 1L)
+    }
+
+    @Test
+    fun logicalTransferIdentityKeepsOneVisibleFocusCardAcrossSourceSlots() {
+        val logicalId = "download:com.android.chrome:file:report"
+        val first = FocusShadeUpdate.stampForSource(
+            """{"chatInfo":{"title":"report","content":"1 MB"},"param_v2":{"chatInfo":{"title":"report","content":"1 MB"}}}""",
+            logicalId,
+        )
+        val second = FocusShadeUpdate.stampForSource(
+            """{"chatInfo":{"title":"report","content":"4 MB"},"param_v2":{"chatInfo":{"title":"report","content":"4 MB"}}}""",
+            logicalId,
+        )
+        val order = FocusShadeUpdate.orderIdFor(logicalId)
+        val firstRoot = JsonParser.parseString(first).asJsonObject
+        val secondRoot = JsonParser.parseString(second).asJsonObject
+        assertEquals(order, firstRoot["orderId"].asString)
+        assertEquals(order, secondRoot["orderId"].asString)
+        assertTrue(firstRoot["isShowNotification"].asBoolean)
+        assertTrue(secondRoot["isShowNotification"].asBoolean)
+        assertTrue(secondRoot["sequence"].asLong > firstRoot["sequence"].asLong)
+        assertEquals("report", secondRoot.getAsJsonObject("chatInfo")["title"].asString)
+        assertEquals("4 MB", secondRoot.getAsJsonObject("param_v2").getAsJsonObject("chatInfo")["content"].asString)
     }
 }

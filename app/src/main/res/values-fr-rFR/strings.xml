@@ -40,12 +40,6 @@
     <string name="group_configuration">Configuration</string>
     <string name="system_setup">Configuration du systÃ¨me</string>
     <string name="system_setup_subtitle">Corriger les permissions &amp; batterie</string>
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">Notification permanente</string>
-    <string name="permanent_island_desc">Gardez la zone de notification visible en permanence Ã  l\'Ã©cran lorsqu\'il n\'y a pas de notification active.</string>
-    <string name="permanent_island_screen_desc">Lorsque cette option est activÃ©e, une zone de notification vide sera affichÃ©e de faÃ§on permanente sur votre Ã©cran. Elle se masquera automatiquement lorsque des notifications rÃ©elles arriveront et rÃ©apparaÃ®tra lorsque toutes les notifications seront effacÃ©es. Elle ne sera pas visibles dans votre zone de notification.</string>
-    <string name="permanent_island_width">Largeur de la zone</string>
-    <string name="permanent_island_hide_landscape">Masquer en mode paysage</string>
     <string name="group_about">A propos</string>
     <string name="special_thanks">Special Thanks</string>
     <string name="xmsf_workaround_credit_title">XMSF Workaround</string>

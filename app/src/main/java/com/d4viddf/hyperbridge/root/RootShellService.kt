@@ -2,6 +2,7 @@ package com.d4viddf.hyperbridge.root
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import kotlin.concurrent.thread
 
 data class RootCommandResult(val exitCode: Int, val stdout: String, val stderr: String) {
@@ -10,15 +11,25 @@ data class RootCommandResult(val exitCode: Int, val stdout: String, val stderr: 
 
 object RootShellService {
     suspend fun execute(command: String): RootCommandResult = withContext(Dispatchers.IO) {
-        val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-        val error = StringBuilder()
-        val errorReader = thread(start = true, isDaemon = true, name = "hyperbridge-root-stderr") {
-            process.errorStream.bufferedReader().use { error.append(it.readText()) }
+        var process: Process? = null
+        try {
+            val startedProcess = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            process = startedProcess
+            val error = StringBuilder()
+            val errorReader = thread(start = true, isDaemon = true, name = "hyperbridge-root-stderr") {
+                startedProcess.errorStream.bufferedReader().use { error.append(it.readText()) }
+            }
+            val output = startedProcess.inputStream.bufferedReader().use { it.readText() }
+            val exit = startedProcess.waitFor()
+            errorReader.join()
+            RootCommandResult(exit, output.trim(), error.toString().trim())
+        } catch (error: IOException) {
+            process?.destroy()
+            RootCommandResult(-1, "", error.message.orEmpty())
+        } catch (error: SecurityException) {
+            process?.destroy()
+            RootCommandResult(-1, "", error.message.orEmpty())
         }
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        val exit = process.waitFor()
-        errorReader.join()
-        RootCommandResult(exit, output.trim(), error.toString().trim())
     }
 
     suspend fun isAvailable(): Boolean = execute("id").let {

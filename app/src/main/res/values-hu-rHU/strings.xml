@@ -40,12 +40,6 @@
     <string name="group_configuration">KonfigurÃ¡ciÃ³</string>
     <string name="system_setup">RendszerbeÃ¡llÃ­tÃ¡s</string>
     <string name="system_setup_subtitle">EngedÃ©lyek Ã©s akkumulÃ¡tor javÃ­tÃ¡sa</string>
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">Folyamatos Island</string>
-    <string name="permanent_island_desc">Mindig látható a Dynamic Island, még akkor is ha nincs aktív értesítés.</string>
-    <string name="permanent_island_screen_desc">When enabled, an empty Dynamic Island will be shown permanently on your screen. It will automatically hide when real notifications arrive and reappear when all notifications are cleared. It will not be visible in your notification shade.</string>
-    <string name="permanent_island_width">Island szélessége</string>
-    <string name="permanent_island_hide_landscape">Hide in Landscape</string>
     <string name="group_about">AlkalmazÃ¡srÃ³l</string>
     <string name="special_thanks">Special Thanks</string>
     <string name="xmsf_workaround_credit_title">XMSF Workaround</string>

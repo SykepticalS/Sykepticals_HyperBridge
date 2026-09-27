@@ -400,11 +400,6 @@
         <item quantity="other">%1$d custom actions</item>
     </plurals>
 
-    <!-- Permanent Island -->
-    <string name="permanent_island_title">Isla Permanente</string>
-    <string name="permanent_island_desc">Mantener la Isla Dinámica permanentemente visible en la pantalla cuando no haya notificaciones activas.</string>
-    <string name="permanent_island_screen_desc">Cuando esté activado, se mostrará una Isla Dinámica vacía de forma permanente en la pantalla. Se ocultará automáticamente cuando lleguen notificaciones reales y volverá a aparecer cuando se borren todas las notificaciones. No será visible en el panel de notificaciones.</string>
-    <string name="permanent_island_width">Ancho de la Isla</string>
 
     <string name="dnd_mode_title">No molestar</string>
     <string name="dnd_mode_desc">Gestionar la visibilidad de la isla durante No molestar</string>

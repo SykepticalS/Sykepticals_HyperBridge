@@ -43,8 +43,6 @@ class ProgressTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
 
-        builder.setShowNotification(config.isShowShade ?: true)
-        
         val floatPresentation = IslandFloatingPresentationPolicy.resolve(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
         val isFloatEnabled = floatPresentation.enableFloat
         builder.setEnableFloat(floatPresentation.enableFloat)
@@ -89,16 +87,27 @@ class ProgressTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
             actionKeyPrefix = "act_${picKey.removePrefix("pic_")}",
             fallbackActionGlyphs = true,
         )
+        val expanded = ExpandedFocusContent.transfer(
+            title = title,
+            detail = if (isFinished) "Complete" else textContent,
+            pictureKey = picKey,
+            percent = percent,
+            showProgress = !isFinished && !isIndeterminate,
+            progressColor = themeProgressColor,
+            actionKeys = actions.map { it.action.key },
+        )
+        builder.setShowNotification(expanded.showInShade)
 
         builder.setChatInfo(
-            title = title,
-            content = if (isFinished) "Complete" else textContent,
-            pictureKey = picKey,
+            title = expanded.title,
+            content = expanded.detail,
+            pictureKey = expanded.pictureKey,
+            actionKeys = expanded.actionKeys.takeIf { it.isNotEmpty() },
             appPkg = sbn.packageName
         )
 
-        if (!isFinished && !isIndeterminate) {
-            builder.setProgressBar(percent, themeProgressColor)
+        expanded.progressPercent?.let { progress ->
+            builder.setProgressBar(progress, expanded.progressColor ?: themeProgressColor)
         }
 
         if (isFinished) {

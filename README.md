@@ -52,7 +52,6 @@ See the [complete 0.6.0 release notes](docs/releases/0.6.0.md).
     * **Granular Control:** Per-app overrides for colors, icons, and action styles.
     * **Smart Icon Tinting:** Intelligently tints dark/monochrome icons to remain visible.
 * **🧩 Widgets:** Pin standard Android widgets to the island layer for quick access—even on the Lockscreen!
-* **🧠 Intelligent Permanent Island:** The permanent island now automatically hides itself whenever an active widget is shown on the screen, preventing awkward overlaps.
 * **Smart Integration:**
     * **🎵 Media:** Show album art and "Now Playing" status with visualizer support.
     * **🧭 Navigation:** Real-time turn-by-turn instructions (Google Maps, Waze).
