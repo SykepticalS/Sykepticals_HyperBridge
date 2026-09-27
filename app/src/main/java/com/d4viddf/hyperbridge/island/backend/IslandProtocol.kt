@@ -47,6 +47,8 @@ object IslandProtocol {
     const val EXTRA_SOURCE_FOCUS_REPLACE_SHADE = "hyperbridge.source_focus_replace_shade"
     /** Whether this source must stay ongoing so a low-priority Focus card is not dropped. */
     const val EXTRA_SOURCE_FOCUS_ONGOING = "hyperbridge.source_focus_ongoing"
+    /** True once the remote party has answered; the source CallStyle chronometer may run. */
+    const val EXTRA_CALL_CONNECTED = "hyperbridge.call_connected"
     /** Call island is showing, so the source shade entry must stay user-dismissable. */
     const val EXTRA_CALL_SHADE_DISMISSIBLE = "hyperbridge.call_shade_dismissible"
     const val EXTRA_RESULT_RECEIVER = "hyperbridge.result_receiver"

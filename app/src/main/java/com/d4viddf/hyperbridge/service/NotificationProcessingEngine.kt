@@ -278,7 +278,6 @@ class NotificationProcessingEngine private constructor(
             IntentFilter(IslandProtocol.ACTION_REPLY_COMPOSER),
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
         )
-
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -2118,6 +2117,7 @@ class NotificationProcessingEngine private constructor(
                         sbn, data, effectiveTitle, effectiveText, finalConfig, inPlaceUpdate = false,
                         semanticType = focusSemanticType,
                         focusIdentity = effectiveKey,
+                        connected = callSession?.state == CallState.ACTIVE,
                     )
                 if (focusRefreshed) {
                     markSourceHeadsUpSuppressed(sbn, incomingCallBanner)
@@ -2135,6 +2135,7 @@ class NotificationProcessingEngine private constructor(
                     inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE,
                     semanticType = focusSemanticType,
                     focusIdentity = effectiveKey,
+                    connected = callSession?.state == CallState.ACTIVE,
                 )
             ) {
                 if (previous != null && !previous.sourceFocus) {
@@ -2688,6 +2689,9 @@ class NotificationProcessingEngine private constructor(
         )
         IslandVisualExtras.apply(notification.extras, visualPlan)
         notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
+        if (semanticType == NotificationType.CALL || semanticType == NotificationType.VOICE_MESSAGE) {
+            notification.extras.putString("miui.pkg.name", sbn.packageName)
+        }
         if (inPlaceUpdate || lockExpansion) {
             notification.extras.putBoolean("miui.island.updateNoFloat", true)
             notification.extras.putBoolean(IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION, true)
@@ -2711,6 +2715,7 @@ class NotificationProcessingEngine private constructor(
         inPlaceUpdate: Boolean,
         semanticType: NotificationType = NotificationType.CALL,
         focusIdentity: String = sbn.key,
+        connected: Boolean = false,
     ): Boolean {
         val notification = assembleIslandNotification(
             sbn = sbn,
@@ -2752,6 +2757,7 @@ class NotificationProcessingEngine private constructor(
         // notification's package. The exit animation matches that name to the closing app.
         decoration.putString("miui.pkg.name", sbn.packageName)
         decoration.putString(IslandProtocol.EXTRA_SEMANTIC_TYPE, semanticType.name)
+        decoration.putBoolean(IslandProtocol.EXTRA_CALL_CONNECTED, connected)
         val focusParam = decoration.getString("miui.focus.param")
         if (focusParam.isNullOrBlank()) return false
         decoration.putString(

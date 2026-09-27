@@ -349,6 +349,14 @@ object SystemUiNotificationIngressHook {
                 sbn.notification.flags and flag.inv()
             }
         }
+        if (decoration.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) == "CALL" &&
+            !cancelling &&
+            !decoration.getBoolean(IslandProtocol.EXTRA_CALL_CONNECTED, false)
+        ) {
+            // CallStyle enables a chronometer while the row still says Calling. Leave that
+            // extra off until we have connect evidence so HyperOS does not count up the island.
+            sbn.notification.extras.putBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER, false)
+        }
     }
 
     private fun allowCallShadeDismissal(sbn: StatusBarNotification, request: Bundle) {
