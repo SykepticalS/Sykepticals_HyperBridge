@@ -11,16 +11,25 @@ object DynamicClassLoaderHooks {
     private const val FACTORY = "com.android.systemui.shared.plugins.PluginInstance\$PluginFactory"
     private val pluginFactories = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()))
     private val callbacks = CopyOnWriteArrayList<(ClassLoader) -> Unit>()
+    private val dispatched = Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>())
     @Volatile private var dexHooksInstalled = false
 
     fun observe(module: XposedModule, classLoader: ClassLoader, callback: (ClassLoader) -> Unit) {
-        callbacks += callback
+        val pending = synchronized(dispatched) {
+            callbacks += callback
+            dispatched.toList()
+        }
+        pending.forEach { loader -> runCatching { callback(loader) } }
         hookPluginFactory(module, classLoader)
         hookDexLoaders(module, classLoader)
     }
 
     private fun dispatch(loader: ClassLoader) {
-        callbacks.forEach { callback -> runCatching { callback(loader) } }
+        val current = synchronized(dispatched) {
+            dispatched.add(loader)
+            callbacks.toList()
+        }
+        current.forEach { callback -> runCatching { callback(loader) } }
     }
 
     private fun hookPluginFactory(module: XposedModule, classLoader: ClassLoader) {

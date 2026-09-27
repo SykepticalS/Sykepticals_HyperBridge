@@ -45,6 +45,13 @@ object MediaCardConstants {
     const val KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION = "key_hook_island_expanded_media_background_color_animation"
     const val KEY_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT = "key_hook_island_expanded_media_background_auto_invert"
     const val KEY_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE = "key_hook_island_expanded_media_soft_cover_tone"
+    const val KEY_HOOK_ISLAND_COMPACT_SHOW_TITLE = "key_hook_island_compact_show_title"
+    const val KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE = "key_hook_island_compact_title_scroll_mode"
+    const val KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED = "key_hook_island_compact_title_scroll_speed"
+    const val KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE = "key_hook_island_compact_title_scroll_bounce"
+    const val KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST = "key_hook_island_compact_cycle_title_artist"
+    const val KEY_HOOK_ISLAND_COMPACT_WIDTH = "key_hook_island_compact_width"
+    const val KEY_HOOK_MEDIA_CARD_EDITING_ENABLED = "key_hook_media_card_editing_enabled"
 
     const val NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DISABLED = 0
     const val NOTIFICATION_MEDIA_AMBIENT_FLOW_MODE_DYNAMIC = 1
@@ -155,4 +162,19 @@ object MediaCardConstants {
     const val DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_COLOR_ANIMATION = false
     const val DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_BACKGROUND_AUTO_INVERT = false
     const val DEFAULT_HOOK_ISLAND_EXPANDED_MEDIA_SOFT_COVER_TONE = MEDIA_SOFT_COVER_TONE_DARK
+
+    const val COMPACT_TITLE_SCROLL_OFF = 0
+    const val COMPACT_TITLE_SCROLL_ONCE = 1
+    const val COMPACT_TITLE_SCROLL_TWICE = 2
+    const val COMPACT_TITLE_SCROLL_FOREVER = 3
+    const val DEFAULT_HOOK_ISLAND_COMPACT_SHOW_TITLE = true
+    const val DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE = COMPACT_TITLE_SCROLL_FOREVER
+    const val DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED = 100
+    const val MIN_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED = 20
+    const val MAX_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED = 500
+    const val DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE = true
+    const val DEFAULT_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST = true
+    const val DEFAULT_HOOK_ISLAND_COMPACT_WIDTH = 0
+    const val MAX_HOOK_ISLAND_COMPACT_WIDTH = 30
+    const val DEFAULT_HOOK_MEDIA_CARD_EDITING_ENABLED = true
 }

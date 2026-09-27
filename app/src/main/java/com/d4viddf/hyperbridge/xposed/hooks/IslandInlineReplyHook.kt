@@ -510,7 +510,7 @@ internal object IslandReplyComposer {
     ): Boolean {
         val row = findButtonRow(source)?.takeIf { host ->
             host.javaClass.simpleName.contains("Window", ignoreCase = true).not() &&
-                host.childCount <= 6
+                host.childCount <= 12
         } ?: run {
             installLayoutRetry(payload, module, source)
             if (!dumpedMissingHost) {
@@ -531,8 +531,8 @@ internal object IslandReplyComposer {
             is LinearLayout -> LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f,
-            )
+                if (row.orientation == LinearLayout.HORIZONTAL) 1f else 0f,
+            ).apply { gravity = Gravity.CENTER_VERTICAL }
             is FrameLayout -> FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -556,7 +556,7 @@ internal object IslandReplyComposer {
                 ?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
         }
         module.log("HyperBridge: island reply embedded in ${row.javaClass.simpleName} children=${row.childCount}")
-        Log.i("HyperBridge", "island reply embedded in ${row.javaClass.simpleName}")
+        Log.i("HyperBridge", "island reply embedded in ${row.javaClass.simpleName} width=${row.width}")
         return true
     }
 
@@ -606,15 +606,17 @@ internal object IslandReplyComposer {
 
     private fun findButtonRow(source: Any?): ViewGroup? {
         viewFrom(source)?.let { view ->
-            buttonRowAround(view)?.let { return it }
+            (fullWidthHost(view) ?: buttonRowAround(view))?.let { return it }
         }
         val expanded = findNamedInWindows("DynamicIslandExpandedView") as? ViewGroup ?: return null
         val clickable = mutableListOf<TextView>()
         collectClickableTexts(expanded, clickable)
-        val reply = clickable.firstOrNull { text ->
+        val replyText = clickable.firstOrNull { text ->
             text.text?.toString()?.contains("Reply", ignoreCase = true) == true
-        }?.parent as? ViewGroup
-        if (reply != null) return reply
+        }
+        if (replyText != null) {
+            (fullWidthHost(replyText) ?: replyText.parent as? ViewGroup)?.let { return it }
+        }
         return clickable.mapNotNull { it.parent as? ViewGroup }
             .firstOrNull { parent ->
                 parent.childCount in 1..4 && clickable.count { it.parent === parent } >= 1
@@ -639,6 +641,37 @@ internal object IslandReplyComposer {
         }
         walk(root)
         return best
+    }
+
+    /**
+     * The tapped reply action is often its own small container (icon + label),
+     * so the composer must be hosted by the nearest ancestor that spans the
+     * expanded island's width, otherwise it renders inside the button.
+     */
+    private fun fullWidthHost(view: View): ViewGroup? {
+        val expanded = expandedAncestor(view) ?: return null
+        val available = expanded.width - expanded.paddingLeft - expanded.paddingRight
+        if (available <= 0) return null
+        var current: View = view
+        while (true) {
+            val parent = current.parent as? ViewGroup ?: return null
+            if (parent === expanded) return current as? ViewGroup ?: expanded
+            if (parent.width >= available * 0.8f &&
+                parent.javaClass.simpleName.contains("Window", ignoreCase = true).not()
+            ) {
+                return parent
+            }
+            current = parent
+        }
+    }
+
+    private fun expandedAncestor(view: View): ViewGroup? {
+        var current: View? = view
+        while (current != null) {
+            if (current.javaClass.simpleName == "DynamicIslandExpandedView") return current as? ViewGroup
+            current = current.parent as? View
+        }
+        return null
     }
 
     private fun buttonRowAround(view: View): ViewGroup? {

@@ -100,8 +100,8 @@ fun GlobalSettingsScreen(
             )
             Spacer(Modifier.height(2.dp))
             ListOptionCard(
-                title = "Media cards",
-                subtitle = "Edit Island and notification-shade media players",
+                title = "Media",
+                subtitle = "Compact island text, length, and media card appearance",
                 icon = Icons.Outlined.MusicNote,
                 shape = getExpressiveShape(6, 2, ShapeStyle.Large),
                 onClick = onMediaCardSettingsClick

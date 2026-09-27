@@ -107,6 +107,7 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
     var switcherMode by prefs.rememberInt(C.KEY_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_MODE, C.DEFAULT_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_MODE)
     var switcherMax by prefs.rememberInt(C.KEY_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_MAX_COUNT, C.DEFAULT_HOOK_NOTIFICATION_MEDIA_CARD_SWITCHER_MAX_COUNT)
     var keepAodExpanded by prefs.rememberBool(C.KEY_HOOK_AOD_DISABLE_MEDIA_CARD_COLLAPSING, C.DEFAULT_HOOK_AOD_DISABLE_MEDIA_CARD_COLLAPSING)
+    var cardsEnabled by prefs.rememberBool(C.KEY_HOOK_MEDIA_CARD_EDITING_ENABLED, C.DEFAULT_HOOK_MEDIA_CARD_EDITING_ENABLED)
 
     val preview = MediaCardPreviewModel(
             showShadow = !shadeHideShadow,
@@ -152,7 +153,7 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Media cards") },
+                title = { Text("Media") },
                 navigationIcon = {
                     FilledTonalIconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -172,6 +173,21 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
+            CompactIslandSettings()
+            SectionTitle("Media cards")
+            TogglePref(
+                title = "Edit media cards",
+                subtitle = "Off leaves the island and notification-shade players stock, which helps check whether card styling causes lag. Restart SystemUI to apply fully.",
+                checked = cardsEnabled,
+            ) {
+                cardsEnabled = it
+                saveBool(C.KEY_HOOK_MEDIA_CARD_EDITING_ENABLED, it)
+            }
+            if (!cardsEnabled) {
+                Spacer(Modifier.height(24.dp))
+                return@Column
+            }
+            Spacer(Modifier.height(8.dp))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 SegmentedButton(
                     selected = section == 0,
@@ -256,6 +272,102 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+private fun CompactIslandSettings() {
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences(IslandProtocol.REMOTE_PREFS, Context.MODE_PRIVATE)
+    }
+    fun sync() = (context.applicationContext as? HyperBridgeApplication)?.syncHookConfig()
+    fun saveBool(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+        sync()
+    }
+    fun saveInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
+        sync()
+    }
+
+    var showTitle by prefs.rememberBool(C.KEY_HOOK_ISLAND_COMPACT_SHOW_TITLE, C.DEFAULT_HOOK_ISLAND_COMPACT_SHOW_TITLE)
+    var scrollMode by prefs.rememberInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE, C.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE)
+    var scrollSpeed by prefs.rememberInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED, C.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED)
+    var scrollBounce by prefs.rememberBool(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE, C.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE)
+    var cycle by prefs.rememberBool(C.KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST, C.DEFAULT_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST)
+    var width by prefs.rememberInt(C.KEY_HOOK_ISLAND_COMPACT_WIDTH, C.DEFAULT_HOOK_ISLAND_COMPACT_WIDTH)
+
+    SectionTitle("Compact island")
+    Text(
+        "Applies to the native media island after you swipe a player up. Restart SystemUI if a player is already showing.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+    )
+    TogglePref(
+        title = "Show song title",
+        subtitle = "Puts the track title in the left side of the compact island.",
+        checked = showTitle,
+    ) { enabled ->
+        showTitle = enabled
+        saveBool(C.KEY_HOOK_ISLAND_COMPACT_SHOW_TITLE, enabled)
+        if (!enabled && cycle) {
+            cycle = false
+            saveBool(C.KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST, false)
+        }
+    }
+    Show(showTitle) {
+        TogglePref(
+            title = "Cycle title and artist",
+            subtitle = "Shows the title, then \"By: artist\", then stays on the title until the track changes. Each line scrolls once (title up to 3 s, artist up to 5 s) and waits 1 s before turning to the next.",
+            checked = cycle,
+        ) {
+            cycle = it
+            saveBool(C.KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST, it)
+        }
+    }
+    Show(showTitle) {
+        TogglePref(
+            title = "Scroll title",
+            subtitle = (if (cycle) "After the cycle, a" else "A") +
+                " long title scrolls to the end, waits 1 s, scrolls back and repeats.",
+            checked = scrollBounce,
+        ) {
+            scrollBounce = it
+            saveBool(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE, it)
+        }
+        Show(scrollBounce) {
+            ChoicePref("Repeat", scrollMode, compactRepeatChoices) {
+                scrollMode = it
+                saveInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE, it)
+            }
+        }
+        SliderPref(
+            title = "Title scroll speed",
+            value = scrollSpeed,
+            min = C.MIN_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
+            max = C.MAX_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
+            steps = 0,
+            format = { "$it px/s" },
+            onPreview = { scrollSpeed = it },
+            onCommit = {
+                scrollSpeed = it
+                saveInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED, it)
+            },
+        )
+    }
+    SliderPref(
+        title = "Island length",
+        value = width.coerceAtMost(C.MAX_HOOK_ISLAND_COMPACT_WIDTH),
+        min = 0,
+        max = C.MAX_HOOK_ISLAND_COMPACT_WIDTH,
+        format = { value -> if (value == 0) "Default" else value.toString() },
+        onPreview = { width = it },
+        onCommit = {
+            width = it
+            saveInt(C.KEY_HOOK_ISLAND_COMPACT_WIDTH, it)
+        },
+    )
 }
 
 @Composable
@@ -416,8 +528,27 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun TogglePref(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    TogglePref(title, checked, subtitle = null, onChange = onChange)
+}
+
+@Composable
+private fun TogglePref(
+    title: String,
+    checked: Boolean,
+    subtitle: String?,
+    onChange: (Boolean) -> Unit,
+) {
     PreferenceCard(Modifier.clickable { onChange(!checked) }) {
-        Text(title, Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }
@@ -445,11 +576,13 @@ private fun SliderPref(
     max: Int,
     onPreview: (Int) -> Unit = {},
     onCommit: (Int) -> Unit,
+    steps: Int = (max - min - 1).coerceAtLeast(0),
+    format: (Int) -> String = { it.toString() },
 ) {
     var slider by remember { mutableFloatStateOf(value.toFloat()) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text("$title: ${slider.roundToInt()}")
+            Text("$title: ${format(slider.roundToInt())}")
             Slider(
                 value = slider,
                 onValueChange = {
@@ -458,7 +591,7 @@ private fun SliderPref(
                 },
                 onValueChangeFinished = { onCommit(slider.roundToInt()) },
                 valueRange = min.toFloat()..max.toFloat(),
-                steps = (max - min - 1).coerceAtLeast(0),
+                steps = steps,
             )
         }
     }
@@ -490,3 +623,9 @@ private val progressChoices = listOf(Choice(0, "Default"), Choice(1, "Wave"))
 private val thumbChoices = listOf(Choice(0, "Default"), Choice(1, "Vertical"), Choice(2, "Hidden"))
 private val actionOrderChoices = listOf(Choice(0, "Default"), Choice(1, "Custom button at far right"), Choice(2, "Play button at far left"))
 private val switcherChoices = listOf(Choice(0, "Single-card view"), Choice(1, "Multi-card view"))
+// Forever comes first so an older stored "off" shows as Forever, which is how the hook treats it.
+private val compactRepeatChoices = listOf(
+    Choice(C.COMPACT_TITLE_SCROLL_FOREVER, "Forever"),
+    Choice(C.COMPACT_TITLE_SCROLL_ONCE, "Once"),
+    Choice(C.COMPACT_TITLE_SCROLL_TWICE, "Twice"),
+)

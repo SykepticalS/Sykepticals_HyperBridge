@@ -4,6 +4,8 @@ import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.hooks.DynamicClassLoaderHooks
 import com.d4viddf.hyperbridge.xposed.log
 import com.d4viddf.hyperbridge.xposed.mediacard.island.IslandExpandedMediaAmbientFlowHooker
+import com.d4viddf.hyperbridge.xposed.mediacard.island.compact.CompactMediaIslandHooker
+import com.d4viddf.hyperbridge.xposed.mediacard.island.compact.CompactMediaIslandWidthHooker
 import com.d4viddf.hyperbridge.xposed.mediacard.island.layout.IslandExpandedMediaLayoutHooker
 import com.d4viddf.hyperbridge.xposed.mediacard.notification.NotificationMediaAmbientFlowHooker
 import com.d4viddf.hyperbridge.xposed.mediacard.notification.NotificationMediaCoverStyleHooker
@@ -13,12 +15,14 @@ import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Installs HyperLyric's media-card engine on SystemUI and its island plugin loader. */
 object MediaCardHook {
     private val visited = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>())
     )
+    private val prefsListening = AtomicBoolean(false)
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         val prefs = HookConfig.remotePreferences() ?: run {
@@ -27,6 +31,12 @@ object MediaCardHook {
         }
         MediaCardLog.module = module
         MediaCardRuntimeConfig.load(prefs)
+        if (prefsListening.compareAndSet(false, true)) {
+            prefs.registerOnSharedPreferenceChangeListener { _, _ ->
+                MediaCardRuntimeConfig.load(prefs)
+                CompactMediaIslandHooker.refresh()
+            }
+        }
         installForLoader(module, param.defaultClassLoader)
         DynamicClassLoaderHooks.observe(module, param.defaultClassLoader) { loader ->
             installForLoader(module, loader)
@@ -36,7 +46,11 @@ object MediaCardHook {
     private fun installForLoader(module: XposedModule, loader: ClassLoader) {
         if (!visited.add(loader)) return
         var installed = 0
-        val installers: List<Pair<String, () -> Unit>> = listOf(
+        val compact: List<Pair<String, () -> Unit>> = listOf(
+            "compact media title" to { CompactMediaIslandHooker.hook(module, loader) },
+            "compact media width" to { CompactMediaIslandWidthHooker.hook(module, loader) },
+        )
+        val cards: List<Pair<String, () -> Unit>> = listOf(
             "configuration refresh" to { MediaCardConfigurationRefreshHooker.hook(module, loader) },
             "progress styling" to { MediaProgressStyleHooker.hook(module, loader) },
             "element behavior" to { MediaCardElementBehaviorHooker.hook(module, loader) },
@@ -45,10 +59,16 @@ object MediaCardHook {
             "shade background" to { NotificationMediaAmbientFlowHooker.hook(module, loader) },
             "shade elements" to { NotificationMediaCoverStyleHooker.hook(module, loader) },
         )
+        val editCards = MediaCardRuntimeConfig.current.enabled
+        val installers = if (editCards) cards + compact else compact
         installers.forEach { (name, action) ->
             runCatching(action).onSuccess { installed++ }.onFailure {
                 module.log("MediaCard: $name unavailable on ${loader.javaClass.simpleName}: ${it.message}")
             }
+        }
+        if (!editCards) {
+            module.log("MediaCard: card editing off; only compact island hooks on ${loader.javaClass.name}")
+            return
         }
         if (MediaCardRuntimeConfig.current.notification.cardSwitcherEnabled) {
             runCatching { NotificationMediaSingleCardSwitcherHooker.hook(module, loader) }

@@ -1,8 +1,7 @@
 package com.d4viddf.hyperbridge.xposed.mediacard
 
 import android.content.SharedPreferences
-import com.d4viddf.hyperbridge.xposed.mediacard.MediaCardConstants
-import com.d4viddf.hyperbridge.xposed.mediacard.MediaCardLog
+import com.d4viddf.hyperbridge.xposed.mediacard.island.compact.CompactMediaIslandSettings
 
 internal object MediaCardRuntimeConfig {
     @Volatile
@@ -23,7 +22,11 @@ internal object MediaCardRuntimeConfig {
                 "cover=${snapshot.islandExpanded.coverStyle}, " +
                 "ambient=${snapshot.islandExpanded.ambientFlowMode}, " +
                 "progress=${snapshot.islandExpanded.progressStyle}), " +
-                "aodCollapseDisabled=${snapshot.alwaysOnDisplay.disableMediaCardCollapsing}"
+                "aodCollapseDisabled=${snapshot.alwaysOnDisplay.disableMediaCardCollapsing}, " +
+                "compact(title=${snapshot.compactIsland.showTitle}, " +
+                "cycle=${snapshot.compactIsland.cycleTitleArtist}, " +
+                "scroll=${snapshot.compactIsland.titleScrollMode}, " +
+                "width=${snapshot.compactIsland.widthPercent})"
         MediaCardLog.dState(
             stateId = "MediaCardRuntimeConfig",
             tag = "MediaCardRuntimeConfig",
@@ -37,21 +40,52 @@ internal object MediaCardRuntimeConfig {
         val enabled: Boolean,
         val notification: Notification,
         val islandExpanded: IslandExpanded,
-        val alwaysOnDisplay: AlwaysOnDisplay
+        val alwaysOnDisplay: AlwaysOnDisplay,
+        val compactIsland: CompactMediaIslandSettings,
     ) {
         companion object {
             fun defaults() = Snapshot(
                 enabled = true,
                 notification = Notification.defaults(),
                 islandExpanded = IslandExpanded.defaults(),
-                alwaysOnDisplay = AlwaysOnDisplay.defaults()
+                alwaysOnDisplay = AlwaysOnDisplay.defaults(),
+                compactIsland = CompactMediaIslandSettings.defaults(),
             )
 
             fun from(prefs: SharedPreferences) = Snapshot(
-                enabled = true,
+                enabled = prefs.getBoolean(
+                    MediaCardConstants.KEY_HOOK_MEDIA_CARD_EDITING_ENABLED,
+                    MediaCardConstants.DEFAULT_HOOK_MEDIA_CARD_EDITING_ENABLED,
+                ),
                 notification = Notification.from(prefs),
                 islandExpanded = IslandExpanded.from(prefs),
-                alwaysOnDisplay = AlwaysOnDisplay.from(prefs)
+                alwaysOnDisplay = AlwaysOnDisplay.from(prefs),
+                compactIsland = CompactMediaIslandSettings.fromRaw(
+                    showTitle = prefs.getBoolean(
+                        MediaCardConstants.KEY_HOOK_ISLAND_COMPACT_SHOW_TITLE,
+                        MediaCardConstants.DEFAULT_HOOK_ISLAND_COMPACT_SHOW_TITLE,
+                    ),
+                    scrollMode = prefs.getInt(
+                        MediaCardConstants.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE,
+                        MediaCardConstants.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE,
+                    ),
+                    speed = prefs.getInt(
+                        MediaCardConstants.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
+                        MediaCardConstants.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
+                    ),
+                    bounce = prefs.getBoolean(
+                        MediaCardConstants.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE,
+                        MediaCardConstants.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE,
+                    ),
+                    cycle = prefs.getBoolean(
+                        MediaCardConstants.KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST,
+                        MediaCardConstants.DEFAULT_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST,
+                    ),
+                    width = prefs.getInt(
+                        MediaCardConstants.KEY_HOOK_ISLAND_COMPACT_WIDTH,
+                        MediaCardConstants.DEFAULT_HOOK_ISLAND_COMPACT_WIDTH,
+                    ),
+                ),
             )
         }
     }
