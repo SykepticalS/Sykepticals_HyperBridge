@@ -52,32 +52,6 @@ class IslandPresentationTest {
         assertEquals("#FF0000", custom.resolvedIslandColor())
     }
 
-    @Test fun contactTitlesForcePinkGlowWhenEnabled() {
-        val config = IslandConfig(
-            islandGlowMode = GlowMode.ON,
-            focusGlowMode = GlowMode.FOLLOW_DYNAMIC,
-            islandGlowColor = "#00FF00",
-            contactPinkGlow = true,
-        )
-        val matched = IslandGlowResolver.resolve(config, IslandConfig(), "#112233", "levixcs")
-        assertEquals(IslandGlowResolver.CONTACT_PINK, matched.resolvedIslandColor())
-        assertEquals(IslandGlowResolver.CONTACT_PINK, matched.resolvedFocusColor())
-        assertEquals(IslandGlowResolver.CONTACT_PINK, IslandGlowResolver.resolve(config, IslandConfig(), "#112233", "Call from Nisamm").resolvedIslandColor())
-        assertEquals("#00FF00", IslandGlowResolver.resolve(config, IslandConfig(), "#112233", "Ada").resolvedIslandColor())
-        assertNull(IslandGlowResolver.contactPink("someone else"))
-        assertEquals("#00FF00", IslandGlowResolver.resolve(config.copy(contactPinkGlow = false), IslandConfig(), "#112233", "levixcs").resolvedIslandColor())
-        val forced = IslandGlowResolver.resolve(
-            IslandConfig(islandGlowMode = GlowMode.OFF, focusGlowMode = GlowMode.OFF, contactPinkGlow = true),
-            IslandConfig(),
-            "#112233",
-            "levixcs",
-        )
-        assertTrue(forced.islandEnabled)
-        assertTrue(forced.focusEnabled)
-        assertEquals(IslandGlowResolver.CONTACT_PINK, forced.resolvedIslandColor())
-        assertNull(IslandGlowResolver.resolve(IslandConfig(islandGlowMode = GlowMode.OFF), IslandConfig(), "#112233", "levixcs").resolvedIslandColor())
-    }
-
     @Test fun automaticAndCustomTextPresentationUseBothSides() {
         val source = IslandTextSource(title = "Conversation", content = "Latest message", app = "Chat", sender = "Ada")
         assertEquals(IslandTextPresentation("Ada", "Latest message"),

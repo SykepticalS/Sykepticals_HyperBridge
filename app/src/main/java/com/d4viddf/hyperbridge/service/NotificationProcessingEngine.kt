@@ -95,6 +95,9 @@ import com.d4viddf.hyperbridge.service.message.MessagePresentationSource
 import com.d4viddf.hyperbridge.service.message.MessageSourceQuality
 import com.d4viddf.hyperbridge.service.message.MessagingEventSignals
 import com.d4viddf.hyperbridge.service.message.isMessagingEvent
+import com.d4viddf.hyperbridge.receiver.LoginCodeCopyReceiver
+import com.d4viddf.hyperbridge.service.logincode.LoginCodeExtractor
+import com.d4viddf.hyperbridge.service.logincode.LoginCodePresentation
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -257,6 +260,15 @@ class NotificationProcessingEngine private constructor(
         }
     }
 
+    private val loginCodeCopiedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != LoginCodeCopyReceiver.ACTION_COPIED) return
+            val sourceKey = intent.getStringExtra(LoginCodeCopyReceiver.EXTRA_SOURCE_KEY) ?: return
+            if (!preferences.getLoginCodeSettingsSync().dismissAfterCopy) return
+            serviceScope.launch { dismissAfterLoginCodeCopy(sourceKey) }
+        }
+    }
+
     private val packageLifecycleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val packageName = intent.data?.schemeSpecificPart ?: return
@@ -279,6 +291,12 @@ class NotificationProcessingEngine private constructor(
             replyComposerReceiver,
             IntentFilter(IslandProtocol.ACTION_REPLY_COMPOSER),
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            loginCodeCopiedReceiver,
+            IntentFilter(LoginCodeCopyReceiver.ACTION_COPIED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -490,24 +508,9 @@ class NotificationProcessingEngine private constructor(
 
     private fun getEffectiveCallStages(pkg: String): Set<CallStage> = preferences.getEffectiveCallStagesSync(pkg)
 
-    private fun getEffectiveEngine(pkg: String): Boolean {
-        val activeTheme = themeRepository.activeTheme.value
-
-        // 1. Theme App Override (Creator explicitly configured this app)
-        val themeAppOverride = activeTheme?.apps?.get(pkg)?.useNativeLiveUpdates
-        if (themeAppOverride != null) return themeAppOverride
-
-        // 2. User App Override (User explicitly configured this app via Home Screen)
-        val userAppOverride = preferences.getAppEnginePreferenceSync(pkg)
-        if (userAppOverride != null) return userAppOverride
-
-        // 3. Theme Global Override (Creator explicitly forced an engine for the whole theme)
-        val themeGlobalOverride = activeTheme?.global?.useNativeLiveUpdates
-        if (themeGlobalOverride != null) return themeGlobalOverride
-
-        // 4. User Global Fallback (The main Engine Setting on the Home Screen!)
-        return preferences.useNativeLiveUpdatesSync()
-    }
+    /** Xiaomi Featured Design is the only engine; stored Live Update preferences are ignored. */
+    @Suppress("UNUSED_PARAMETER", "SameReturnValue")
+    private fun getEffectiveEngine(pkg: String): Boolean = false
 
     private fun getEffectiveNav(pkg: String): Pair<NavContent, NavContent> {
         return preferences.getEffectiveNavLayoutSync(pkg)
@@ -820,6 +823,21 @@ class NotificationProcessingEngine private constructor(
         }
     }
 
+    private suspend fun dismissAfterLoginCodeCopy(sourceKey: String) {
+        notificationLifecycleMutex.withLock {
+            val logicalKey = sourceToLogicalKeys[sourceKey] ?: sourceKey
+            val bridgeId = activeTranslations[logicalKey]
+            if (bridgeId != null) {
+                retireFromRecovery(activeIslands[logicalKey])
+                runCatching { islandBackend.cancel(bridgeId) }
+                cleanupCache(logicalKey)
+            }
+            intentionallyRemovedKeys[sourceKey] = System.currentTimeMillis()
+            cancelSourceNotification(sourceKey)
+            Log.d(TAG, "LOGIN CODE dismissed after copy sourceKey=${sourceKey.hashCode()}")
+        }
+    }
+
     private fun cleanupCache(originalKey: String, preserveCallSession: Boolean = false) {
         val hyperId = activeTranslations[originalKey]
         val island = activeIslands.remove(originalKey)
@@ -1113,7 +1131,10 @@ class NotificationProcessingEngine private constructor(
     }
 
     private fun enqueueSourceNotification(sbn: StatusBarNotification, recovery: Boolean = false) {
-        if (shouldIgnore(sbn.packageName) || !isAppAllowed(sbn.packageName)) return
+        if (shouldIgnore(sbn.packageName)) return
+        // Apps picked for the login code extractor get an island for code messages only.
+        if (!isAppAllowed(sbn.packageName) && detectLoginCode(sbn) == null) return
+        Log.d("HBLoginTest", "enqueue key=${sbn.key} code=${detectLoginCode(sbn) != null} recovery=$recovery") // TEMP-TEST
         if (!recovery) {
             DiagnosticsStore.record("CALLBACK", "received", sbn.packageName)
         }
@@ -1553,14 +1574,6 @@ class NotificationProcessingEngine private constructor(
                 effectiveTypes = effectiveTypes
             )
 
-            if (baseBehaviorConfig.restoreLockscreen == true &&
-                getSystemService(android.app.KeyguardManager::class.java)?.isDeviceLocked == true &&
-                sbn.notification.visibility != Notification.VISIBILITY_PUBLIC
-            ) {
-                Log.d(TAG, "Lockscreen restore active. Leaving native notification ${rawSbn.packageName}")
-                return
-            }
-
             val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val immersivePolicy = runCatching {
                 android.provider.Settings.Global.getString(contentResolver, "policy_control").orEmpty().lowercase()
@@ -1638,6 +1651,16 @@ class NotificationProcessingEngine private constructor(
                 return
             }
             val type = enabledType
+            val loginCode = if (type == NotificationType.STANDARD || type == NotificationType.MESSAGE) {
+                detectLoginCode(sbn)
+            } else {
+                null
+            }
+            Log.d("HBLoginTest", "process key=${sbn.key} type=$type code=${loginCode != null} allowed=${isAppAllowed(sbn.packageName)} live=${getEffectiveEngine(sbn.packageName)}") // TEMP-TEST
+            if (loginCode == null && !isAppAllowed(sbn.packageName)) return
+            if (loginCode != null) {
+                DiagnosticsStore.record(type.name, "login-code", sbn.packageName, "len=${loginCode.code.length}")
+            }
             val isMessagingLifecycle = isMessagingLifecycleEvent(sbn, type, resolvedContent)
 
             var effectiveKey = sbn.key
@@ -1791,6 +1814,7 @@ class NotificationProcessingEngine private constructor(
                 }
 
                 val existingIsland = activeIslands[effectiveKey]
+                Log.d("HBLoginTest", "family key=${sbn.key} logical=$effectiveKey present=${family.shouldPresent} existing=${existingIsland != null} code=${loginCode != null}") // TEMP-TEST
                 if (existingIsland != null && !family.shouldPresent) {
                     sourceToLogicalKeys[sbn.key] = effectiveKey
                     markSourceHeadsUpSuppressed(sbn)
@@ -1840,7 +1864,7 @@ class NotificationProcessingEngine private constructor(
             val incomingCallBanner = callSession?.state == CallState.INCOMING_RINGING &&
                 sbn.notification.fullScreenIntent != null
             val replaceWithSourceFocus = NotificationLifecyclePolicy.carriesVisibleSourceFocus(type)
-            val actionFingerprint = NotificationActionIdentity.fingerprint(sbn)
+            val actionFingerprint = islandActionFingerprint(sbn, loginCode)
             val actionsChanged = NotificationActionIdentity.changed(previous?.actionFingerprint, actionFingerprint)
             val actionRefreshBridgeId = if (
                 actionsChanged && previous != null
@@ -1858,9 +1882,11 @@ class NotificationProcessingEngine private constructor(
             }
 
             // --- LAYERED ENGINE LOGIC ---
+            // Native Live Updates cannot carry the Copy code button, glow or compact code.
             val useLiveUpdates = type != NotificationType.SCREEN_RECORDING &&
                     type != NotificationType.VOICE_MESSAGE &&
                     !isSavedScreenRecording &&
+                    loginCode == null &&
                     !replaceWithSourceFocus &&
                     getEffectiveEngine(sbn.packageName)
             val finalConfig = baseBehaviorConfig.let { config ->
@@ -1942,7 +1968,6 @@ class NotificationProcessingEngine private constructor(
                     finalConfig,
                     IslandConfig(),
                     AppIconPalette.color(this, sbn.packageName),
-                    *glowContactTexts(sbn, effectiveTitle, effectiveText),
                 )
                 val visualPlan = IslandVisualMetadata.plan(
                     config = finalConfig,
@@ -2064,7 +2089,10 @@ class NotificationProcessingEngine private constructor(
                     requireNotNull(screenRecordingSession),
                     design = preferences.getScreenRecordingDesignSync()
                 )
-                NotificationType.MESSAGE -> messageTranslator.translate(sbn, effectiveTitle, effectiveText, picKey, translationConfig, activeTheme, isUpdate)
+                NotificationType.MESSAGE -> messageTranslator.translate(
+                    sbn, effectiveTitle, effectiveText, picKey, translationConfig, activeTheme, isUpdate,
+                    loginCode = loginCode,
+                )
                 NotificationType.VOICE_MESSAGE -> voiceMessageTranslator.translate(
                     sbn,
                     effectiveTitle,
@@ -2075,7 +2103,10 @@ class NotificationProcessingEngine private constructor(
                     isUpdate,
                     compactDuration = preferences.getEffectiveVoiceCompactDurationSync(sbn.packageName),
                 )
-                else -> standardTranslator.translate(sbn, effectiveTitle, effectiveText, picKey, translationConfig, activeTheme, isUpdate)
+                else -> standardTranslator.translate(
+                    sbn, effectiveTitle, effectiveText, picKey, translationConfig, activeTheme, isUpdate,
+                    loginCode = loginCode,
+                )
             }
 
             val newContentHash = if (type == NotificationType.SCREEN_RECORDING && screenRecordingSession != null) {
@@ -2103,7 +2134,7 @@ class NotificationProcessingEngine private constructor(
                 return
             }
 
-            val decision = IslandUpdateResolver.decide(
+            val resolvedDecision = IslandUpdateResolver.decide(
                 logicalId = effectiveKey,
                 candidateBridgeId = presentationBridgeId,
                 contentHash = newContentHash,
@@ -2114,6 +2145,23 @@ class NotificationProcessingEngine private constructor(
                 actionsChanged = actionsChanged,
                 actionRefreshBridgeId = actionRefreshBridgeId,
             )
+            // A code arriving in a conversation that already has an island must still expand and
+            // glow like a new one, so it gets a fresh island instead of an in-place update.
+            val decision = if (
+                loginCode != null && previous != null && previous.loginCode != loginCode.code &&
+                resolvedDecision.kind == IslandPresentationKind.UPDATE
+            ) {
+                resolvedDecision.copy(
+                    kind = IslandPresentationKind.NEW,
+                    bridgeId = NotificationActionIdentity.refreshBridgeId(effectiveKey, actionFingerprint, previous.id),
+                    onlyAlertOnce = false,
+                    presentationReason = IslandPresentationReason.NEW_EVENT,
+                    cancelBeforeNotify = true,
+                )
+            } else {
+                resolvedDecision
+            }
+            Log.d("HBLoginTest", "decision key=${sbn.key} logical=$effectiveKey kind=${decision.kind} resolved=${resolvedDecision.kind} id=${decision.bridgeId} prev=${previous?.id} actionsChanged=$actionsChanged code=${loginCode != null} type=$type") // TEMP-TEST
 
             val supportsSourceFocus = replaceWithSourceFocus
             val focusSemanticType = type
@@ -2218,7 +2266,11 @@ class NotificationProcessingEngine private constructor(
                 TAG,
                 " POSTING Island -> ID: $postedId, kind=${decision.kind}, " +
                     "prevId=${previous?.id}, pic=$picKey, Type: $type, " +
-                    "FinalTitle: '$effectiveTitle', FinalText: '$effectiveText'"
+                    if (loginCode != null) {
+                        "login code island"
+                    } else {
+                        "FinalTitle: '$effectiveTitle', FinalText: '$effectiveText'"
+                    }
             )
             val posted = postStandardNotification(
                 sbn = sbn,
@@ -2237,6 +2289,7 @@ class NotificationProcessingEngine private constructor(
                 lockExpansion = false,
                 postGeneration = System.currentTimeMillis(),
                 incomingCallBanner = incomingCallBanner,
+                nativeGlow = loginCode?.glow == true,
             )
             if (!posted) return
 
@@ -2271,7 +2324,8 @@ class NotificationProcessingEngine private constructor(
                 callSession = callSession,
                 screenRecordingSession = screenRecordingSession,
                 deleteIntent = sbn.notification.deleteIntent,
-                dismissSourceOnContentClick = isSavedScreenRecording
+                dismissSourceOnContentClick = isSavedScreenRecording,
+                loginCode = loginCode?.code,
             )
             updateIslandDiagnostics()
 
@@ -2392,20 +2446,6 @@ class NotificationProcessingEngine private constructor(
             }
         }
         return null
-    }
-
-    private fun glowContactTexts(sbn: StatusBarNotification, vararg extra: String?): Array<CharSequence?> {
-        val extras = sbn.notification.extras
-        return arrayOf(
-            *extra,
-            extras.getCharSequence(Notification.EXTRA_TITLE),
-            extras.getCharSequence(Notification.EXTRA_TITLE_BIG),
-            extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE),
-            extras.getCharSequence(Notification.EXTRA_TEXT),
-            extras.getCharSequence(Notification.EXTRA_SUB_TEXT),
-            extras.getCharSequence(Notification.EXTRA_INFO_TEXT),
-            extras.getCharSequence(Notification.EXTRA_SELF_DISPLAY_NAME),
-        )
     }
 
     private fun resolveTitle(sbn: StatusBarNotification): String {
@@ -2625,6 +2665,7 @@ class NotificationProcessingEngine private constructor(
         lockExpansion: Boolean = false,
         postGeneration: Long = System.currentTimeMillis(),
         incomingCallBanner: Boolean = false,
+        nativeGlow: Boolean = false,
     ): Boolean {
         val notification = assembleIslandNotification(
             sbn = sbn,
@@ -2637,6 +2678,7 @@ class NotificationProcessingEngine private constructor(
             updatableOverride = updatableOverride,
             inPlaceUpdate = floatAsUpdate,
             lockExpansion = lockExpansion,
+            nativeGlow = nativeGlow,
         )
         val posted = postIsland(
             bridgeId,
@@ -2663,6 +2705,7 @@ class NotificationProcessingEngine private constructor(
         updatableOverride: Boolean? = null,
         inPlaceUpdate: Boolean = false,
         lockExpansion: Boolean = false,
+        nativeGlow: Boolean = false,
     ): Notification {
         val semanticType = detectNotificationType(sbn)
         val keepPosted = sourceStaysPosted(sbn, semanticType)
@@ -2702,12 +2745,15 @@ class NotificationProcessingEngine private constructor(
         } else {
             AppIconPalette.color(this, sbn.packageName) ?: IslandGlowResolver.normalizeColor(data.accentColor)
         }
-        val glow = IslandGlowResolver.resolve(
-            config,
-            IslandConfig(),
-            glowDynamicColor,
-            *glowContactTexts(sbn, title, text),
-        )
+        val glow = if (nativeGlow) {
+            LoginCodePresentation.NATIVE_GLOW
+        } else {
+            IslandGlowResolver.resolve(
+                config,
+                IslandConfig(),
+                glowDynamicColor,
+            )
+        }
         val visualPlan = IslandVisualMetadata.plan(
             config = config,
             glow = glow,
@@ -2734,6 +2780,7 @@ class NotificationProcessingEngine private constructor(
             ),
         )
         IslandVisualExtras.apply(notification.extras, visualPlan)
+        if (nativeGlow) notification.extras.putBoolean(IslandProtocol.EXTRA_GLOW_NATIVE, true)
         notification.extras.putBoolean("miui.enableFloat", floatPresentation.enableFloat)
         if (semanticType == NotificationType.CALL || semanticType == NotificationType.VOICE_MESSAGE) {
             notification.extras.putString("miui.pkg.name", sbn.packageName)
@@ -3041,10 +3088,41 @@ class NotificationProcessingEngine private constructor(
 
     private fun shouldIgnore(packageName: String): Boolean = packageName == this.packageName || packageName == "android" || packageName.contains("miui.notification")
     private fun isAppAllowed(packageName: String): Boolean =
+        packageName == "com.android.shell" || // TEMP-TEST
         preferences.isAppAllowedSync(packageName) ||
             allowedPackageSet.contains(packageName) ||
             (packageName == ScreenRecordingClassifier.PACKAGE_NAME &&
                 HookConfigSync.replaceScreenRecorder(this))
+
+    /** Fingerprint of the buttons the island shows, which the Copy code button replaces. */
+    private fun islandActionFingerprint(sbn: StatusBarNotification, loginCode: LoginCodePresentation?): Int =
+        if (loginCode?.copyAction == true) {
+            31 * LoginCodeCopyReceiver.ACTION_COPY.hashCode() + loginCode.code.hashCode()
+        } else {
+            NotificationActionIdentity.fingerprint(sbn)
+        }
+
+    private fun detectLoginCode(sbn: StatusBarNotification): LoginCodePresentation? {
+        val settings = preferences.getLoginCodeSettingsSync()
+        if (!settings.appliesTo(sbn.packageName)) return null
+        val notification = sbn.notification ?: return null
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return null
+        val extras = notification.extras ?: return null
+        val latestMessage = extractMessageContent(notification)
+            .lastOrNull { !it.isSelf && !it.text.isNullOrBlank() }
+            ?.text
+        // Older conversation lines stay out: the newest message is the one carrying the code.
+        val bodies = listOf(
+            latestMessage,
+            extras.getCharSequence(Notification.EXTRA_TITLE_BIG),
+            extras.getCharSequence(Notification.EXTRA_TEXT),
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+            notification.tickerText,
+        )
+        val code = LoginCodeExtractor.extract(extras.getCharSequence(Notification.EXTRA_TITLE), bodies)
+            ?: return null
+        return LoginCodePresentation.of(code, settings)
+    }
 
     private var syncJob: Job? = null
     fun onIngressConnected(preserveVisibleIslands: Boolean = false) {
@@ -3342,6 +3420,7 @@ class NotificationProcessingEngine private constructor(
         if (::vpnIslandController.isInitialized) vpnIslandController.stop()
         unregisterReceiver(systemReceiver)
         unregisterReceiver(replyComposerReceiver)
+        unregisterReceiver(loginCodeCopiedReceiver)
         unregisterReceiver(packageLifecycleReceiver)
         syncJob?.cancel()
         callSessionTracker.clear()

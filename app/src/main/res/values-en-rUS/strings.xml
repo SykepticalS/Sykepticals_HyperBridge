@@ -125,8 +125,6 @@
     <string name="setting_float_desc">Show the full notification banner briefly before minimizing to the Island.</string>
     <string name="setting_float_timeout_desc">How long the heads-up popup stays visible.</string>
 
-    <string name="setting_shade">Notification Panel</string>
-    <string name="setting_shade_desc">Keep the notification visible in the notification panel. If disabled, it only appears as an Island.</string>
 
     <string name="seconds_suffix">%ds</string>
 
@@ -502,22 +500,13 @@
 
     <string name="channel_live_updates">Native Live Updates</string>
 
-    <string name="engine_preview_title">Preview</string>
-    <string name="engine_design_section">Notification Design</string>
-    <string name="engine_xiaomi_title">Xiaomi Featured Design</string>
-    <string name="engine_xiaomi_desc">Modern HyperOS layout with Xiaomi intended design.</string>
-    <string name="engine_native_title">Live Update Design</string>
-    <string name="engine_native_desc">Native android notification designs, works on CN ROM.</string>
 
     <string name="engine_config_title">Engine Configuration</string>
-    <string name="engine_section_design">Notification Design</string>
     <string name="good_to_know">Good to know</string>
     <string name="nav_layout_info">• Navigation layouts will be fully integrated into the Theme Engine in an upcoming update.\n• When using the Native Live Update engine, only the Right Side content is visible.</string>
     <string name="xiaomi_featured_notifications">Xiaomi Featured Notifications</string>
     <string name="island_behavior_title">Island Behavior</string>
     <string name="island_behavior_desc"><![CDATA[Timeouts, duplicates & visibility]]></string>
-    <string name="engine">Engine</string>
-    <string name="engine_desc">Live Updates vs Xiaomi Island</string>
     <string name="behaviour_triggers"><![CDATA[Behaviour & Triggers]]></string>
     <string name="engine_timeouts_triggers"><![CDATA[Engine, timeouts & triggers]]></string>
     <string name="global_behavior">Global Behavior</string>
@@ -540,8 +529,6 @@
     <string name="trigger_app_desc">Select which events trigger the island for this app.</string>
     <string name="enable_triggers">Enable specific triggers</string>
     <string name="open_source_licenses">Open Source Licenses</string>
-    <string name="remove_original_notification">Remove original notification</string>
-    <string name="remove_original_notification_desc">Automatically dismiss the source notification when a Live Update is active.</string>
     <string name="onboarding_can_be_changed">You can change these options later in Settings and Theme Configurator.</string>
     <string name="onboarding_widget_desc">Add standard Android widgets to your island for quick access.</string>
     <string name="onboard_theme_desc">Fully customize colors, shapes and icons of your island.</string>

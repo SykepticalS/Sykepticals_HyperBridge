@@ -142,6 +142,10 @@
             android:name=".receiver.VpnActionReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".receiver.LoginCodeCopyReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".ui.InlineReplyActivity"
             android:exported="true"

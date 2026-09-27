@@ -105,8 +105,6 @@
     <string name="island_appearance">Island Appearance</string>
     <string name="setting_float">Heads-up Popup</string>
     <string name="setting_float_desc">Show the full notification banner briefly before minimizing to the Island.</string>
-    <string name="setting_shade">Notification Panel</string>
-    <string name="setting_shade_desc">Keep the notification visible in the notification panel. If disabled, it only appears as an Island.</string>
     <string name="seconds_suffix">%ds</string>
     <string name="use_global_default">Use Global Defaults</string>
     <string-array name="nav_arrival_keywords">

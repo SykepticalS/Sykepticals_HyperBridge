@@ -69,7 +69,6 @@ import com.d4viddf.hyperbridge.ui.screens.theme.content.ActionsDetailContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.BehaviourMenuContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.CallStyleSheetContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.ColorsDetailContent
-import com.d4viddf.hyperbridge.ui.screens.theme.content.EngineThemeContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.IconsDetailContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.NotificationTypesContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.ThemeBehaviourContent
@@ -77,7 +76,7 @@ import com.d4viddf.hyperbridge.ui.screens.theme.content.safeParseColor
 import com.d4viddf.hyperbridge.ui.theme.HyperBridgeTheme
 
 enum class AppEditorRoute {
-    MENU, BEHAVIOR_MENU, BEHAVIOR_ENGINE, BEHAVIOR_ISLAND, BEHAVIOR_TYPES, COLORS, ICONS, CALLS, NAVIGATION, REPLY, ACTIONS
+    MENU, BEHAVIOR_MENU, BEHAVIOR_ISLAND, BEHAVIOR_TYPES, COLORS, ICONS, CALLS, NAVIGATION, ACTIONS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,7 +88,6 @@ fun AppThemeEditor(viewModel: ThemeViewModel) {
     // Logic to handle "Back" request
     val handleBack = {
         when (currentRoute) {
-            AppEditorRoute.BEHAVIOR_ENGINE,
             AppEditorRoute.BEHAVIOR_ISLAND,
             AppEditorRoute.BEHAVIOR_TYPES -> currentRoute = AppEditorRoute.BEHAVIOR_MENU // Go back to sub-menu
             AppEditorRoute.MENU -> showUnsavedDialog = true // Ask to save before exiting
@@ -111,14 +109,12 @@ fun AppThemeEditor(viewModel: ThemeViewModel) {
                             text = if (currentRoute == AppEditorRoute.MENU) stringResource(R.string.edit_app) else stringResource(
                                 when (currentRoute) {
                                     AppEditorRoute.BEHAVIOR_MENU -> R.string.behaviour_triggers
-                                    AppEditorRoute.BEHAVIOR_ENGINE -> R.string.engine
                                     AppEditorRoute.BEHAVIOR_ISLAND -> R.string.island_behavior
                                     AppEditorRoute.BEHAVIOR_TYPES -> R.string.active_notifications_title
                                     AppEditorRoute.COLORS -> R.string.creator_nav_colors
                                     AppEditorRoute.ICONS -> R.string.creator_nav_icons
                                     AppEditorRoute.CALLS -> R.string.creator_nav_calls
                                     AppEditorRoute.NAVIGATION -> R.string.nav_layout_title
-                                    AppEditorRoute.REPLY -> R.string.app_name // Fallback or explicit string if preferred
                                     AppEditorRoute.ACTIONS -> R.string.creator_nav_actions
                                     else -> R.string.app_name
                                 }
@@ -129,12 +125,6 @@ fun AppThemeEditor(viewModel: ThemeViewModel) {
                         if (currentRoute == AppEditorRoute.MENU) {
                             Text(
                                 text = viewModel.editingAppLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else if (currentRoute == AppEditorRoute.REPLY) {
-                            Text(
-                                text = "Inline Reply",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -195,18 +185,11 @@ fun AppThemeEditor(viewModel: ThemeViewModel) {
                     AppEditorRoute.BEHAVIOR_MENU -> Box(Modifier.fillMaxSize()) {
                         BehaviourMenuContent(onNavigate = {
                             currentRoute = when (it) {
-                                CreatorRoute.BEHAVIOR_ENGINE -> AppEditorRoute.BEHAVIOR_ENGINE
                                 CreatorRoute.BEHAVIOR_ISLAND -> AppEditorRoute.BEHAVIOR_ISLAND
                                 CreatorRoute.BEHAVIOR_TYPES -> AppEditorRoute.BEHAVIOR_TYPES
                                 else -> AppEditorRoute.BEHAVIOR_MENU
                             }
                         })
-                    }
-                    AppEditorRoute.BEHAVIOR_ENGINE -> Box(Modifier.fillMaxSize()) {
-                        EngineThemeContent(
-                            isNative = viewModel.appUseNativeLiveUpdates,
-                            onEngineChange = { viewModel.appUseNativeLiveUpdates = it }
-                        )
                     }
                     AppEditorRoute.BEHAVIOR_ISLAND -> Box(Modifier.fillMaxSize()) {
                         ThemeBehaviourContent() // Still uses standard island behavior
@@ -238,9 +221,6 @@ fun AppThemeEditor(viewModel: ThemeViewModel) {
                             packageName = viewModel.editingAppPackage,
                             showTopBar = false
                         )
-                    }
-                    AppEditorRoute.REPLY -> Box(Modifier.fillMaxSize()) {
-                        com.d4viddf.hyperbridge.ui.screens.theme.content.ReplyStyleSheetContent(viewModel = viewModel)
                     }
                     AppEditorRoute.ACTIONS -> Box(Modifier.fillMaxSize()) {
                         AppActionEditor(viewModel)
@@ -329,7 +309,6 @@ fun AppEditorMenu(
                 AppEditorRoute.ICONS,
                 AppEditorRoute.CALLS,
                 AppEditorRoute.NAVIGATION,
-                AppEditorRoute.REPLY,
                 AppEditorRoute.ACTIONS
             )
 
@@ -337,7 +316,7 @@ fun AppEditorMenu(
                 val shape = getExpressiveShape(items.size, index, ShapeStyle.Large)
                 when(route) {
                     AppEditorRoute.BEHAVIOR_MENU -> CreatorOptionCard(
-                        title = stringResource(R.string.engine),
+                        title = stringResource(R.string.behaviour_triggers),
                         subtitle = stringResource(R.string.engine_timeouts_triggers),
                         icon = Icons.Outlined.DisplaySettings,
                         shape = shape,
@@ -375,13 +354,6 @@ fun AppEditorMenu(
                         title = stringResource(R.string.nav_layout_title),
                         subtitle = stringResource(R.string.nav_layout_desc),
                         icon = Icons.Outlined.Map,
-                        shape = shape,
-                        onClick = { onNavigate(route) }
-                    )
-                    AppEditorRoute.REPLY -> CreatorOptionCard(
-                        title = stringResource(R.string.inline_reply_title),
-                        subtitle = stringResource(R.string.customize_inline_reply),
-                        icon = Icons.Outlined.Call, // Just use a call or generic icon for now
                         shape = shape,
                         onClick = { onNavigate(route) }
                     )
@@ -588,51 +560,6 @@ fun PreviewNotificationTypesContentDark() {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)) {
             NotificationTypesContent()
-        }
-    }
-}
-
-@Preview(showBackground = true, name = "5. Engine - Default Inherit (Light)")
-@Composable
-fun PreviewEngineThemeContentDefault() {
-    HyperBridgeTheme(darkTheme = false) {
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)) {
-            EngineThemeContent(
-                isNative = null, // Demonstrates the Default option selected
-                onEngineChange = {}
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true, name = "6. Engine - Native Live Updates (Dark)")
-@Composable
-fun PreviewEngineThemeContentNativeDark() {
-    HyperBridgeTheme(darkTheme = true) {
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)) {
-            EngineThemeContent(
-                isNative = true, // Demonstrates the Native option selected
-                onEngineChange = {}
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true, name = "7. Engine - Xiaomi Custom (Light)")
-@Composable
-fun PreviewEngineThemeContentXiaomiLight() {
-    HyperBridgeTheme(darkTheme = false) {
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)) {
-            EngineThemeContent(
-                isNative = false, // Demonstrates the Xiaomi option selected
-                onEngineChange = {}
-            )
         }
     }
 }

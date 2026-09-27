@@ -37,8 +37,6 @@ object HookConfig {
     internal fun remotePreferences(): android.content.SharedPreferences? = prefs
 
     fun focusEnabled(): Boolean = prefs?.getBoolean(HookConfigSync.KEY_FOCUS_ENABLED, true) == true
-    fun suppressSourceHeadsUp(): Boolean =
-        prefs?.getBoolean(HookConfigSync.KEY_SUPPRESS_SOURCE_HEADS_UP, true) ?: true
     fun marqueeSpeed(): Int = prefs?.getInt(HookConfigSync.KEY_MARQUEE_SPEED, 100)?.coerceIn(20, 500) ?: 100
     fun glowRange(): Int = prefs?.getInt(HookConfigSync.KEY_GLOW_RANGE, 100)?.coerceIn(0, 100) ?: 100
     fun singleColorGlow(): Boolean = prefs?.getBoolean(HookConfigSync.KEY_SINGLE_COLOR_GLOW, false) ?: false
@@ -56,7 +54,6 @@ object HookConfig {
 
     /** Fast, local and fail-open prediction used before SystemUI evaluates heads-up state. */
     fun expectsReplacement(sbn: StatusBarNotification): Boolean {
-        if (!suppressSourceHeadsUp()) return false
         val p = prefs ?: return false
         if (p.getInt(HookConfigSync.KEY_PROTOCOL, -1) != IslandProtocol.VERSION ||
             !p.getBoolean(HookConfigSync.KEY_ENGINE_ENABLED, false)
@@ -95,7 +92,6 @@ object HookConfig {
      * will replace it.
      */
     fun expectsIncomingCallBannerSuppression(sbn: StatusBarNotification): Boolean {
-        if (!suppressSourceHeadsUp()) return false
         val preferences = prefs ?: return false
         if (preferences.getInt(HookConfigSync.KEY_PROTOCOL, -1) != IslandProtocol.VERSION ||
             !preferences.getBoolean(HookConfigSync.KEY_ENGINE_ENABLED, false)

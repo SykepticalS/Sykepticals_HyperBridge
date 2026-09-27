@@ -24,6 +24,10 @@ import java.lang.ref.WeakReference
 internal class CompactMediaTitleController(
     primary: CompactTitleView,
     ghost: CompactTitleView,
+    /** Xiaomi's transition copy: shows the real island's current line at rest and never scrolls. */
+    private val passive: Boolean,
+    /** False while the island is inside an app, expanded, or animating between states. */
+    private val islandAtRest: (View) -> Boolean,
 ) : Choreographer.FrameCallback {
     private val primaryRef = WeakReference(primary)
     private val ghostRef = WeakReference(ghost)
@@ -37,7 +41,13 @@ internal class CompactMediaTitleController(
     private var phase = CyclePhase.SETTLED
     private var state = State.IDLE
     private var stateStartNanos = 0L
-    private var pausedAtNanos = 0L
+    private var paused = false
+    private var spotKey = Long.MIN_VALUE
+    private var spotSinceNanos = 0L
+    private val spot = IntArray(2)
+    private var lastX = 0
+    private var lastY = 0
+    private var lastScale = 1f
     private var completedLoops = 0
     private var overflow = 0f
     private var speed = 0f
@@ -45,6 +55,11 @@ internal class CompactMediaTitleController(
 
     fun render(settings: CompactMediaIslandSettings, title: String, artist: String, identity: String) {
         val view = primaryRef.get() ?: return
+        if (passive) {
+            view.text = sharedLine?.takeIf { it.first == identity }?.second ?: title
+            view.offset = 0f
+            return
+        }
         val key = listOf(
             settings.cycleActive,
             settings.titleScrollMode,
@@ -84,13 +99,25 @@ internal class CompactMediaTitleController(
             return
         }
         if (!isOnScreen(view)) {
-            if (pausedAtNanos == 0L) pausedAtNanos = frameTimeNanos
+            pause(view)
+            spotKey = Long.MIN_VALUE
             choreographer.postFrameCallbackDelayed(this, HIDDEN_POLL_MS)
             return
         }
-        if (pausedAtNanos != 0L) {
-            if (stateStartNanos != 0L) stateStartNanos += frameTimeNanos - pausedAtNanos
-            pausedAtNanos = 0L
+        if (!islandAtRest(view)) {
+            pause(view)
+            spotKey = Long.MIN_VALUE
+            choreographer.postFrameCallbackDelayed(this, BUSY_POLL_MS)
+            return
+        }
+        if (!isSettled(view, frameTimeNanos)) {
+            pause(view)
+            choreographer.postFrameCallback(this)
+            return
+        }
+        if (paused) {
+            paused = false
+            stateStartNanos = 0L
         }
         if (stateStartNanos == 0L) stateStartNanos = frameTimeNanos
         step(view, frameTimeNanos)
@@ -173,6 +200,7 @@ internal class CompactMediaTitleController(
 
     private fun beginLine(view: CompactTitleView, text: String, animate: Boolean) {
         turn?.cancel()
+        identity?.let { sharedLine = it to text }
         if (animate) startTurn(view, text) else view.text = text
         view.offset = 0f
         completedLoops = 0
@@ -264,9 +292,62 @@ internal class CompactMediaTitleController(
     private fun start() {
         if (running) return
         running = true
-        pausedAtNanos = 0L
+        spotKey = Long.MIN_VALUE
         choreographer.removeFrameCallback(this)
         choreographer.postFrameCallback(this)
+    }
+
+    /**
+     * The line goes back to rest as soon as the island leaves its resting state, so the
+     * animation back into the cutout never shows a half-scrolled title.
+     */
+    private fun pause(view: CompactTitleView) {
+        if (paused) return
+        paused = true
+        restartLine(view)
+    }
+
+    private fun restartLine(view: CompactTitleView) {
+        if (state == State.FORWARD || state == State.HOLD || state == State.RETURN) {
+            view.offset = 0f
+            state = State.WAIT
+        }
+        completedLoops = 0
+        stateStartNanos = 0L
+    }
+
+    /**
+     * True once the island has held still for a moment. Its entry animation from an app
+     * (and width changes between tracks) move the slot, and time must not run meanwhile.
+     */
+    private fun isSettled(view: View, now: Long): Boolean {
+        val anchor = view.parent as? View ?: view
+        anchor.getLocationInWindow(spot)
+        val scale = cumulativeScale(anchor)
+        val step = MOVE_STEP_DP * view.resources.displayMetrics.density
+        val moving = spotKey == Long.MIN_VALUE ||
+            kotlin.math.abs(spot[0] - lastX) > step ||
+            kotlin.math.abs(spot[1] - lastY) > step ||
+            kotlin.math.abs(scale - lastScale) > MOVE_SCALE_STEP
+        spotKey = 0L
+        lastX = spot[0]
+        lastY = spot[1]
+        lastScale = scale
+        if (moving) {
+            spotSinceNanos = now
+            return false
+        }
+        return now - spotSinceNanos >= SETTLE_NANOS
+    }
+
+    private fun cumulativeScale(view: View): Float {
+        var scale = 1f
+        var current: View? = view
+        while (current != null) {
+            scale *= current.scaleX
+            current = current.parent as? View
+        }
+        return scale
     }
 
     /** Picks up after a detach. A half-finished scroll restarts from the beginning of the line. */
@@ -309,7 +390,15 @@ internal class CompactMediaTitleController(
         private const val TURN_ROTATION_DEG = 20f
         private const val TURN_BLUR_PX = 30f
 
+        private const val BUSY_POLL_MS = 100L
+        private const val SETTLE_NANOS = 200_000_000L
+        private const val MOVE_STEP_DP = 1.5f
+        private const val MOVE_SCALE_STEP = 0.004f
+
         /** Track whose cycle already played, shared by the real and transition islands. */
         @Volatile var settledIdentity: String? = null
+
+        /** Line the real island shows for a track, mirrored by the transition copy. */
+        @Volatile private var sharedLine: Pair<String, String>? = null
     }
 }

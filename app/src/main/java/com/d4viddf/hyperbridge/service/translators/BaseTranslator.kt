@@ -40,7 +40,9 @@ import com.d4viddf.hyperbridge.models.theme.ActionConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.models.theme.ResourceType
 import com.d4viddf.hyperbridge.models.theme.ThemeResource
+import com.d4viddf.hyperbridge.receiver.LoginCodeCopyReceiver
 import com.d4viddf.hyperbridge.service.download.DownloadTransportControls
+import com.d4viddf.hyperbridge.service.logincode.LoginCodePresentation
 import com.d4viddf.hyperbridge.service.visual.IconGeometry
 import com.d4viddf.hyperbridge.service.visual.LargeIconRole
 import com.d4viddf.hyperbridge.service.visual.NotificationVisualPlanner
@@ -429,10 +431,6 @@ abstract class BaseTranslator(
             val rawTitle = androidAction.title?.toString() ?: ""
             val isMarkAsRead = androidAction.semanticAction == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ || rawTitle.equals("mark as read", ignoreCase = true)
 
-            if (config.removeOriginalNotification == true && hasRemoteInput) {
-                return@forEachIndexed
-            }
-
             val uniqueKey = "${actionKeyPrefix ?: "act_${sbn.key.hashCode()}"}_$index"
 
             val actionConfig = resolveActionConfig(theme, sbn.packageName, rawTitle)
@@ -527,8 +525,7 @@ abstract class BaseTranslator(
                 hyperPic = HyperPicture("${uniqueKey}_icon", processedBitmap)
             }
 
-            val inlineReply = hasRemoteInput && config.enableInlineReply != false
-            val finalIntent = if (inlineReply) {
+            val finalIntent = if (hasRemoteInput) {
                 com.d4viddf.hyperbridge.ui.InlineReplyIntents.pendingIntent(
                     context,
                     uniqueKey.hashCode(),
@@ -536,8 +533,6 @@ abstract class BaseTranslator(
                     androidAction.remoteInputs!![0].resultKey,
                     sbn.packageName,
                 )
-            } else if (hasRemoteInput) {
-                sbn.notification.contentIntent ?: androidAction.actionIntent
             } else {
                 androidAction.actionIntent
             }
@@ -561,6 +556,33 @@ abstract class BaseTranslator(
             bridgeActions.add(BridgeAction(hyperAction, hyperPic))
         }
         return bridgeActions
+    }
+
+    protected fun IslandTextPresentation.withLoginCode(loginCode: LoginCodePresentation?): IslandTextPresentation =
+        if (loginCode?.compactCode == true) copy(right = loginCode.code) else this
+
+    /** The source actions, or only a Copy code button when the login code extractor asks for one. */
+    protected fun actionsWithLoginCode(
+        sbn: StatusBarNotification,
+        loginCode: LoginCodePresentation?,
+        sourceActions: () -> List<BridgeAction>,
+    ): List<BridgeAction> {
+        if (loginCode?.copyAction != true) return sourceActions()
+        val pendingIntent = LoginCodeCopyReceiver.pendingIntent(context, sbn.key, loginCode.code)
+        return listOf(
+            BridgeAction(
+                HyperAction(
+                    key = "login_code_copy_${sbn.key.hashCode()}",
+                    title = context.getString(R.string.login_code_copy_action),
+                    icon = null,
+                    pendingIntent = pendingIntent,
+                    actionIntentType = FocusActionIntentTypes.of(pendingIntent),
+                    actionBgColor = null,
+                    titleColor = "#FFFFFF",
+                ),
+                null,
+            )
+        )
     }
 
     // --- UTILS ---

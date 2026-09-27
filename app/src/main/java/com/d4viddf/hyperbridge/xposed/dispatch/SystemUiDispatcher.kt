@@ -5,15 +5,20 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.os.ResultReceiver
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import android.widget.Toast
 import com.d4viddf.hyperbridge.island.backend.IslandOwnership
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.xposed.log
@@ -51,6 +56,7 @@ object SystemUiDispatcher {
                         IslandProtocol.ACTION_RELOAD_ENGINE -> SystemUiNotificationIngressHook.reloadEngine()
                         IslandProtocol.ACTION_CANCEL_SOURCE -> intent.getStringExtra(IslandProtocol.EXTRA_SOURCE_KEY)
                             ?.let(SystemUiNotificationIngressHook::cancelSource)
+                        IslandProtocol.ACTION_COPY_TEXT -> copyText(context, intent, module)
                     }
                 }
             }
@@ -61,6 +67,7 @@ object SystemUiDispatcher {
                 addAction(IslandProtocol.ACTION_PING)
                 addAction(IslandProtocol.ACTION_RELOAD_ENGINE)
                 addAction(IslandProtocol.ACTION_CANCEL_SOURCE)
+                addAction(IslandProtocol.ACTION_COPY_TEXT)
             }
             context.registerReceiver(
                 receiver,
@@ -131,6 +138,22 @@ object SystemUiDispatcher {
             if (result.isSuccess) IslandProtocol.RESULT_POSTED else IslandProtocol.RESULT_REJECTED,
             Bundle.EMPTY,
         )
+    }
+
+    private fun copyText(context: Context, intent: Intent, module: XposedModule) {
+        val text = intent.getStringExtra(IslandProtocol.EXTRA_COPY_TEXT)?.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            val clipboard = context.getSystemService(ClipboardManager::class.java) ?: error("ClipboardManager unavailable")
+            val clip = ClipData.newPlainText(intent.getStringExtra(IslandProtocol.EXTRA_COPY_LABEL).orEmpty(), text).apply {
+                description.extras = PersistableBundle().apply {
+                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                }
+            }
+            clipboard.setPrimaryClip(clip)
+            intent.getStringExtra(IslandProtocol.EXTRA_COPY_CONFIRMATION)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+        }.onFailure { module.log("HyperBridge: clipboard copy failed: ${it.message}") }
     }
 
     private fun cancel(context: Context, intent: Intent) {

@@ -85,18 +85,14 @@ class LiveUpdateTranslator(
             
             val hasRemoteInput = action.remoteInputs != null && action.remoteInputs!!.isNotEmpty()
             val finalIntent = if (hasRemoteInput) {
-                if (config?.enableInlineReply != false) {
-                    val uniqueKey = "act_${sbn?.key.hashCode()}_$index"
-                    com.d4viddf.hyperbridge.ui.InlineReplyIntents.pendingIntent(
-                        context,
-                        uniqueKey.hashCode(),
-                        action.actionIntent,
-                        action.remoteInputs!![0].resultKey,
-                        sbn?.packageName,
-                    )
-                } else {
-                    original?.contentIntent ?: action.actionIntent
-                }
+                val uniqueKey = "act_${sbn?.key.hashCode()}_$index"
+                com.d4viddf.hyperbridge.ui.InlineReplyIntents.pendingIntent(
+                    context,
+                    uniqueKey.hashCode(),
+                    action.actionIntent,
+                    action.remoteInputs!![0].resultKey,
+                    sbn?.packageName,
+                )
             } else {
                 action.actionIntent
             }

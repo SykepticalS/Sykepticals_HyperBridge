@@ -29,4 +29,7 @@ interface IslandBackend {
     fun cancelAllOwned(): Result<Unit>
     fun ping()
     fun health(): IslandBackendHealth
+    /** Copies sensitive text from SystemUI, which may write the clipboard while this app is in the background. */
+    fun copyToClipboard(label: String, text: String, confirmation: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Clipboard relay unavailable"))
 }

@@ -154,6 +154,15 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
         })
     }
 
+    override fun copyToClipboard(label: String, text: String, confirmation: String): Result<Unit> = runCatching {
+        send(Intent(IslandProtocol.ACTION_COPY_TEXT).apply {
+            putExtra(IslandProtocol.EXTRA_PROTOCOL, IslandProtocol.VERSION)
+            putExtra(IslandProtocol.EXTRA_COPY_LABEL, label)
+            putExtra(IslandProtocol.EXTRA_COPY_TEXT, text)
+            putExtra(IslandProtocol.EXTRA_COPY_CONFIRMATION, confirmation)
+        })
+    }
+
     override fun health(): IslandBackendHealth {
         val elapsed = lastHandshakeElapsed.get()
         val fresh = elapsed != 0L && SystemClock.elapsedRealtime() - elapsed <= IslandProtocol.HEARTBEAT_LEASE_MS

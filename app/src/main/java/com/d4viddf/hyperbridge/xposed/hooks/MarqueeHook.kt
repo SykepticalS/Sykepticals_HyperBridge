@@ -899,6 +899,59 @@ object MarqueeHook {
         return view.paint.measureText(fallbackText)
     }
 
+    // TEMP-DEBUG-MARQUEE-END
+    private fun debugEndGeometry(view: TextView, text: String, maxScroll: Float) {
+        runCatching {
+            val loc = IntArray(2)
+            view.getLocationInWindow(loc)
+            val layout = view.layout
+            val bounds = Rect()
+            view.paint.getTextBounds(text, 0, text.length, bounds)
+            val sb = StringBuilder()
+            sb.append("area=").append(compactAreaName(view))
+                .append(" cls=").append(view.javaClass.name)
+                .append(" winL=").append(loc[0]).append(" w=").append(view.width)
+                .append(" pad=").append(view.paddingLeft).append('/').append(view.paddingRight)
+                .append(" cpad=").append(view.compoundPaddingLeft).append('/').append(view.compoundPaddingRight)
+                .append(" grav=").append(Integer.toHexString(view.gravity))
+                .append(" scrollX=").append(view.scrollX).append(" max=").append(maxScroll)
+                .append(" avail=").append(availableTextWidth(view))
+                .append(" advance=").append(laidOutTextWidth(view, text))
+                .append(" ink=").append(bounds.left).append('/').append(bounds.right)
+                .append(" measure=").append(view.paint.measureText(text))
+                .append(" lsp=").append(view.letterSpacing)
+                .append(" fade=").append(view.horizontalFadingEdgeLength)
+            if (layout != null) {
+                sb.append(" lay.w=").append(layout.width)
+                    .append(" lineL=").append(layout.getLineLeft(0))
+                    .append(" lineR=").append(layout.getLineRight(0))
+                    .append(" lineMax=").append(layout.getLineMax(0))
+                    .append(" align=").append(layout.getParagraphAlignment(0))
+            }
+            val vis = Rect()
+            val shown = view.getGlobalVisibleRect(vis)
+            sb.append(" globalVis=").append(shown).append(':').append(vis.toShortString())
+            var parent = view.parent
+            var depth = 0
+            while (parent is ViewGroup && depth < 8) {
+                val pl = IntArray(2)
+                parent.getLocationInWindow(pl)
+                val name = runCatching { parent.resources.getResourceEntryName(parent.id) }.getOrNull()
+                sb.append("\n  ^").append(parent.javaClass.simpleName).append('#').append(name)
+                    .append(" winL=").append(pl[0]).append(" w=").append(parent.width)
+                    .append(" pad=").append(parent.paddingLeft).append('/').append(parent.paddingRight)
+                    .append(" clipC=").append(parent.clipChildren)
+                    .append(" clipP=").append(parent.clipToPadding)
+                    .append(" clipB=").append(parent.clipBounds?.toShortString())
+                    .append(" outlineClip=").append(parent.clipToOutline)
+                if (islandEnabled.containsKey(parent)) break
+                parent = parent.parent
+                depth++
+            }
+            Log.i("HyperBridge", "HyperBridge: MARQUEE-END $sb")
+        }
+    }
+
     private fun normalize(text: String): String = text
         .replace(Regex("[\\n\\r\\t\\u00A0\\u200B\\uFEFF]+"), " ")
         .replace(Regex(" +"), " ")
@@ -984,6 +1037,7 @@ object MarqueeHook {
                         state = 2
                         startNanos = frameTimeNanos
                         onRightForwardComplete(view)
+                        debugEndGeometry(view, text, maxScroll)
                     }
                     view.scrollTo(scrollX.toInt(), 0)
                     view.invalidate()

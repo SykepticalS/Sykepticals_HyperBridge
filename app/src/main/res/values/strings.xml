@@ -127,15 +127,11 @@
     <string name="configure_order">Configure apps order</string>
 
     <string name="global_settings">Global Settings</string>
-    <string name="suppress_source_floating">Suppress source floating notification</string>
-    <string name="suppress_source_floating_desc">Hide the original heads-up only after HyperBridge successfully posts its Island.</string>
     <string name="island_appearance">Island Appearance</string>
     <string name="setting_float">Heads-up Popup</string>
     <string name="setting_float_desc">Show the full notification banner briefly before minimizing to the Island.</string>
     <string name="setting_float_timeout_desc">How long the heads-up popup stays visible.</string>
 
-    <string name="setting_shade">Notification Panel</string>
-    <string name="setting_shade_desc">Keep the notification visible in the notification panel. If disabled, it only appears as an Island.</string>
 
     <string name="seconds_suffix">%ds</string>
 
@@ -534,22 +530,13 @@
 
     <string name="channel_live_updates">Native Live Updates</string>
 
-    <string name="engine_preview_title">Preview</string>
-    <string name="engine_design_section">Notification Design</string>
-    <string name="engine_xiaomi_title">Xiaomi Featured Design</string>
-    <string name="engine_xiaomi_desc">Modern HyperOS layout with Xiaomi intended design.</string>
-    <string name="engine_native_title">Live Update Design</string>
-    <string name="engine_native_desc">Native android notification designs, works on CN ROM.</string>
 
     <string name="engine_config_title">Engine Configuration</string>
-    <string name="engine_section_design">Notification Design</string>
     <string name="good_to_know">Good to know</string>
     <string name="nav_layout_info">• Navigation layouts will be fully integrated into the Theme Engine in an upcoming update.\n• When using the Native Live Update engine, only the Right Side content is visible.</string>
     <string name="xiaomi_featured_notifications">Xiaomi Featured Notifications</string>
     <string name="island_behavior_title">Island Behavior</string>
     <string name="island_behavior_desc"><![CDATA[Timeouts, duplicates & visibility]]></string>
-    <string name="engine">Engine</string>
-    <string name="engine_desc">Live Updates vs Xiaomi Island</string>
     
     <string name="dnd_mode_title">Do Not Disturb</string>
     <string name="dnd_mode_desc">Manage island visibility during DND</string>
@@ -558,7 +545,7 @@
     <string name="dnd_auto_detect">Auto-detect System DND</string>
     <string name="dnd_auto_detect_desc">Automatically pause islands when your phone is in Do Not Disturb mode</string>
     <string name="behaviour_triggers"><![CDATA[Behaviour & Triggers]]></string>
-    <string name="engine_timeouts_triggers"><![CDATA[Engine, timeouts & triggers]]></string>
+    <string name="engine_timeouts_triggers"><![CDATA[Timeouts & triggers]]></string>
     <string name="global_behavior">Global Behavior</string>
     <string name="auto_hide_island">Auto-hide Island</string>
     <string name="hides_after_a_set_time">Hides after a set time</string>
@@ -587,13 +574,6 @@
     <string name="trigger_app_desc">Select which events trigger the island for this app.</string>
     <string name="enable_triggers">Enable specific triggers</string>
     <string name="open_source_licenses">Open Source Licenses</string>
-    <string name="remove_original_notification">Remove original notification</string>
-    <string name="remove_original_notification_desc">Automatically dismiss the source notification when a Live Update is active.</string>
-    <string name="dismiss_with_original">Dismiss with original</string>
-    <string name="dismiss_with_original_desc">Island will disappear when you clear the original notification.</string>
-    <string name="enable_inline_reply">Enable inline reply</string>
-    <string name="enable_inline_reply_desc">Launch the custom inline reply overlay when replying from the island.</string>
-    <string name="remove_original_notification_hidden_warning">Note: When enabled, Hyper Bridge cannot respond or mark messages as read. Reply and Mark as Read actions will be hidden.</string>
     
     <string name="color_mode">Color Mode</string>
     <string name="color_mode_select">Select Color Mode</string>
@@ -655,7 +635,6 @@
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
 
-    <string name="notification_management">Notification Management</string>
     <string name="inline_reply_title">Inline Reply</string>
     <string name="customize_inline_reply">Customize inline reply overlay</string>
     <string name="reply_hint">Reply...</string>
@@ -918,6 +897,33 @@
     <string name="screen_recorder_notification_recording_text">Pause or stop and save the recording</string>
     <string name="screen_recorder_notification_paused_text">Tap to resume recording</string>
     <string name="screen_recorder_notification_stop">Stop</string>
+
+    <!-- Login code extractor -->
+    <string name="login_code_title">Login code extractor</string>
+    <string name="login_code_desc">Finds sign-in and verification codes in messages and emails and puts them on the island</string>
+    <string name="login_code_screen_desc">When a notification from one of the selected apps contains a one-time code, HyperBridge finds it in any language and shows it on the island. Selected apps get an island for code messages even when they are not bridged.</string>
+    <string name="login_code_enabled">Detect login codes</string>
+    <string name="login_code_enabled_desc">Scan notifications from the selected apps for one-time codes</string>
+    <string name="login_code_when_detected">When a code is detected</string>
+    <string name="login_code_copy_setting">Copy code button</string>
+    <string name="login_code_copy_setting_desc">Replace the notification\'s buttons with a single Copy code button</string>
+    <string name="login_code_dismiss_setting">Dismiss after copy</string>
+    <string name="login_code_dismiss_setting_desc">After copying, close the island and remove the notification from the shade</string>
+    <string name="login_code_glow_setting">Native glow</string>
+    <string name="login_code_glow_setting_desc">Light up the island with a glow, indicating that a code has been detected</string>
+    <string name="login_code_compact_setting">Code in small island</string>
+    <string name="login_code_compact_setting_desc">Show the code on the right side of the small island instead of the message text</string>
+    <string name="login_code_privacy_title">Stays on your phone</string>
+    <string name="login_code_privacy_desc">Codes are found entirely on this device. The extractor never communicates with the outside, and no code ever leaves your phone.</string>
+    <string name="login_code_apps">Apps</string>
+    <string name="login_code_apps_reset">Reset to defaults</string>
+    <string name="login_code_search_apps">Search apps</string>
+    <string name="login_code_selected_count">%1$d selected</string>
+    <string name="login_code_copy_action">Copy code</string>
+    <string name="login_code_copied">Code copied</string>
+    <string name="login_code_clip_label">Login code</string>
+    <string name="login_code_onboarding_title">Login codes, right on the island</string>
+    <string name="login_code_onboarding_desc">When a verification code arrives by SMS, email or chat, HyperBridge shows the code on the island with a Copy code button. It reads codes in any language and number system.</string>
+    <string name="login_code_onboarding_later">You can change the apps and what happens when a code arrives in Settings → Global settings → Login code extractor.</string>
+    <string name="login_code_onboarding_finish">Get started</string>
 </resources>
-
-

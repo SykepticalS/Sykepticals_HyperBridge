@@ -20,15 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.TextFields
@@ -93,7 +89,6 @@ fun IslandSettingsControl(
     val isTimeoutEnabled = currentTimeout > 0
     val isFloatEnabled = displayConfig.firstFloat ?: true
     val currentFloatTimeout = displayConfig.floatTimeout ?: 10
-    val removeOriginalOn = displayConfig.removeOriginalNotification == true
     val showLeftCustom = displayConfig.leftContent == IslandTextContent.CUSTOM
     val showRightCustom = displayConfig.rightContent == IslandTextContent.CUSTOM
     val contentGroupSize = 2 + (if (showLeftCustom) 1 else 0) + (if (showRightCustom) 1 else 0)
@@ -138,7 +133,7 @@ fun IslandSettingsControl(
 
         SectionLabel(stringResource(R.string.xiaomi_featured_notifications))
         SettingsStack {
-            SettingsCard(shape = groupedShape(3, 0)) {
+            SettingsCard(shape = groupedShape(2, 0)) {
                 SettingsRow(
                     icon = Icons.Default.Visibility,
                     title = stringResource(R.string.setting_float),
@@ -165,20 +160,12 @@ fun IslandSettingsControl(
                 }
             }
             SettingsToggleCard(
-                title = stringResource(R.string.setting_shade),
-                subtitle = stringResource(R.string.setting_shade_desc),
-                icon = Icons.Default.Layers,
-                checked = displayConfig.isShowShade ?: false,
-                onCheckedChange = { onUpdate(config.copy(isShowShade = it)) },
-                shape = groupedShape(3, 1)
-            )
-            SettingsToggleCard(
                 title = "Expand on updates",
                 subtitle = "Expand the island again when an existing notification changes.",
                 icon = Icons.Default.Update,
                 checked = displayConfig.floatOnUpdate == true,
                 onCheckedChange = { onUpdate(config.copy(floatOnUpdate = it)) },
-                shape = groupedShape(3, 2)
+                shape = groupedShape(2, 1)
             )
         }
 
@@ -263,7 +250,7 @@ fun IslandSettingsControl(
                 displayValue = displayConfig.islandGlowMode ?: GlowMode.OFF,
                 values = GlowMode.entries,
                 allowInherit = defaultConfig != null,
-                shape = groupedShape(7, 0),
+                shape = groupedShape(6, 0),
                 onChange = { onUpdate(config.copy(islandGlowMode = it)) },
                 label = ::prettyGlowLabel,
             )
@@ -271,7 +258,7 @@ fun IslandSettingsControl(
                 title = "Island glow color",
                 value = displayConfig.islandGlowColor.orEmpty(),
                 icon = Icons.Default.Palette,
-                shape = groupedShape(7, 1),
+                shape = groupedShape(6, 1),
                 onChange = { onUpdate(config.copy(islandGlowColor = it.ifBlank { null })) }
             )
             SettingsToggleCard(
@@ -280,7 +267,7 @@ fun IslandSettingsControl(
                 icon = Icons.Default.LightMode,
                 checked = displayConfig.forceIslandGlow == true,
                 onCheckedChange = { onUpdate(config.copy(forceIslandGlow = it)) },
-                shape = groupedShape(7, 2)
+                shape = groupedShape(6, 2)
             )
             InheritedEnumSettingCard(
                 title = "Focus / expanded outer glow",
@@ -290,7 +277,7 @@ fun IslandSettingsControl(
                 displayValue = displayConfig.focusGlowMode ?: GlowMode.OFF,
                 values = GlowMode.entries,
                 allowInherit = defaultConfig != null,
-                shape = groupedShape(7, 3),
+                shape = groupedShape(6, 3),
                 onChange = { onUpdate(config.copy(focusGlowMode = it)) },
                 label = ::prettyGlowLabel,
             )
@@ -298,7 +285,7 @@ fun IslandSettingsControl(
                 title = "Focus glow color",
                 value = displayConfig.focusGlowColor.orEmpty(),
                 icon = Icons.Default.Palette,
-                shape = groupedShape(7, 4),
+                shape = groupedShape(6, 4),
                 onChange = { onUpdate(config.copy(focusGlowColor = it.ifBlank { null })) }
             )
             SettingsToggleCard(
@@ -307,44 +294,19 @@ fun IslandSettingsControl(
                 icon = Icons.Default.LightMode,
                 checked = displayConfig.forceFocusGlow == true,
                 onCheckedChange = { onUpdate(config.copy(forceFocusGlow = it)) },
-                shape = groupedShape(7, 5)
-            )
-            SettingsToggleCard(
-                title = "Pink glow for levixcs / Nisamm",
-                subtitle = "Always use pink glow for those names, even when outer glow is off.",
-                icon = Icons.Default.Palette,
-                checked = displayConfig.contactPinkGlow == true,
-                onCheckedChange = { onUpdate(config.copy(contactPinkGlow = it)) },
-                shape = groupedShape(7, 6)
+                shape = groupedShape(6, 5)
             )
         }
 
         SectionLabel("System Behavior")
         SettingsStack {
-            SettingsToggleCard(
-                title = "Restore native lockscreen behavior",
-                subtitle = "Do not replace private content while the lockscreen requires redaction.",
-                icon = Icons.Default.Lock,
-                checked = displayConfig.restoreLockscreen == true,
-                onCheckedChange = { onUpdate(config.copy(restoreLockscreen = it)) },
-                shape = groupedShape(4, 0)
-            )
-            EnumSettingCard(
-                title = "Do not disturb",
-                subtitle = "How the island behaves while DND is active.",
-                icon = Icons.Default.DoNotDisturb,
-                value = displayConfig.dndBehavior ?: IslandSceneBehavior.SUPPRESS,
-                values = IslandSceneBehavior.entries,
-                shape = groupedShape(4, 1),
-                onChange = { onUpdate(config.copy(dndBehavior = it)) }
-            )
             EnumSettingCard(
                 title = "Fullscreen",
                 subtitle = "How the island behaves in fullscreen apps.",
                 icon = Icons.Default.Fullscreen,
                 value = displayConfig.fullscreenBehavior ?: IslandSceneBehavior.DEFAULT,
                 values = IslandSceneBehavior.entries,
-                shape = groupedShape(4, 2),
+                shape = groupedShape(2, 0),
                 onChange = { onUpdate(config.copy(fullscreenBehavior = it)) }
             )
             EnumSettingCard(
@@ -353,50 +315,8 @@ fun IslandSettingsControl(
                 icon = Icons.Default.ScreenRotation,
                 value = displayConfig.landscapeBehavior ?: IslandSceneBehavior.DEFAULT,
                 values = IslandSceneBehavior.entries,
-                shape = groupedShape(4, 3),
+                shape = groupedShape(2, 1),
                 onChange = { onUpdate(config.copy(landscapeBehavior = it)) }
-            )
-        }
-
-        SectionLabel(stringResource(R.string.notification_management))
-        SettingsStack {
-            SettingsToggleCard(
-                title = stringResource(R.string.remove_original_notification),
-                subtitle = stringResource(R.string.remove_original_notification_desc),
-                icon = Icons.Default.DeleteSweep,
-                checked = removeOriginalOn,
-                onCheckedChange = { onUpdate(config.copy(removeOriginalNotification = it)) },
-                shape = groupedShape(3, 0)
-            )
-            SettingsToggleCard(
-                title = stringResource(R.string.dismiss_with_original),
-                subtitle = stringResource(R.string.dismiss_with_original_desc),
-                icon = Icons.Default.DeleteSweep,
-                checked = displayConfig.dismissWithOriginal ?: false,
-                enabled = !removeOriginalOn,
-                onCheckedChange = { onUpdate(config.copy(dismissWithOriginal = it)) },
-                shape = groupedShape(3, 1)
-            )
-            SettingsToggleCard(
-                title = stringResource(R.string.enable_inline_reply),
-                subtitle = stringResource(R.string.enable_inline_reply_desc),
-                icon = Icons.AutoMirrored.Filled.Reply,
-                checked = displayConfig.enableInlineReply ?: true,
-                enabled = !removeOriginalOn,
-                onCheckedChange = { onUpdate(config.copy(enableInlineReply = it)) },
-                shape = groupedShape(3, 2)
-            )
-        }
-        AnimatedVisibility(
-            visible = removeOriginalOn,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
-            Text(
-                text = stringResource(R.string.remove_original_notification_hidden_warning),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -500,6 +420,7 @@ fun SettingsRow(
     subtitle: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    value: String? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
@@ -523,6 +444,15 @@ fun SettingsRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (value != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
         if (trailing != null) {
             Spacer(Modifier.width(8.dp))
@@ -549,7 +479,7 @@ private fun SettingsIcon(icon: ImageVector) {
 }
 
 @Composable
-private fun <T : Enum<T>> EnumSettingCard(
+fun <T : Enum<T>> EnumSettingCard(
     title: String,
     value: T,
     values: List<T>,
@@ -571,24 +501,8 @@ private fun <T : Enum<T>> EnumSettingCard(
                 icon = icon ?: Icons.AutoMirrored.Filled.Notes,
                 title = title,
                 subtitle = subtitle ?: label(value),
-                trailing = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (subtitle != null) {
-                            Text(
-                                text = label(value),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(end = 4.dp)
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                value = if (subtitle != null) label(value) else null,
+                trailing = { DropdownArrow() }
             )
             DropdownMenu(
                 expanded = expanded,
@@ -667,24 +581,8 @@ private fun InheritedBooleanSettingCard(
                 icon = icon ?: Icons.AutoMirrored.Filled.Notes,
                 title = title,
                 subtitle = subtitle ?: shown,
-                trailing = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (subtitle != null) {
-                            Text(
-                                text = shown,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(end = 4.dp)
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                value = if (subtitle != null) shown else null,
+                trailing = { DropdownArrow() }
             )
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 if (allowInherit) {
@@ -741,24 +639,8 @@ private fun <T : Enum<T>> InheritedEnumSettingCard(
                 icon = icon ?: Icons.AutoMirrored.Filled.Notes,
                 title = title,
                 subtitle = subtitle ?: shown,
-                trailing = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (subtitle != null) {
-                            Text(
-                                text = shown,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(end = 4.dp)
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                value = if (subtitle != null) shown else null,
+                trailing = { DropdownArrow() }
             )
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 if (allowInherit) {
@@ -782,6 +664,15 @@ private fun <T : Enum<T>> InheritedEnumSettingCard(
             }
         }
     }
+}
+
+@Composable
+private fun DropdownArrow() {
+    Icon(
+        imageVector = Icons.Default.KeyboardArrowDown,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 private fun prettyGlowLabel(mode: GlowMode): String = when (mode) {
@@ -842,9 +733,6 @@ fun IslandSettingsControlPreview() {
                     firstFloat = true,
                     timeout = 5,
                     floatTimeout = 5,
-                    isShowShade = true,
-                    removeOriginalNotification = false,
-                    dismissWithOriginal = false
                 ),
                 onUpdate = {}
             )

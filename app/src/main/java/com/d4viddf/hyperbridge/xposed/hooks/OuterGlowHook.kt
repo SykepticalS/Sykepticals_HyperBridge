@@ -366,7 +366,12 @@ object OuterGlowHook {
         val enabled = glowRequested(snapshot, resolvedMode) ||
             (resolvedMode == MODE_STATUS && snapshot.islandGlowEnabled) ||
             (resolvedMode == MODE_EXPAND && (snapshot.focusGlowEnabled || snapshot.islandGlowEnabled))
-        val color = if (resolvedMode == MODE_EXPAND) snapshot.focusColorArgb() else snapshot.islandColorArgb()
+        val native = snapshot.nativeGlow
+        val color = when {
+            native -> null
+            resolvedMode == MODE_EXPAND -> snapshot.focusColorArgb()
+            else -> snapshot.islandColorArgb()
+        }
         val shader = resolveLightBgShader(glowView) ?: return
         val runtime = resolveRuntimeShader(shader) ?: return
         val shaderClass = shader.javaClass
@@ -378,7 +383,11 @@ object OuterGlowHook {
             else -> GlowShaderPalette.rebuild(base, color, single)
         }
         setFloatUniform(runtime, "uLightColors", colors)
-        val configuredBase = HookConfig.glowBaseColor()?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+        val configuredBase = if (native) {
+            null
+        } else {
+            HookConfig.glowBaseColor()?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+        }
         val paletteColor = color.takeIf { enabled }
         val baseColor = when {
             single && paletteColor != null -> paletteColor

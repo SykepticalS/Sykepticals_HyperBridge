@@ -261,9 +261,12 @@ class CallTranslator(
                 }
             } else "circle"
 
-            val padding = CallActionIconSizingPolicy.classicPaddingPercent(
-                resolvePadding(theme, sbn.packageName)
-            )
+            val configuredPadding = resolvePadding(theme, sbn.packageName)
+            val padding = if (isAnswer || isHangUp) {
+                CallActionIconSizingPolicy.answerRejectPaddingPercent(configuredPadding)
+            } else {
+                CallActionIconSizingPolicy.classicPaddingPercent(configuredPadding)
+            }
 
             if (originalBitmap != null) {
                 // This bitmap has a fixed 96 px canvas, so use percentage padding. The old

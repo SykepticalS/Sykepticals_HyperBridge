@@ -22,6 +22,7 @@ import com.d4viddf.hyperbridge.models.NotificationType
 import com.d4viddf.hyperbridge.models.WidgetConfig
 import com.d4viddf.hyperbridge.models.WidgetRenderMode
 import com.d4viddf.hyperbridge.models.WidgetSize
+import com.d4viddf.hyperbridge.service.logincode.LoginCodeSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -824,6 +825,52 @@ class AppPreferences internal constructor(
 
     val autoDetectDndFlow: Flow<Boolean> = dao.getSettingFlow("auto_detect_dnd").map { it.toBoolean(false) }
     suspend fun setAutoDetectDnd(autoDetect: Boolean) = save("auto_detect_dnd", autoDetect.toString())
+
+    // ========================================================================
+    //                        LOGIN CODE EXTRACTOR
+    // ========================================================================
+
+    private val loginCodeKeys = listOf(
+        SettingsKeys.LOGIN_CODE_ENABLED,
+        SettingsKeys.LOGIN_CODE_COPY_ACTION,
+        SettingsKeys.LOGIN_CODE_DISMISS_AFTER_COPY,
+        SettingsKeys.LOGIN_CODE_GLOW,
+        SettingsKeys.LOGIN_CODE_COMPACT,
+        SettingsKeys.LOGIN_CODE_PACKAGES,
+    )
+
+    val loginCodeSettingsFlow: Flow<LoginCodeSettings> = combine(
+        loginCodeKeys.map(dao::getSettingFlow)
+    ) { values -> parseLoginCodeSettings(values.asList()) }.distinctUntilChanged()
+
+    fun getLoginCodeSettingsSync(): LoginCodeSettings =
+        parseLoginCodeSettings(loginCodeKeys.map { memoryCache[it] })
+
+    suspend fun setLoginCodeEnabled(value: Boolean) = save(SettingsKeys.LOGIN_CODE_ENABLED, value.toString())
+    suspend fun setLoginCodeCopyAction(value: Boolean) = save(SettingsKeys.LOGIN_CODE_COPY_ACTION, value.toString())
+    suspend fun setLoginCodeDismissAfterCopy(value: Boolean) =
+        save(SettingsKeys.LOGIN_CODE_DISMISS_AFTER_COPY, value.toString())
+    suspend fun setLoginCodeGlow(value: Boolean) = save(SettingsKeys.LOGIN_CODE_GLOW, value.toString())
+    suspend fun setLoginCodeCompact(value: Boolean) = save(SettingsKeys.LOGIN_CODE_COMPACT, value.toString())
+
+    suspend fun setLoginCodeApp(packageName: String, enabled: Boolean) {
+        val current = dao.getSetting(SettingsKeys.LOGIN_CODE_PACKAGES)
+            ?.deserializeSet()
+            ?: LoginCodeSettings.DEFAULT_PACKAGES
+        save(SettingsKeys.LOGIN_CODE_PACKAGES, (if (enabled) current + packageName else current - packageName).serialize())
+    }
+
+    suspend fun resetLoginCodeApps() = remove(SettingsKeys.LOGIN_CODE_PACKAGES)
+
+    /** [values] follow the order of [loginCodeKeys]. */
+    private fun parseLoginCodeSettings(values: List<String?>) = LoginCodeSettings(
+        enabled = values[0].toBoolean(true),
+        copyAction = values[1].toBoolean(true),
+        dismissAfterCopy = values[2].toBoolean(true), // TEMP-TEST
+        glow = values[3].toBoolean(true),
+        compactCode = values[4].toBoolean(true),
+        packages = values[5]?.deserializeSet() ?: LoginCodeSettings.DEFAULT_PACKAGES,
+    )
 
     // --- APP-SPECIFIC ENGINE OVERRIDES ---
 

@@ -18,4 +18,9 @@ class CallActionIconSizingPolicyTest {
     fun invalidNegativePaddingIsClamped() {
         assertEquals(0, CallActionIconSizingPolicy.classicPaddingPercent(-5))
     }
+
+    @Test
+    fun answerAndRejectGlyphsGetASmallExtraInset() {
+        assertEquals(14, CallActionIconSizingPolicy.answerRejectPaddingPercent(15))
+    }
 }

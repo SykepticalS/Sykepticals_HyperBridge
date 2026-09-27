@@ -132,8 +132,6 @@ Hyper Bridge</string>
     <string name="setting_float_desc">إظهار شريط الإشعار بالكامل لفترة وجيزة قبل تصغيره للجزيرة.</string>
     <string name="setting_float_timeout_desc">المدة التي تبقى فيها النافذة المنبثقة ظاهرة.</string>
 
-    <string name="setting_shade">لوحة الإشعارات</string>
-    <string name="setting_shade_desc">إبقاء الإشعار ظاهراً في لوحة الإشعارات. إذا تم تعطيله، يظهر كجزيرة فقط.</string>
 
     <string name="seconds_suffix">%d ثانية</string>
 
@@ -514,23 +512,14 @@ Hyper Bridge</string>
 
     <string name="channel_live_updates">التحديثات المباشرة الأصلية</string>
 
-    <string name="engine_preview_title">معاينة</string>
-    <string name="engine_design_section">تصميم الإشعار</string>
-    <string name="engine_xiaomi_title">تصميم شاومي المميز</string>
-    <string name="engine_xiaomi_desc">تخطيط HyperOS العصري مع تصميم شاومي المخصص.</string>
-    <string name="engine_native_title">تصميم التحديثات المباشرة</string>
-    <string name="engine_native_desc">تصميمات إشعارات أندرويد الأصلية، تعمل على الروم الصيني (CN ROM).</string>
 
     <string name="engine_config_title">تهيئة المحرك</string>
-    <string name="engine_section_design">تصميم الإشعار</string>
     <string name="good_to_know">معلومة مفيدة</string>
     <string name="nav_layout_info">• سيتم دمج تخطيطات الملاحة بالكامل في محرك الثيمات في تحديث قادم.
 • عند استخدام محرك التحديثات المباشرة الأصلي، يكون محتوى الجانب الأيمن فقط مرئياً.</string>
     <string name="xiaomi_featured_notifications">إشعارات شاومي المميزة</string>
     <string name="island_behavior_title">سلوك الجزيرة</string>
     <string name="island_behavior_desc">المهل الزمنية، التكرارات والظهور</string>
-    <string name="engine">المحرك</string>
-    <string name="engine_desc">التحديثات المباشرة مقابل جزيرة شاومي</string>
     
     <string name="dnd_mode_title">عدم الإزعاج</string>
     <string name="dnd_mode_desc">إدارة ظهور الجزيرة أثناء وضع عدم الإزعاج</string>
@@ -562,13 +551,6 @@ Hyper Bridge</string>
     <string name="trigger_app_desc">حدد الأحداث التي تُظهر الجزيرة لهذا التطبيق.</string>
     <string name="enable_triggers">تفعيل مشغلات محددة</string>
     <string name="open_source_licenses">رخص المصادر المفتوحة</string>
-    <string name="remove_original_notification">إزالة الإشعار الأصلي</string>
-    <string name="remove_original_notification_desc">إغلاق الإشعار المصدري تلقائياً عندما يكون التحديث المباشر نشطاً.</string>
-    <string name="dismiss_with_original">الإغلاق مع الإشعار الأصلي</string>
-    <string name="dismiss_with_original_desc">ستختفي الجزيرة عندما تقوم بمسح الإشعار الأصلي.</string>
-    <string name="enable_inline_reply">تفعيل الرد السريع المباشر</string>
-    <string name="enable_inline_reply_desc">فتح واجهة الرد المضمنة المخصصة عند الرد من الجزيرة.</string>
-    <string name="remove_original_notification_hidden_warning">ملاحظة: عند التفعيل، لا يستطيع Hyper Bridge الرد أو تحديد الرسائل كمقروءة. سيتم إخفاء إجراءات الرد والتحديد كمقروء.</string>
     
     <string name="color_mode">وضع الألوان</string>
     <string name="color_mode_select">اختر وضع الألوان</string>
@@ -634,7 +616,6 @@ Hyper Bridge</string>
     <string name="migration_message">جاري ترحيل قاعدة البيانات إلى وحدة التخزين المحمية للجهاز…</string>
     <string name="migration_complete">اكتمل التحديث</string>
 
-    <string name="notification_management">إدارة الإشعارات</string>
     <string name="inline_reply_title">الرد المباشر</string>
     <string name="customize_inline_reply">تخصيص نافذة الرد المباشر</string>
     <string name="reply_hint">اكتب رداً...</string>

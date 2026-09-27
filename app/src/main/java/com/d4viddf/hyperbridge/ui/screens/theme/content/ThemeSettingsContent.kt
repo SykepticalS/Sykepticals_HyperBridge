@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.DisplaySettings
 import androidx.compose.material.icons.outlined.Map
-import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -68,18 +67,10 @@ fun BehaviourMenuContent(onNavigate: (CreatorRoute) -> Unit) {
             .padding(16.dp)
     ) {
         CreatorOptionCard(
-            title = stringResource(R.string.engine),
-            subtitle = stringResource(R.string.engine_desc),
-            icon = Icons.Outlined.Memory,
-            shape = getExpressiveShape(3, 0, ShapeStyle.Large),
-            onClick = { onNavigate(CreatorRoute.BEHAVIOR_ENGINE) }
-        )
-        Spacer(Modifier.height(2.dp))
-        CreatorOptionCard(
             title = stringResource(R.string.island_behavior),
             subtitle = stringResource(R.string.island_behavior_desc),
             icon = Icons.Outlined.DisplaySettings,
-            shape = getExpressiveShape(3, 1, ShapeStyle.Large),
+            shape = getExpressiveShape(2, 0, ShapeStyle.Large),
             onClick = { onNavigate(CreatorRoute.BEHAVIOR_ISLAND) }
         )
         Spacer(Modifier.height(2.dp))
@@ -87,7 +78,7 @@ fun BehaviourMenuContent(onNavigate: (CreatorRoute) -> Unit) {
             title = stringResource(R.string.active_notifications_title),
             subtitle = stringResource(R.string.select_triggered_events),
             icon = Icons.Outlined.NotificationsActive,
-            shape = getExpressiveShape(3, 2, ShapeStyle.Large),
+            shape = getExpressiveShape(2, 1, ShapeStyle.Large),
             onClick = { onNavigate(CreatorRoute.BEHAVIOR_TYPES) }
         )
     }

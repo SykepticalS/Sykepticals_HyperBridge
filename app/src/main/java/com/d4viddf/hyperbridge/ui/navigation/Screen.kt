@@ -17,14 +17,13 @@ sealed interface Screen : NavKey {
     @Serializable data object Backup : Screen
     @Serializable data class ImportPreview(val backup: HyperBridgeBackup) : Screen
     @Serializable data class NavCustomization(val packageName: String?) : Screen
-    @Serializable data object EngineSettings : Screen
     @Serializable data object AppPriority : Screen
     @Serializable data object GlobalBlocklist : Screen
     @Serializable data object BlocklistApps : Screen
     @Serializable data object IslandSettings : Screen
     @Serializable data object MediaCardSettings : Screen
     @Serializable data object DndSettings : Screen
-    @Serializable data object ReplyCustomization : Screen
+    @Serializable data object LoginCodeSettings : Screen
     @Serializable data object BugReport : Screen
     @Serializable data object ScreenRecordingCustomization : Screen
     @Serializable data object Diagnostics : Screen

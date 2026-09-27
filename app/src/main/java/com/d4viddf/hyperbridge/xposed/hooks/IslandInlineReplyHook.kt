@@ -6,12 +6,15 @@ import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.Region
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.InputType
 import android.util.Log
 import android.util.TypedValue
@@ -19,6 +22,8 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -50,6 +55,7 @@ object IslandInlineReplyHook {
         "onDynamicPluginCallback_expandedToBig",
     )
     private const val DROP_DOWN = "onDynamicPluginCallback_dropDownExpandedIsland"
+    private val OUTSIDE_COLLAPSE_REASONS = setOf("outside", "input monitor", "action collapse")
     private const val EXPANDED_TO_BIG = "onDynamicPluginCallback_expandedToBig"
     private val loaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
@@ -190,13 +196,17 @@ object IslandInlineReplyHook {
             }
             module.hook(delay).intercept { chain ->
                 IslandReplyCollapseGuard.remember(chain.thisObject)
+                val seconds = chain.args.getOrNull(0) as? Long ?: 0L
                 if (IslandReplyComposer.shouldStayExpanded()) {
+                    IslandReplyCollapseGuard.deferCollapse(chain.thisObject, seconds)
                     Log.i("HyperBridge", "timeout method blocked DynamicIslandSafeguardsController.delayCollapsed")
                     null
                 } else {
+                    IslandReplyCollapseGuard.scheduledCollapse(chain.thisObject, seconds)
                     chain.proceed()
                 }
             }
+            IslandLifetimeHold.install(module, safeguards)
             safeguards.declaredMethods
                 .filter { it.name == "delayCollapsed\$lambda\$3" }
                 .forEach { method ->
@@ -224,9 +234,25 @@ object IslandInlineReplyHook {
                         if (reason == "delay" && IslandReplyComposer.shouldStayExpanded()) {
                             Log.i("HyperBridge", "timeout method blocked DynamicIslandWindowView.collapse(delay)")
                             null
+                        } else if (reason in OUTSIDE_COLLAPSE_REASONS && IslandReplyComposer.consumeOutsideCollapse()) {
+                            Log.i("HyperBridge", "island reply kept island expanded, blocked collapse($reason)")
+                            null
                         } else {
                             chain.proceed()
                         }
+                    }
+                }
+            window.declaredMethods
+                .filter {
+                    it.name == "maybeCollapseExpand" &&
+                        it.parameterTypes.contentEquals(arrayOf(Integer.TYPE, Integer.TYPE))
+                }
+                .forEach { method ->
+                    module.hook(method).intercept { chain ->
+                        if (!IslandReplyComposer.isOpen()) return@intercept chain.proceed()
+                        val x = chain.args[0] as Int
+                        val y = chain.args[1] as Int
+                        if (IslandReplyComposer.onMonitoredTouch(chain.thisObject, x, y)) chain.proceed() else null
                     }
                 }
             module.log("HyperBridge: plugin class hooked DynamicIslandSafeguardsController.delayCollapsed")
@@ -317,16 +343,40 @@ object IslandInlineReplyHook {
     }
 }
 
+/**
+ * Pauses the expanded -> small timer (DynamicIslandSafeguardsController.delayCollapsed,
+ * in seconds) while the composer is open and re-arms it with the time that was left.
+ */
 private object IslandReplyCollapseGuard {
     private val safeguards = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<Any, Boolean>()),
     )
+    private var collapseOwner = WeakReference<Any>(null)
+    private var collapseDeadline = 0L
+    private var pausedRemainingMs: Long? = null
 
     fun remember(instance: Any?) {
         if (instance != null) safeguards += instance
     }
 
+    @Synchronized
+    fun scheduledCollapse(instance: Any?, seconds: Long) {
+        collapseOwner = WeakReference(instance)
+        collapseDeadline = SystemClock.uptimeMillis() + seconds * 1000L
+    }
+
+    @Synchronized
+    fun deferCollapse(instance: Any?, seconds: Long) {
+        collapseOwner = WeakReference(instance)
+        pausedRemainingMs = seconds * 1000L
+    }
+
     fun cancelScheduledCollapse() {
+        synchronized(this) {
+            val remaining = collapseDeadline - SystemClock.uptimeMillis()
+            if (collapseDeadline > 0L && remaining > 0L) pausedRemainingMs = remaining
+            collapseDeadline = 0L
+        }
         val snapshot = synchronized(safeguards) { safeguards.toList() }
         snapshot.forEach { instance ->
             runCatching {
@@ -338,6 +388,138 @@ private object IslandReplyCollapseGuard {
         if (snapshot.isNotEmpty()) {
             Log.i("HyperBridge", "cancelled scheduled island collapse instances=${snapshot.size}")
         }
+    }
+
+    fun resumeScheduledCollapse() {
+        val (owner, remaining) = synchronized(this) {
+            val value = collapseOwner.get() to pausedRemainingMs
+            pausedRemainingMs = null
+            value
+        }
+        if (owner == null || remaining == null) return
+        val seconds = ((remaining + 999L) / 1000L).coerceAtLeast(1L)
+        runCatching {
+            owner.javaClass.getDeclaredMethod("delayCollapsed", java.lang.Long.TYPE).apply {
+                isAccessible = true
+            }.invoke(owner, seconds)
+            Log.i("HyperBridge", "resumed island collapse timer seconds=$seconds")
+        }
+    }
+}
+
+/**
+ * HyperOS removes an island after `islandTimeout` via
+ * DynamicIslandSafeguardsController.delayDeleted(key, seconds). Freeze those timers while
+ * the composer is open and resume each with its remaining time afterwards.
+ */
+private object IslandLifetimeHold {
+    private class Timer(val owner: Any, val deadline: Long)
+    private class Paused(val owner: Any, val remainingMs: Long)
+
+    private val scheduled = HashMap<String, Timer>()
+    private val paused = LinkedHashMap<String, Paused>()
+    private var cancelMethod: java.lang.reflect.Method? = null
+    private var delayMethod: java.lang.reflect.Method? = null
+    @Volatile private var internalCall = false
+    @Volatile private var held = false
+
+    fun install(module: XposedModule, safeguards: Class<*>) {
+        runCatching {
+            val delay = safeguards.getDeclaredMethod(
+                "delayDeleted",
+                String::class.java,
+                java.lang.Long.TYPE,
+            ).apply { isAccessible = true }
+            val cancel = safeguards.getDeclaredMethod("cancelDelayDeleted", String::class.java)
+                .apply { isAccessible = true }
+            delayMethod = delay
+            cancelMethod = cancel
+            module.hook(delay).intercept { chain ->
+                val key = chain.args.getOrNull(0) as? String ?: return@intercept chain.proceed()
+                val seconds = chain.args.getOrNull(1) as? Long ?: return@intercept chain.proceed()
+                val owner = chain.thisObject ?: return@intercept chain.proceed()
+                synchronized(this) {
+                    if (held) {
+                        scheduled.remove(key)
+                        paused[key] = Paused(owner, seconds * 1000L)
+                        Log.i("HyperBridge", "island lifetime deferred while replying key=$key seconds=$seconds")
+                        return@intercept null
+                    }
+                }
+                val result = chain.proceed()
+                synchronized(this) {
+                    scheduled[key] = Timer(owner, SystemClock.uptimeMillis() + seconds * 1000L)
+                }
+                result
+            }
+            module.hook(cancel).intercept { chain ->
+                if (!internalCall) {
+                    val key = chain.args.getOrNull(0) as? String
+                    if (key != null) synchronized(this) {
+                        scheduled.remove(key)
+                        paused.remove(key)
+                    }
+                }
+                chain.proceed()
+            }
+            safeguards.declaredMethods
+                .filter { it.name == "delayDeleted\$lambda\$1" && it.parameterCount == 2 }
+                .forEach { method ->
+                    module.hook(method).intercept { chain ->
+                        val key = chain.args.getOrNull(0) as? String
+                        val owner = chain.args.getOrNull(1)
+                        synchronized(this) {
+                            if (key != null) scheduled.remove(key)
+                            if (held && key != null && owner != null) {
+                                paused[key] = Paused(owner, 1000L)
+                                return@intercept null
+                            }
+                        }
+                        chain.proceed()
+                    }
+                }
+            module.log("HyperBridge: island reply lifetime hold hooked delayDeleted")
+        }.onFailure {
+            module.log("HyperBridge: island reply lifetime hold unavailable: ${it.message}")
+        }
+    }
+
+    fun pause() {
+        val cancel = cancelMethod ?: return
+        val toCancel = synchronized(this) {
+            if (held) return
+            held = true
+            val now = SystemClock.uptimeMillis()
+            scheduled.forEach { (key, timer) ->
+                val remaining = timer.deadline - now
+                if (remaining > 0L) paused[key] = Paused(timer.owner, remaining)
+            }
+            scheduled.clear()
+            paused.map { it.key to it.value.owner }
+        }
+        internalCall = true
+        try {
+            toCancel.forEach { (key, owner) -> runCatching { cancel.invoke(owner, key) } }
+        } finally {
+            internalCall = false
+        }
+        if (toCancel.isNotEmpty()) Log.i("HyperBridge", "island lifetime paused count=${toCancel.size}")
+    }
+
+    fun resume() {
+        val delay = delayMethod ?: return
+        val toResume = synchronized(this) {
+            if (!held) return
+            held = false
+            val snapshot = paused.toList()
+            paused.clear()
+            snapshot
+        }
+        toResume.forEach { (key, timer) ->
+            val seconds = ((timer.remainingMs + 999L) / 1000L).coerceAtLeast(1L)
+            runCatching { delay.invoke(timer.owner, key, seconds) }
+        }
+        if (toResume.isNotEmpty()) Log.i("HyperBridge", "island lifetime resumed count=${toResume.size}")
     }
 }
 
@@ -362,6 +544,8 @@ internal object IslandReplyComposer {
     private var retryListener: View.OnLayoutChangeListener? = null
     private var dumpedMissingHost = false
     private var hiddenButtons: List<View> = emptyList()
+    @Volatile private var lastMonitoredTouchAt = 0L
+    @Volatile private var outsideDismissedUntil = 0L
 
     fun openNow(
         context: Context?,
@@ -377,6 +561,7 @@ internal object IslandReplyComposer {
         MarqueeHook.holdAutoHide()
         SystemUiDispatcher.notifyReplyComposer(true)
         IslandReplyCollapseGuard.cancelScheduledCollapse()
+        pauseLifetime()
         val run = {
             runCatching { embed(payload, module, source) }
                 .onFailure { module.log("HyperBridge: island reply embed failed: ${it.message}") }
@@ -424,12 +609,103 @@ internal object IslandReplyComposer {
         intendedOpen = true
         MarqueeHook.holdAutoHide()
         IslandReplyCollapseGuard.cancelScheduledCollapse()
+        pauseLifetime()
     }
 
     fun markAborted() {
         if (overlay.get()?.isAttachedToWindow == true) return
         intendedOpen = false
+        resumeTimers()
     }
+
+    private fun pauseLifetime() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            IslandLifetimeHold.pause()
+        } else {
+            main.postAtFrontOfQueue { if (intendedOpen) IslandLifetimeHold.pause() }
+        }
+    }
+
+    private fun resumeTimers() {
+        IslandLifetimeHold.resume()
+        IslandReplyCollapseGuard.resumeScheduledCollapse()
+    }
+
+    /**
+     * Returns true to let SystemUI handle the monitored touch (inside the island),
+     * false to swallow it: keyboard taps keep the composer, other taps close only the composer.
+     */
+    fun onMonitoredTouch(windowView: Any?, x: Int, y: Int): Boolean {
+        lastMonitoredTouchAt = SystemClock.uptimeMillis()
+        val composer = overlay.get() ?: return true
+        if (insideIsland(windowView, composer, x, y)) return true
+        if (imeFrame(composer)?.contains(x, y) == true) return false
+        if (imeFrame(composer) == null && imeShowing(composer) && y >= screenHeight(composer) / 2) return false
+        dismissFromOutside()
+        return false
+    }
+
+    /** True when an outside collapse must be swallowed so only the composer closes. */
+    fun consumeOutsideCollapse(): Boolean {
+        val now = SystemClock.uptimeMillis()
+        if (now < outsideDismissedUntil) return true
+        if (!intendedOpen) return false
+        main.postDelayed({
+            if (!intendedOpen) return@postDelayed
+            if (SystemClock.uptimeMillis() - lastMonitoredTouchAt < 400L) return@postDelayed
+            val composer = overlay.get()
+            if (composer != null && imeShowing(composer)) return@postDelayed
+            dismissFromOutside()
+        }, 150L)
+        return true
+    }
+
+    private fun dismissFromOutside() {
+        outsideDismissedUntil = SystemClock.uptimeMillis() + 600L
+        Log.i("HyperBridge", "island reply dismissed by outside tap; island stays expanded")
+        dismiss()
+    }
+
+    private fun insideIsland(windowView: Any?, composer: View, x: Int, y: Int): Boolean {
+        val region = runCatching {
+            val coordinator = windowView?.javaClass?.getDeclaredField("eventCoordinator")
+                ?.apply { isAccessible = true }?.get(windowView) ?: return@runCatching null
+            val flow = coordinator.javaClass.getMethod("getTouchRegion").invoke(coordinator)
+                ?: return@runCatching null
+            flow.javaClass.getMethod("getValue").apply { isAccessible = true }.invoke(flow) as? Region
+        }.getOrNull()
+        if (region != null && !region.isEmpty) return region.contains(x, y)
+        val island = expandedAncestor(composer) ?: return false
+        val location = IntArray(2)
+        island.getLocationOnScreen(location)
+        return Rect(location[0], location[1], location[0] + island.width, location[1] + island.height)
+            .contains(x, y)
+    }
+
+    private fun imeShowing(view: View): Boolean =
+        view.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+
+    private fun screenHeight(view: View): Int =
+        view.context.getSystemService(WindowManager::class.java)?.maximumWindowMetrics?.bounds?.height()
+            ?: view.resources.displayMetrics.heightPixels
+
+    /** Keyboard frame in display coordinates; the island window never overlaps it, so insets read 0. */
+    private fun imeFrame(view: View): Rect? = runCatching {
+        val root = View::class.java.getMethod("getViewRootImpl").invoke(view) ?: return@runCatching null
+        val controller = root.javaClass.getMethod("getInsetsController").invoke(root)
+        val state = controller.javaClass.getMethod("getState").invoke(controller)
+        val size = state.javaClass.getMethod("sourceSize").invoke(state) as Int
+        val sourceAt = state.javaClass.getMethod("sourceAt", Integer.TYPE)
+        for (index in 0 until size) {
+            val source = sourceAt.invoke(state, index) ?: continue
+            val type = source.javaClass.getMethod("getType").invoke(source) as Int
+            if (type != WindowInsets.Type.ime()) continue
+            val visible = source.javaClass.getMethod("isVisible").invoke(source) as Boolean
+            val frame = source.javaClass.getMethod("getFrame").invoke(source) as Rect
+            if (visible && !frame.isEmpty) return@runCatching Rect(frame)
+        }
+        null
+    }.getOrNull()
 
     fun shouldStayExpanded(): Boolean = intendedOpen
 
@@ -464,6 +740,7 @@ internal object IslandReplyComposer {
         activeRow = null
         lastSource = null
         MarqueeHook.releaseAutoHide()
+        resumeTimers()
         SystemUiDispatcher.notifyReplyComposer(false)
     }
 
@@ -524,7 +801,8 @@ internal object IslandReplyComposer {
         val existing = overlay.get()
         if (existing?.parent === row && existing.isAttachedToWindow) return true
         dismissKeepingIntent()
-        val composer = buildComposer(row.context, payload, module)
+        val hostHeight = row.height - row.paddingTop - row.paddingBottom
+        val composer = buildComposer(row.context, payload, module, hostHeight)
         hiddenButtons = (0 until row.childCount).map { row.getChildAt(it) }.filter { it !== composer }
         hiddenButtons.forEach { it.visibility = View.GONE }
         val params = when (row) {
@@ -550,14 +828,40 @@ internal object IslandReplyComposer {
         IslandWindowImeHook.sanitize(row)
         composer.post {
             val field = composer.findViewWithTag<EditText>("$TAG.field") ?: return@post
-            prepareImeWindow(field)
-            field.requestFocus()
+            showKeyboard(field)
+        }
+        module.log("HyperBridge: island reply embedded in ${row.javaClass.simpleName} children=${row.childCount}")
+        Log.i("HyperBridge", "island reply embedded in ${row.javaClass.simpleName} width=${row.width} height=$hostHeight")
+        return true
+    }
+
+    /**
+     * The island window only becomes focusable after prepareImeWindow's relayout, so an
+     * immediate showSoftInput is dropped; show again once the window actually gains focus.
+     */
+    private fun showKeyboard(field: EditText) {
+        prepareImeWindow(field)
+        field.requestFocus()
+        val show = show@{
+            if (overlay.get() == null || !field.isAttachedToWindow) return@show
+            if (imeShowing(field)) return@show
+            if (!field.isFocused) field.requestFocus()
+            field.windowInsetsController?.show(WindowInsets.Type.ime())
             field.context.getSystemService(InputMethodManager::class.java)
                 ?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
         }
-        module.log("HyperBridge: island reply embedded in ${row.javaClass.simpleName} children=${row.childCount}")
-        Log.i("HyperBridge", "island reply embedded in ${row.javaClass.simpleName} width=${row.width}")
-        return true
+        if (field.hasWindowFocus()) show()
+        val observer = field.viewTreeObserver
+        if (observer.isAlive) {
+            observer.addOnWindowFocusChangeListener(object : ViewTreeObserver.OnWindowFocusChangeListener {
+                override fun onWindowFocusChanged(hasFocus: Boolean) {
+                    if (!hasFocus) return
+                    field.viewTreeObserver.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(this)
+                    field.post { show() }
+                }
+            })
+        }
+        longArrayOf(120L, 300L, 600L).forEach { delay -> field.postDelayed({ show() }, delay) }
     }
 
     private fun installLayoutRetry(
@@ -738,9 +1042,12 @@ internal object IslandReplyComposer {
         context: Context,
         payload: IslandReplyPayload,
         module: XposedModule,
+        hostHeight: Int,
     ): View {
         val density = context.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
+        val controlSize = if (hostHeight in dp(24) until dp(40)) hostHeight else dp(40)
+        val compact = controlSize < dp(40)
         val field = EditText(context).apply {
             tag = "$TAG.field"
             hint = "Reply"
@@ -751,11 +1058,13 @@ internal object IslandReplyComposer {
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE
             imeOptions = EditorInfo.IME_ACTION_SEND or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            maxLines = 3
-            minHeight = dp(40)
+            maxLines = if (compact) 1 else 3
+            minHeight = controlSize
+            minimumHeight = controlSize
             alpha = 1f
             background = pill(opaque(0xFF2C2C2E.toInt()))
-            setPadding(dp(14), dp(8), dp(14), dp(8))
+            val vertical = if (compact) dp(2) else dp(8)
+            setPadding(dp(14), vertical, dp(14), vertical)
             setOnEditorActionListener { _, actionId, event ->
                 val send = actionId == EditorInfo.IME_ACTION_SEND ||
                     (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
@@ -769,12 +1078,13 @@ internal object IslandReplyComposer {
             text = "➤"
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
-            textSize = 16f
+            textSize = if (compact) 14f else 16f
             typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             alpha = 1f
             background = pill(Color.WHITE)
-            val size = dp(40)
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { leftMargin = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(controlSize, controlSize).apply { leftMargin = dp(8) }
             setOnClickListener { submit(payload, field.text?.toString().orEmpty(), module) }
         }
         return LinearLayout(context).apply {
@@ -784,7 +1094,14 @@ internal object IslandReplyComposer {
             setPadding(0, 0, 0, 0)
             alpha = 1f
             background = null
-            addView(field, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(
+                field,
+                LinearLayout.LayoutParams(
+                    0,
+                    if (compact) controlSize else ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f,
+                ),
+            )
             addView(send)
             isClickable = true
             setOnClickListener { }

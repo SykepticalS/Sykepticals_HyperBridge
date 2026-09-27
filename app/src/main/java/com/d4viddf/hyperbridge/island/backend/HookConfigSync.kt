@@ -14,7 +14,6 @@ object HookConfigSync {
     const val KEY_TYPE_POLICY = "type_policy"
     const val KEY_CALL_STAGE_POLICY = "call_stage_policy"
     const val KEY_FOCUS_ENABLED = "focus_enabled"
-    const val KEY_SUPPRESS_SOURCE_HEADS_UP = "suppress_source_heads_up"
     const val KEY_MARQUEE_SPEED = "marquee_speed"
     const val KEY_GLOW_RANGE = "glow_range"
     const val KEY_SINGLE_COLOR_GLOW = "single_color_glow"
@@ -34,8 +33,6 @@ object HookConfigSync {
             .putInt(KEY_PROTOCOL, IslandProtocol.VERSION)
             .putBoolean(KEY_ENGINE_ENABLED, true)
             .putBoolean(KEY_FOCUS_ENABLED, true)
-            .putBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP,
-                local(context).getBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP, true))
             .putInt(KEY_MARQUEE_SPEED, local(context).getInt(KEY_MARQUEE_SPEED, 100).coerceIn(20, 500))
             .putInt(KEY_GLOW_RANGE, local(context).getInt(KEY_GLOW_RANGE, 100).coerceIn(0, 100))
             .putBoolean(KEY_SINGLE_COLOR_GLOW, local(context).getBoolean(KEY_SINGLE_COLOR_GLOW, false))
@@ -96,14 +93,6 @@ object HookConfigSync {
         local(context).edit().putBoolean(KEY_BACKEND_READY, health.available).apply()
         sync(context)
     }
-
-    fun setSuppressSourceHeadsUp(context: Context, enabled: Boolean) {
-        local(context).edit().putBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP, enabled).apply()
-        sync(context)
-    }
-
-    fun suppressSourceHeadsUp(context: Context): Boolean =
-        local(context).getBoolean(KEY_SUPPRESS_SOURCE_HEADS_UP, true)
 
     fun marqueeSpeed(context: Context): Int = local(context).getInt(KEY_MARQUEE_SPEED, 100).coerceIn(20, 500)
     fun glowRange(context: Context): Int = local(context).getInt(KEY_GLOW_RANGE, 100).coerceIn(0, 100)

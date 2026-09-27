@@ -99,7 +99,6 @@ import com.d4viddf.hyperbridge.ui.screens.theme.content.AppsDetailContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.BehaviourMenuContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.CallStyleSheetContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.ColorsDetailContent
-import com.d4viddf.hyperbridge.ui.screens.theme.content.EngineThemeContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.IconsDetailContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.NotificationTypesContent
 import com.d4viddf.hyperbridge.ui.screens.theme.content.ThemeBehaviourContent
@@ -109,7 +108,7 @@ import kotlinx.coroutines.withContext
 
 // [NEW] Sub-menu routing added
 enum class CreatorRoute {
-    MAIN_MENU, BEHAVIOR_MENU, BEHAVIOR_ENGINE, BEHAVIOR_ISLAND, BEHAVIOR_TYPES, COLORS, ICONS, CALLS, NAVIGATION, REPLY, ACTIONS, APPS
+    MAIN_MENU, BEHAVIOR_MENU, BEHAVIOR_ISLAND, BEHAVIOR_TYPES, COLORS, ICONS, CALLS, NAVIGATION, ACTIONS, APPS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,8 +120,6 @@ fun ThemeCreatorScreen(
 ) {
     val viewModel: ThemeViewModel = viewModel()
     val activeThemeId by viewModel.activeThemeId.collectAsState()
-    val isNative by viewModel.useNativeLiveUpdates.collectAsState()
-
     if (viewModel.editingAppPackage != null) {
         AppThemeEditor(
             viewModel = viewModel
@@ -147,7 +144,6 @@ fun ThemeCreatorScreen(
         // --- Shared Back Logic ---
         val handleBackNavigation = {
             when (currentRoute) {
-                CreatorRoute.BEHAVIOR_ENGINE,
                 CreatorRoute.BEHAVIOR_ISLAND,
                 CreatorRoute.BEHAVIOR_TYPES -> currentRoute = CreatorRoute.BEHAVIOR_MENU // Return to sub-menu
                 CreatorRoute.MAIN_MENU -> {
@@ -180,14 +176,12 @@ fun ThemeCreatorScreen(
                             text = when (currentRoute) {
                                 CreatorRoute.MAIN_MENU -> if (editThemeId == null) stringResource(R.string.creator_title_new) else stringResource(R.string.creator_title_edit)
                                 CreatorRoute.BEHAVIOR_MENU -> stringResource(R.string.behaviour_triggers)
-                                CreatorRoute.BEHAVIOR_ENGINE -> stringResource(R.string.engine)
                                 CreatorRoute.BEHAVIOR_ISLAND -> stringResource(R.string.island_behavior)
                                 CreatorRoute.BEHAVIOR_TYPES -> stringResource(R.string.active_notifications_title)
                                 CreatorRoute.COLORS -> stringResource(R.string.creator_nav_colors)
                                 CreatorRoute.ICONS -> stringResource(R.string.creator_nav_icons)
                                 CreatorRoute.CALLS -> stringResource(R.string.creator_nav_calls)
                                 CreatorRoute.NAVIGATION -> stringResource(R.string.nav_layout_title)
-                                CreatorRoute.REPLY -> stringResource(R.string.inline_reply_title)
                                 CreatorRoute.ACTIONS -> stringResource(R.string.creator_nav_actions)
                                 CreatorRoute.APPS -> stringResource(R.string.creator_nav_apps)
                             },
@@ -246,13 +240,6 @@ fun ThemeCreatorScreen(
                         CreatorRoute.BEHAVIOR_MENU -> Box(Modifier.fillMaxSize()) {
                             BehaviourMenuContent(onNavigate = { currentRoute = it })
                         }
-                        CreatorRoute.BEHAVIOR_ENGINE -> {
-                            EngineThemeContent(
-                                isNative = isNative,
-                                showDefaultOption = false,
-                                onEngineChange = { viewModel.setUseNativeLiveUpdates(it ?: false) }
-                            )
-                        }
                         CreatorRoute.BEHAVIOR_ISLAND -> Box(Modifier.fillMaxSize()) {
                             ThemeBehaviourContent()
                         }
@@ -261,9 +248,6 @@ fun ThemeCreatorScreen(
                         }
                         CreatorRoute.NAVIGATION -> Box(Modifier.fillMaxSize()) {
                             NavCustomizationScreen(onBack = { currentRoute = CreatorRoute.MAIN_MENU },null, false)
-                        }
-                        CreatorRoute.REPLY -> Box(Modifier.fillMaxSize()) {
-                            com.d4viddf.hyperbridge.ui.screens.theme.content.ReplyStyleSheetContent(viewModel = viewModel)
                         }
                         CreatorRoute.COLORS -> DetailScreenShell(
                             previewContent = {
@@ -420,7 +404,6 @@ fun CreatorMainList(viewModel: ThemeViewModel, onNavigate: (CreatorRoute) -> Uni
                 CreatorRoute.ICONS,
                 CreatorRoute.CALLS,
                 CreatorRoute.NAVIGATION,
-                CreatorRoute.REPLY,
                 CreatorRoute.ACTIONS,
                 CreatorRoute.APPS
             )
@@ -438,18 +421,16 @@ fun CreatorMainList(viewModel: ThemeViewModel, onNavigate: (CreatorRoute) -> Uni
                         CreatorRoute.ICONS -> Icons.Outlined.Widgets
                         CreatorRoute.CALLS -> Icons.Outlined.Call
                         CreatorRoute.NAVIGATION -> Icons.Outlined.Map
-                        CreatorRoute.REPLY -> Icons.Outlined.Edit
                         CreatorRoute.ACTIONS -> Icons.Outlined.TouchApp
                         CreatorRoute.APPS -> Icons.Outlined.Apps
                         else -> Icons.Outlined.Image
                     }
                     val title = when(route) {
-                        CreatorRoute.BEHAVIOR_MENU -> stringResource(R.string.engine)
+                        CreatorRoute.BEHAVIOR_MENU -> stringResource(R.string.behaviour_triggers)
                         CreatorRoute.COLORS -> stringResource(R.string.creator_nav_colors)
                         CreatorRoute.ICONS -> stringResource(R.string.creator_nav_icons)
                         CreatorRoute.CALLS -> stringResource(R.string.creator_nav_calls)
                         CreatorRoute.NAVIGATION -> stringResource(R.string.nav_layout_title)
-                        CreatorRoute.REPLY -> stringResource(R.string.inline_reply_title)
                         CreatorRoute.ACTIONS -> stringResource(R.string.creator_nav_actions)
                         CreatorRoute.APPS -> stringResource(R.string.creator_nav_apps)
                         else -> stringResource(R.string.app_name)
@@ -460,7 +441,6 @@ fun CreatorMainList(viewModel: ThemeViewModel, onNavigate: (CreatorRoute) -> Uni
                         CreatorRoute.ICONS -> stringResource(R.string.creator_sub_icons)
                         CreatorRoute.CALLS -> stringResource(R.string.creator_sub_calls)
                         CreatorRoute.NAVIGATION -> stringResource(R.string.nav_layout_desc)
-                        CreatorRoute.REPLY -> stringResource(R.string.customize_inline_reply)
                         CreatorRoute.ACTIONS -> stringResource(R.string.creator_sub_actions)
                         CreatorRoute.APPS -> stringResource(R.string.creator_sub_apps)
                         else -> stringResource(R.string.app_name)

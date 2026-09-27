@@ -18,6 +18,11 @@ object IslandProtocol {
     const val ACTION_RELOAD_ENGINE = "$APP_PACKAGE.action.RELOAD_ENGINE"
     const val ACTION_CANCEL_SOURCE = "$APP_PACKAGE.action.CANCEL_SOURCE"
     const val ACTION_REPLY_COMPOSER = "$APP_PACKAGE.action.REPLY_COMPOSER"
+    /** HyperOS only lets foreground apps write the clipboard, so SystemUI writes it for us. */
+    const val ACTION_COPY_TEXT = "$APP_PACKAGE.action.COPY_TEXT"
+    const val EXTRA_COPY_TEXT = "hyperbridge.copy.text"
+    const val EXTRA_COPY_LABEL = "hyperbridge.copy.label"
+    const val EXTRA_COPY_CONFIRMATION = "hyperbridge.copy.confirmation"
 
     const val EXTRA_PROTOCOL = "hyperbridge.protocol"
     const val EXTRA_NOTIFICATION = "hyperbridge.notification"
@@ -63,6 +68,8 @@ object IslandProtocol {
     const val EXTRA_GLOW_DYNAMIC_COLOR = "hyperbridge.glow.dynamic_color"
     const val EXTRA_FORCE_ISLAND_GLOW = "hyperbridge.glow.force_island"
     const val EXTRA_FORCE_FOCUS_GLOW = "hyperbridge.glow.force_focus"
+    /** Keep SystemUI's stock glow palette and ignore the user's glow color settings. */
+    const val EXTRA_GLOW_NATIVE = "hyperbridge.glow.native"
     const val EXTRA_UPDATABLE = "hyperbridge.updatable"
     const val EXTRA_TEXT_UPDATE_ANIMATION = "hyperbridge.text_update_animation"
     const val EXTRA_REPLY_COMPOSER_OPEN = "hyperbridge.reply_composer_open"

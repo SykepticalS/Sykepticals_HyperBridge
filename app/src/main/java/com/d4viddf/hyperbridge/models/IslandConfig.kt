@@ -56,22 +56,25 @@ data class IslandConfig(
     val landscapeBehavior: IslandSceneBehavior? = null,
 ) {
     fun hasOverrides(): Boolean = listOf(
-        firstFloat, floatOnUpdate, isShowShade, timeout, floatTimeout, removeOriginalNotification,
-        dismissWithOriginal, enableInlineReply, marqueeEnabled, marqueeDismissMode, leftContent,
+        firstFloat, floatOnUpdate, timeout, floatTimeout, marqueeEnabled, marqueeDismissMode, leftContent,
         rightContent, leftCustomExpression, rightCustomExpression, islandGlowMode, focusGlowMode,
-        islandGlowColor, focusGlowColor, forceIslandGlow, forceFocusGlow, contactPinkGlow, restoreLockscreen,
-        dndBehavior, fullscreenBehavior, landscapeBehavior,
+        islandGlowColor, focusGlowColor, forceIslandGlow, forceFocusGlow,
+        fullscreenBehavior, landscapeBehavior,
     ).any { it != null }
 
+    /**
+     * Shade visibility, original-notification handling, inline reply, pink glow and lockscreen
+     * restore are no longer configurable; any stored values are ignored. DND behavior is global-only.
+     */
     fun mergeWith(global: IslandConfig): IslandConfig = IslandConfig(
         firstFloat = firstFloat ?: global.firstFloat ?: true,
         floatOnUpdate = floatOnUpdate ?: global.floatOnUpdate ?: false,
-        isShowShade = isShowShade ?: global.isShowShade ?: false,
+        isShowShade = false,
         timeout = timeout ?: global.timeout ?: 10,
         floatTimeout = floatTimeout ?: global.floatTimeout ?: 5,
-        removeOriginalNotification = removeOriginalNotification ?: global.removeOriginalNotification ?: false,
-        dismissWithOriginal = dismissWithOriginal ?: global.dismissWithOriginal ?: true,
-        enableInlineReply = enableInlineReply ?: global.enableInlineReply ?: true,
+        removeOriginalNotification = false,
+        dismissWithOriginal = true,
+        enableInlineReply = true,
         marqueeEnabled = marqueeEnabled ?: global.marqueeEnabled ?: false,
         marqueeDismissMode = marqueeDismissMode ?: global.marqueeDismissMode ?: MarqueeDismissMode.OFF,
         leftContent = leftContent ?: global.leftContent ?: IslandTextContent.AUTOMATIC,
@@ -84,9 +87,9 @@ data class IslandConfig(
         focusGlowColor = focusGlowColor ?: global.focusGlowColor,
         forceIslandGlow = forceIslandGlow ?: global.forceIslandGlow ?: false,
         forceFocusGlow = forceFocusGlow ?: global.forceFocusGlow ?: false,
-        contactPinkGlow = contactPinkGlow ?: global.contactPinkGlow ?: false,
-        restoreLockscreen = restoreLockscreen ?: global.restoreLockscreen ?: false,
-        dndBehavior = dndBehavior ?: global.dndBehavior ?: IslandSceneBehavior.SUPPRESS,
+        contactPinkGlow = false,
+        restoreLockscreen = false,
+        dndBehavior = global.dndBehavior ?: IslandSceneBehavior.SUPPRESS,
         fullscreenBehavior = fullscreenBehavior ?: global.fullscreenBehavior ?: IslandSceneBehavior.DEFAULT,
         landscapeBehavior = landscapeBehavior ?: global.landscapeBehavior ?: IslandSceneBehavior.DEFAULT,
     )

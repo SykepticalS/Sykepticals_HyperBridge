@@ -15,12 +15,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,13 +31,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d4viddf.hyperbridge.HyperBridgeApplication
+import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.data.AppPreferences
+import com.d4viddf.hyperbridge.ui.screens.settings.LoginCodePrivacyCard
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.SystemUiIslandBackend
 import com.d4viddf.hyperbridge.root.RootShellService
@@ -46,6 +53,77 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun OnboardingScreen(onFinish: () -> Unit) {
+    var setupDone by rememberSaveable { mutableStateOf(false) }
+    if (setupDone) {
+        LoginCodeIntroPage(onFinish)
+    } else {
+        PrivilegedSetupPage(onContinue = { setupDone = true })
+    }
+}
+
+@Composable
+private fun LoginCodeIntroPage(onFinish: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { AppPreferences(context) }
+    val settings by prefs.loginCodeSettingsFlow.collectAsState(initial = prefs.getLoginCodeSettingsSync())
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Outlined.Password, null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            stringResource(R.string.login_code_onboarding_title),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.login_code_onboarding_desc),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(24.dp))
+        LoginCodePrivacyCard()
+        Spacer(Modifier.height(12.dp))
+        Card(
+            onClick = { scope.launch { prefs.setLoginCodeEnabled(!settings.enabled) } },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.login_code_enabled), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.login_code_enabled_desc),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.enabled,
+                    onCheckedChange = { scope.launch { prefs.setLoginCodeEnabled(it) } },
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(R.string.login_code_onboarding_later),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.login_code_onboarding_finish))
+        }
+    }
+}
+
+@Composable
+private fun PrivilegedSetupPage(onContinue: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val module by ModuleServiceState.state.collectAsState()
@@ -122,7 +200,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Restart scopes") }
         Spacer(Modifier.height(12.dp))
-        Button(onClick = onFinish, enabled = allReady, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onContinue, enabled = allReady, modifier = Modifier.fillMaxWidth()) {
             Text(if (allReady) "Continue" else "Complete setup above")
         }
     }

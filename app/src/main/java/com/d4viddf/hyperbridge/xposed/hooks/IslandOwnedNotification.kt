@@ -29,6 +29,7 @@ internal data class OwnedIslandSnapshot(
     val focusGlowMode: GlowMode get() = GlowMode.parse(extras.getString(IslandProtocol.EXTRA_GLOW_FOCUS_MODE)) ?: GlowMode.OFF
     val forceIsland: Boolean get() = extras.getBoolean(IslandProtocol.EXTRA_FORCE_ISLAND_GLOW, false)
     val forceFocus: Boolean get() = extras.getBoolean(IslandProtocol.EXTRA_FORCE_FOCUS_GLOW, false)
+    val nativeGlow: Boolean get() = extras.getBoolean(IslandProtocol.EXTRA_GLOW_NATIVE, false)
     val islandEffect: Boolean
         get() = extras.getString(IslandProtocol.MIUI_BIG_ISLAND_EFFECT) == IslandProtocol.EFFECT_OUTER_GLOW ||
             jsonHasEffect(island = true)

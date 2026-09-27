@@ -6,6 +6,7 @@ import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
+import com.d4viddf.hyperbridge.service.logincode.LoginCodePresentation
 import io.github.d4viddf.hyperisland_kit.HyperAction
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
 
@@ -21,10 +22,12 @@ class MessageTranslator(
         picKey: String,
         config: IslandConfig,
         theme: HyperTheme?,
-        isUpdate: Boolean = false
+        isUpdate: Boolean = false,
+        loginCode: LoginCodePresentation? = null,
     ): HyperIslandData {
         val highlightColor = resolveColor(theme, sbn.packageName, "#FFFFFF")
         val presentation = resolveIslandText(sbn, title, text, config, sender = title)
+            .withLoginCode(loginCode)
         val compact = compactIslandAssets(sbn, picKey, presentation)
 
         val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
@@ -46,11 +49,13 @@ class MessageTranslator(
         )
         builder.setShowNotification(config.isShowShade ?: false)
 
-        val bridgeActions = extractBridgeActions(
-            sbn = sbn,
-            config = config,
-            theme = theme
-        )
+        val bridgeActions = actionsWithLoginCode(sbn, loginCode) {
+            extractBridgeActions(
+                sbn = sbn,
+                config = config,
+                theme = theme
+            )
+        }
 
         builder.addPicture(compact.avatar)
         compact.attachment?.let(builder::addPicture)

@@ -72,4 +72,12 @@ object SettingsKeys {
     const val SCREEN_RECORDING_REPLACE_FLOATING = "screen_recording_replace_floating"
     const val SCREEN_RECORDING_IMMEDIATE_START = "screen_recording_immediate_start"
     const val SCREEN_RECORDING_ICON_STYLE = "screen_recording_icon_style"
+
+    // Login code extractor
+    const val LOGIN_CODE_ENABLED = "login_code_enabled"
+    const val LOGIN_CODE_COPY_ACTION = "login_code_copy_action"
+    const val LOGIN_CODE_DISMISS_AFTER_COPY = "login_code_dismiss_after_copy"
+    const val LOGIN_CODE_GLOW = "login_code_glow"
+    const val LOGIN_CODE_COMPACT = "login_code_compact"
+    const val LOGIN_CODE_PACKAGES = "login_code_packages"
 }

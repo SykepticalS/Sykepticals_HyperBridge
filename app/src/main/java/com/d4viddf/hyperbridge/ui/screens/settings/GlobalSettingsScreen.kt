@@ -18,11 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.DisplaySettings
 import androidx.compose.material.icons.outlined.DoNotDisturbOn
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Navigation
-import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -32,19 +30,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.d4viddf.hyperbridge.R
-import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 import com.d4viddf.hyperbridge.ui.components.ListOptionCard
 import com.d4viddf.hyperbridge.ui.screens.theme.ShapeStyle
 import com.d4viddf.hyperbridge.ui.screens.theme.getExpressiveShape
@@ -54,17 +46,11 @@ import com.d4viddf.hyperbridge.ui.screens.theme.getExpressiveShape
 fun GlobalSettingsScreen(
     onBack: () -> Unit,
     onNavSettingsClick: () -> Unit,
-    onInlineReplyClick: () -> Unit,
     onIslandSettingsClick: () -> Unit,
     onMediaCardSettingsClick: () -> Unit,
-    onEngineSettingsClick: () -> Unit,
-    onDndSettingsClick: () -> Unit
+    onDndSettingsClick: () -> Unit,
+    onLoginCodeSettingsClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    var suppressSourceFloating by remember {
-        mutableStateOf(HookConfigSync.suppressSourceHeadsUp(context))
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,20 +68,11 @@ fun GlobalSettingsScreen(
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
         ) {
-            // Island Settings Card
-            ListOptionCard(
-                title = stringResource(R.string.engine),
-                subtitle = stringResource(R.string.engine_desc),
-                icon = Icons.Outlined.Memory,
-                shape = getExpressiveShape(6, 0, ShapeStyle.Large),
-                onClick = onEngineSettingsClick
-            )
-            Spacer(Modifier.height(2.dp))
             ListOptionCard(
                 title = stringResource(R.string.island_behavior_title),
                 subtitle = stringResource(R.string.island_behavior_desc),
                 icon = Icons.Outlined.DisplaySettings,
-                shape = getExpressiveShape(6, 1, ShapeStyle.Large),
+                shape = getExpressiveShape(5, 0, ShapeStyle.Large),
                 onClick = onIslandSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -103,15 +80,23 @@ fun GlobalSettingsScreen(
                 title = "Media",
                 subtitle = "Compact island text, length, and media card appearance",
                 icon = Icons.Outlined.MusicNote,
-                shape = getExpressiveShape(6, 2, ShapeStyle.Large),
+                shape = getExpressiveShape(5, 1, ShapeStyle.Large),
                 onClick = onMediaCardSettingsClick
+            )
+            Spacer(Modifier.height(2.dp))
+            ListOptionCard(
+                title = stringResource(R.string.login_code_title),
+                subtitle = stringResource(R.string.login_code_desc),
+                icon = Icons.Outlined.Password,
+                shape = getExpressiveShape(5, 2, ShapeStyle.Large),
+                onClick = onLoginCodeSettingsClick
             )
             Spacer(Modifier.height(2.dp))
             ListOptionCard(
                 title = stringResource(R.string.dnd_mode_title),
                 subtitle = stringResource(R.string.dnd_mode_desc),
                 icon = Icons.Outlined.DoNotDisturbOn,
-                shape = getExpressiveShape(6, 3, ShapeStyle.Large),
+                shape = getExpressiveShape(5, 3, ShapeStyle.Large),
                 onClick = onDndSettingsClick
             )
             Spacer(Modifier.height(2.dp))
@@ -119,29 +104,9 @@ fun GlobalSettingsScreen(
                 title = stringResource(R.string.nav_layout_title),
                 subtitle = stringResource(R.string.nav_layout_desc),
                 icon = Icons.Outlined.Navigation,
-                shape = getExpressiveShape(6, 4, ShapeStyle.Large),
+                shape = getExpressiveShape(5, 4, ShapeStyle.Large),
                 onClick = onNavSettingsClick
             )
-            Spacer(Modifier.height(2.dp))
-            ListOptionCard(
-                title = stringResource(R.string.inline_reply_title),
-                subtitle = stringResource(R.string.customize_inline_reply),
-                icon = Icons.Outlined.Edit,
-                shape = getExpressiveShape(6, 5, ShapeStyle.Large),
-                onClick = onInlineReplyClick
-            )
-            Spacer(Modifier.height(16.dp))
-            SettingsSwitchItem(
-                icon = Icons.Outlined.NotificationsOff,
-                title = stringResource(R.string.suppress_source_floating),
-                subtitle = stringResource(R.string.suppress_source_floating_desc),
-                checked = suppressSourceFloating,
-                onCheckedChange = { enabled ->
-                    suppressSourceFloating = enabled
-                    HookConfigSync.setSuppressSourceHeadsUp(context, enabled)
-                },
-            )
-
         }
     }
 }

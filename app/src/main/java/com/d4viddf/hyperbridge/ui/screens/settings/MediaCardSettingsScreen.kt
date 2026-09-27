@@ -177,7 +177,6 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
             SectionTitle("Media cards")
             TogglePref(
                 title = "Edit media cards",
-                subtitle = "Off leaves the island and notification-shade players stock, which helps check whether card styling causes lag. Restart SystemUI to apply fully.",
                 checked = cardsEnabled,
             ) {
                 cardsEnabled = it
@@ -319,7 +318,7 @@ private fun CompactIslandSettings() {
     Show(showTitle) {
         TogglePref(
             title = "Cycle title and artist",
-            subtitle = "Shows the title, then \"By: artist\", then stays on the title until the track changes. Each line scrolls once (title up to 3 s, artist up to 5 s) and waits 1 s before turning to the next.",
+            subtitle = "Shows the title, then \"By: artist\", then stays on the title until the track changes. A long line scrolls once (title up to 3 s, artist up to 5 s) and waits 1 s; a line that fits moves on after 1.2 s.",
             checked = cycle,
         ) {
             cycle = it
@@ -517,7 +516,7 @@ private fun Show(visible: Boolean, content: @Composable () -> Unit) {
         visible = visible,
         enter = expandVertically() + fadeIn(),
         exit = shrinkVertically() + fadeOut(),
-        content = { content() },
+        content = { Column { content() } },
     )
 }
 

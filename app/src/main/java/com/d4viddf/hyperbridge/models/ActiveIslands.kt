@@ -29,4 +29,6 @@ data class ActiveIsland(
     val dismissSourceOnContentClick: Boolean = false,
     /** The calling app's own notification carries the focus payload, so no SystemUI proxy is posted. */
     val sourceFocus: Boolean = false,
+    /** The login code this island presents, when the extractor found one. */
+    val loginCode: String? = null,
 )

@@ -17,6 +17,7 @@ object CompactMediaIslandPolicy {
     const val ARTIST_BUDGET_MS = 5_000L
     const val CYCLE_SCROLL_DELAY_MS = 600L
     const val CYCLE_HOLD_AFTER_SCROLL_MS = 1_000L
+    const val FITTING_LINE_HOLD_MS = 1_200L
     const val TITLE_LOOP_HOLD_MS = 1_000L
     const val LIMITED_LEFT_DP = 114f
     const val UNLIMITED_LEFT_DP = 170f
@@ -83,9 +84,12 @@ object CompactMediaIslandPolicy {
         return maxOf(minSpeedPxPerSec.toFloat(), overflowPx / (budgetMs / 1000f))
     }
 
-    /** Fitting text stays for the whole budget. Scrolled text waits a second at the end. */
+    /**
+     * Text that fits moves on after a short read, never outlasting the budget.
+     * Scrolled text waits a second at the end.
+     */
     fun cycleHoldMs(overflowPx: Float, budgetMs: Long): Long =
-        if (overflowPx <= 0f) budgetMs else CYCLE_HOLD_AFTER_SCROLL_MS
+        if (overflowPx <= 0f) minOf(FITTING_LINE_HOLD_MS, budgetMs) else CYCLE_HOLD_AFTER_SCROLL_MS
 
     fun nextCyclePhase(current: CyclePhase, artistBlank: Boolean = false): CyclePhase = when (current) {
         CyclePhase.TITLE -> if (artistBlank) CyclePhase.SETTLED else CyclePhase.ARTIST

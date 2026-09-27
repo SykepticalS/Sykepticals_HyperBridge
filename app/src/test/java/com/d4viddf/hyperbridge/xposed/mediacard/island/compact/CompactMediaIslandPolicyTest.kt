@@ -57,10 +57,11 @@ class CompactMediaIslandPolicyTest {
         assertEquals(0f, CompactMediaIslandPolicy.cycleScrollSpeedPxPerSec(80f, 0L, 100), 0.01f)
     }
 
-    @Test fun scrolledLinesWaitOneSecondAndFittingLinesWaitTheBudget() {
+    @Test fun scrolledLinesWaitOneSecondAndFittingLinesMoveOnQuickly() {
         assertEquals(1_000L, CompactMediaIslandPolicy.cycleHoldMs(overflowPx = 40f, budgetMs = 3_000L))
-        assertEquals(3_000L, CompactMediaIslandPolicy.cycleHoldMs(overflowPx = 0f, budgetMs = 3_000L))
-        assertEquals(5_000L, CompactMediaIslandPolicy.cycleHoldMs(overflowPx = 0f, budgetMs = 5_000L))
+        assertEquals(1_200L, CompactMediaIslandPolicy.cycleHoldMs(overflowPx = 0f, budgetMs = 3_000L))
+        assertEquals(1_200L, CompactMediaIslandPolicy.cycleHoldMs(overflowPx = 0f, budgetMs = 5_000L))
+        assertEquals(800L, CompactMediaIslandPolicy.cycleHoldMs(overflowPx = 0f, budgetMs = 800L))
     }
 
     @Test fun cycleRunsTitleThenArtistThenStaysOnTheTitle() {

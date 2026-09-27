@@ -61,6 +61,7 @@ object IslandVisualExtras {
         IslandProtocol.EXTRA_SOURCE_ONGOING,
         IslandProtocol.EXTRA_FORCE_ISLAND_GLOW,
         IslandProtocol.EXTRA_FORCE_FOCUS_GLOW,
+        IslandProtocol.EXTRA_GLOW_NATIVE,
         IslandProtocol.EXTRA_UPDATABLE,
         IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION,
     )

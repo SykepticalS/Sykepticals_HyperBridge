@@ -57,38 +57,26 @@ data class IslandGlowPresentation(
 }
 
 object IslandGlowResolver {
-    const val CONTACT_PINK = "#FF69B4"
-    private val CONTACT_TOKENS = arrayOf("levixcs", "nisamm")
-
     fun runtimeEnabled(modeRaw: String?, effectPresent: Boolean, force: Boolean): Boolean {
         val mode = GlowMode.parse(modeRaw)
         if (mode == GlowMode.OFF) return false
         return mode != null || effectPresent || force
     }
 
-    fun contactPink(vararg texts: CharSequence?): String? {
-        val haystack = texts.joinToString(" ") { it?.toString().orEmpty() }
-        if (haystack.isBlank()) return null
-        return CONTACT_PINK.takeIf { CONTACT_TOKENS.any { token -> haystack.contains(token, ignoreCase = true) } }
-    }
-
     fun resolve(
         global: IslandConfig,
         app: IslandConfig,
         dynamicColor: String?,
-        vararg contactTexts: CharSequence?,
     ): IslandGlowPresentation {
-        val pinkEnabled = app.contactPinkGlow ?: global.contactPinkGlow ?: false
-        val pink = contactPink(*contactTexts).takeIf { pinkEnabled }
-        val islandMode = if (pink != null) GlowMode.ON else app.islandGlowMode ?: global.islandGlowMode ?: GlowMode.OFF
-        val focusMode = if (pink != null) GlowMode.ON else app.focusGlowMode ?: global.focusGlowMode ?: GlowMode.OFF
+        val islandMode = app.islandGlowMode ?: global.islandGlowMode ?: GlowMode.OFF
+        val focusMode = app.focusGlowMode ?: global.focusGlowMode ?: GlowMode.OFF
         return IslandGlowPresentation(
             islandMode, focusMode,
-            pink ?: normalizeColor(app.islandGlowColor ?: global.islandGlowColor),
-            pink ?: normalizeColor(app.focusGlowColor ?: global.focusGlowColor),
-            pink ?: normalizeColor(dynamicColor),
-            islandMode != GlowMode.OFF && (pink != null || (app.forceIslandGlow ?: global.forceIslandGlow ?: false)),
-            focusMode != GlowMode.OFF && (pink != null || (app.forceFocusGlow ?: global.forceFocusGlow ?: false)),
+            normalizeColor(app.islandGlowColor ?: global.islandGlowColor),
+            normalizeColor(app.focusGlowColor ?: global.focusGlowColor),
+            normalizeColor(dynamicColor),
+            islandMode != GlowMode.OFF && (app.forceIslandGlow ?: global.forceIslandGlow ?: false),
+            focusMode != GlowMode.OFF && (app.forceFocusGlow ?: global.forceFocusGlow ?: false),
         )
     }
 

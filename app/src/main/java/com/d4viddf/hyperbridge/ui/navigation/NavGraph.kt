@@ -16,7 +16,6 @@ import com.d4viddf.hyperbridge.ui.screens.settings.BlocklistAppListScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.BugReportScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ChangelogHistoryScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.DiagnosticsScreen
-import com.d4viddf.hyperbridge.ui.screens.settings.EngineSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalBlocklistScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.GlobalSettingsScreen
 import com.d4viddf.hyperbridge.ui.screens.settings.ImportPreviewScreen
@@ -76,27 +75,23 @@ fun mainNavGraph(
         GlobalSettingsScreen(
             onBack = { navigator.goBack() },
             onNavSettingsClick = { navigator.navigate(Screen.NavCustomization(null)) },
-            onInlineReplyClick = { navigator.navigate(Screen.ReplyCustomization) },
             onIslandSettingsClick = { navigator.navigate(Screen.IslandSettings) },
             onMediaCardSettingsClick = { navigator.navigate(Screen.MediaCardSettings) },
-            onEngineSettingsClick = { navigator.navigate(Screen.EngineSettings) },
-            onDndSettingsClick = { navigator.navigate(Screen.DndSettings) }
+            onDndSettingsClick = { navigator.navigate(Screen.DndSettings) },
+            onLoginCodeSettingsClick = { navigator.navigate(Screen.LoginCodeSettings) }
         )
     }
     entry<Screen.DndSettings> {
         com.d4viddf.hyperbridge.ui.screens.settings.DndSettingsScreen(onBack = { navigator.goBack() })
     }
-    entry<Screen.ReplyCustomization> {
-        com.d4viddf.hyperbridge.ui.screens.theme.GlobalReplyCustomizationScreen(onBack = { navigator.goBack() })
+    entry<Screen.LoginCodeSettings> {
+        com.d4viddf.hyperbridge.ui.screens.settings.LoginCodeSettingsScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.NavCustomization> { key ->
         NavCustomizationScreen(
             onBack = { navigator.goBack() },
             packageName = key.packageName
         )
-    }
-    entry<Screen.EngineSettings> {
-        EngineSettingsScreen(onBack = { navigator.goBack() })
     }
     entry<Screen.Setup> {
         SetupHealthScreen(

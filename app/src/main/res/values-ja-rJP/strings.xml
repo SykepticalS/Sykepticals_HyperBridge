@@ -129,8 +129,6 @@
     <string name="setting_float_desc">アイランドに縮小する前に、完全な通知バナーを一時的に表示します。</string>
     <string name="setting_float_timeout_desc">ヘッドアップ表示が画面に残る時間です。</string>
 
-    <string name="setting_shade">通知パネル</string>
-    <string name="setting_shade_desc">通知パネルにも通知を表示したままにします。無効にすると、アイランドとしてのみ表示されます。</string>
 
     <string name="seconds_suffix">%d秒</string>
 
@@ -508,22 +506,13 @@
 
     <string name="channel_live_updates">ネイティブライブアップデート</string>
 
-    <string name="engine_preview_title">プレビュー</string>
-    <string name="engine_design_section">通知デザイン</string>
-    <string name="engine_xiaomi_title">Xiaomi Featuredデザイン</string>
-    <string name="engine_xiaomi_desc">Xiaomiの意図に沿った、モダンなHyperOSレイアウトです。</string>
-    <string name="engine_native_title">ライブアップデートデザイン</string>
-    <string name="engine_native_desc">Android標準の通知デザインで、CN ROMでも動作します。</string>
 
     <string name="engine_config_title">エンジン設定</string>
-    <string name="engine_section_design">通知デザイン</string>
     <string name="good_to_know">知っておくと良いこと</string>
     <string name="nav_layout_info">• ナビゲーションレイアウトは、今後のアップデートでテーマエンジンに完全統合される予定です。\n• ネイティブライブアップデートエンジンを使用している場合、右側のコンテンツのみ表示されます。</string>
     <string name="xiaomi_featured_notifications">Xiaomi Featured通知</string>
     <string name="island_behavior_title">アイランドの動作</string>
     <string name="island_behavior_desc"><![CDATA[タイムアウト、重複、表示設定]]></string>
-    <string name="engine">エンジン</string>
-    <string name="engine_desc">ライブアップデート vs Xiaomiアイランド</string>
     <string name="behaviour_triggers"><![CDATA[動作とトリガー]]></string>
     <string name="engine_timeouts_triggers"><![CDATA[エンジン、タイムアウト、トリガー]]></string>
     <string name="global_behavior">全体の動作</string>
@@ -546,8 +535,6 @@
     <string name="trigger_app_desc">このアプリでアイランドを表示させるイベントを選択してください。</string>
     <string name="enable_triggers">特定のトリガーを有効にする</string>
     <string name="open_source_licenses">オープンソースライセンス</string>
-    <string name="remove_original_notification">元の通知を削除</string>
-    <string name="remove_original_notification_desc">ライブアップデートが表示されている間、元の通知を自動的に消去します。</string>
     <string name="onboarding_can_be_changed">これらのオプションは、後から設定画面やテーマ設定でいつでも変更できます。</string>
     <string name="onboarding_widget_desc">標準的なAndroidウィジェットをアイランドに追加し、すぐにアクセスできるようにします。</string>
     <string name="onboard_theme_desc">アイランドの色、形、アイコンを自由にカスタマイズできます。</string>

@@ -245,13 +245,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 else -> globalTypes
             }
 
-            // 2. Resolve Engine
-            val effectiveEngine = when {
-                themeOverride?.useNativeLiveUpdates != null -> themeOverride.useNativeLiveUpdates
-                else -> true // Global Default
-            }
-
-            // 3. Resolve Navigation Visuals (Theme completely overrides local nav preferences)
+            // 2. Resolve Navigation Visuals (Theme completely overrides local nav preferences)
             val effectiveNavVisuals = themeOverride?.navigation
 
             EffectiveAppConfig(
@@ -259,7 +253,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 activeTypes = effectiveTypes,
                 activeCallStages = effectiveCallStages,
                 voiceCompactDuration = voiceCompactDuration,
-                useNativeEngine = effectiveEngine,
+                useNativeEngine = false,
                 navigationOverride = effectiveNavVisuals,
                 localNavContent = effectiveNavContent
             )

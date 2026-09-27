@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
 import android.view.Choreographer
@@ -66,7 +67,10 @@ internal object CompactMediaIslandHooker {
     private const val TEXT_SP = 13f
     private const val BOLD_WEIGHT = 700
     private const val MAX_BIND_ATTEMPTS = 45
-    private val AREA_NAMES = arrayOf("area_left", "fake_area_left")
+    private const val FAKE_AREA = "fake_area_left"
+    private const val MAX_ANIMATING_MS = 2_500L
+    private val RESTING_STATES = setOf("BigIsland", "ShowOnceBigIsland")
+    private val AREA_NAMES = arrayOf("area_left", FAKE_AREA)
     private val PACKAGES = arrayOf("miui.systemui.plugin", "com.android.systemui")
 
     private val hookedLoaders = Collections.synchronizedSet(
@@ -87,6 +91,10 @@ internal object CompactMediaIslandHooker {
     private val relayoutMethods = ConcurrentHashMap<Class<*>, Method>()
     private val holderFields = ConcurrentHashMap<Class<*>, Field>()
     private val rootViewMethods = ConcurrentHashMap<Class<*>, Optional<Method>>()
+    private val stateGetters = ConcurrentHashMap<Class<*>, Optional<Method>>()
+    private val animatingGetters = ConcurrentHashMap<Class<*>, Optional<Method>>()
+    private val stateNames = Collections.synchronizedMap(WeakHashMap<View, String?>())
+    private val animatingSince = Collections.synchronizedMap(WeakHashMap<View, Long>())
     private val reports = HashMap<String, String>()
     private val resizing = ThreadLocal<Boolean>()
     @Volatile private var liveTitle: String = ""
@@ -442,9 +450,12 @@ internal object CompactMediaIslandHooker {
             ghost.text = ""
             return if (changed) 1 else 0
         }
-        val controller = controllers[primary] ?: CompactMediaTitleController(primary, ghost).also {
-            controllers[primary] = it
-        }
+        val controller = controllers[primary] ?: CompactMediaTitleController(
+            primary = primary,
+            ghost = ghost,
+            passive = resourceName(area) == FAKE_AREA,
+            islandAtRest = ::islandAtRest,
+        ).also { controllers[primary] = it }
         controller.render(settings, text.title, text.artist, text.identity)
         return if (changed) 1 else 0
     }
@@ -737,6 +748,42 @@ internal object CompactMediaIslandHooker {
         }?.invoke(picInfo) as? String ?: return false
         return pic == MEDIA_ALBUM || pic.contains("album")
     }
+
+    /**
+     * The compact island is only really on show in its big-island state with no transition
+     * running. Inside the media app the state is AppExpanded while every view still reports
+     * itself visible. A transition flag stuck on for too long is ignored.
+     */
+    private fun islandAtRest(view: View): Boolean {
+        val host = contentHost(view) ?: return true
+        if (host.javaClass.name != CONTENT_VIEW) return true
+        val state = runCatching { stateGetter(host)?.invoke(host) }.getOrNull()
+        val stateName = state?.javaClass?.simpleName
+        if (stateName != stateNames[host]) {
+            stateNames[host] = stateName
+            Log.i("HyperBridge", "CompactMediaIsland: island state $stateName")
+        }
+        if (stateName != null && stateName !in RESTING_STATES) {
+            animatingSince.remove(host)
+            return false
+        }
+        val animating = runCatching { animatingGetter(host)?.invoke(host) as? Boolean }.getOrNull() == true
+        if (!animating) {
+            animatingSince.remove(host)
+            return true
+        }
+        val now = SystemClock.uptimeMillis()
+        val since = animatingSince.getOrPut(host) { now }
+        return now - since > MAX_ANIMATING_MS
+    }
+
+    private fun stateGetter(host: View): Method? = stateGetters.getOrPut(host.javaClass) {
+        Optional.ofNullable(host.javaClass.methods.firstOrNull { it.name == "getState" && it.parameterCount == 0 })
+    }.orElse(null)
+
+    private fun animatingGetter(host: View): Method? = animatingGetters.getOrPut(host.javaClass) {
+        Optional.ofNullable(host.javaClass.methods.firstOrNull { it.name == "isAnimating" && it.parameterCount == 0 })
+    }.orElse(null)
 
     private fun contentHost(view: View): ViewGroup? {
         var current: View? = view

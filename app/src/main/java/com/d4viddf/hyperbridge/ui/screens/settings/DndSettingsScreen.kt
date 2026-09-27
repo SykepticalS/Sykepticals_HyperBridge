@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material.icons.outlined.DoNotDisturbOn
 import androidx.compose.material.icons.outlined.NotificationsPaused
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,7 +31,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
+import com.d4viddf.hyperbridge.models.IslandConfig
+import com.d4viddf.hyperbridge.models.IslandSceneBehavior
+import com.d4viddf.hyperbridge.ui.components.EnumSettingCard
 import com.d4viddf.hyperbridge.ui.components.ListOptionCard
+import com.d4viddf.hyperbridge.ui.components.SectionLabel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +45,7 @@ fun DndSettingsScreen(onBack: () -> Unit) {
     val prefs = remember { AppPreferences(context) }
     val isDndModeEnabled by prefs.isDndModeEnabledFlow.collectAsState(initial = false)
     val autoDetectDnd by prefs.autoDetectDndFlow.collectAsState(initial = false)
+    val globalConfig by prefs.globalConfigFlow.collectAsState(initial = IslandConfig())
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -96,6 +102,19 @@ fun DndSettingsScreen(onBack: () -> Unit) {
                     Switch(checked = isDndModeEnabled, onCheckedChange = {
                         scope.launch { prefs.setDndModeEnabled(it) }
                     })
+                }
+            )
+
+            SectionLabel(stringResource(R.string.island_behavior_title))
+            EnumSettingCard(
+                title = "Island while DND is active",
+                subtitle = "How the island behaves while Do Not Disturb is on.",
+                icon = Icons.Default.DoNotDisturb,
+                value = globalConfig.dndBehavior ?: IslandSceneBehavior.SUPPRESS,
+                values = IslandSceneBehavior.entries,
+                shape = RoundedCornerShape(24.dp),
+                onChange = { behavior ->
+                    scope.launch { prefs.updateGlobalConfig(IslandConfig(dndBehavior = behavior)) }
                 }
             )
         }

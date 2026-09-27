@@ -107,8 +107,6 @@
     <string name="setting_float">Pop-up de notificações</string>
     <string name="setting_float_desc">Mostre o banner completo da notificação brevemente antes de minimizar para a Ilha.</string>
     <string name="setting_float_timeout_desc">Por quanto tempo o pop-up de aviso permanece visÃ­vel.</string>
-    <string name="setting_shade">Painel de Notificações</string>
-    <string name="setting_shade_desc">Manter a notificação visível no painel de notificações. Se desativado, ela só aparece como uma Ilha.</string>
     <string name="seconds_suffix">%ds</string>
     <string name="use_global_default">Usar PadrÃµes Globais</string>
     <string-array name="nav_arrival_keywords">
@@ -430,22 +428,13 @@ Novas notificações substituem as mais antigas automaticamente.</string>
     <string name="all">Tudo</string>
     <string name="favorites">Favoritos</string>
     <string name="channel_live_updates">Atualizações nativas ao vivo</string>
-    <string name="engine_preview_title">Preview</string>
-    <string name="engine_design_section">Design de notificação</string>
-    <string name="engine_xiaomi_title">Design em destaque da Xiaomi</string>
-    <string name="engine_xiaomi_desc">Layout moderno do HyperOS com design pensado para a Xiaomi.</string>
-    <string name="engine_native_title">Design de atualização ao vivo</string>
-    <string name="engine_native_desc">Design de notificações nativo do Android, funciona na ROM CN.</string>
     <string name="engine_config_title">Configuração do motor</string>
-    <string name="engine_section_design">Design de Notificação</string>
     <string name="good_to_know">É bom saber</string>
     <string name="nav_layout_info">• Os layouts de navegação serão totalmente integrados ao mecanismo de temas em uma atualização futura.
     • Ao usar o mecanismo de atualização nativa em tempo real, apenas o conteúdo do lado direito fica visível</string>
     <string name="xiaomi_featured_notifications">Notificações em destaque da Xiaomi</string>
     <string name="island_behavior_title">Comportamento insular</string>
     <string name="island_behavior_desc"><![CDATA[Tempo limite, duplicados &amp; visibilidade]]></string>
-    <string name="engine">Motor</string>
-    <string name="engine_desc">Atualizações ao vivo vs Ilha Xiaomi</string>
     <string name="dnd_mode_title">Não pertube</string>
     <string name="dnd_mode_desc">Gerenciar a visibilidade da ilha durante o período de não perturbe</string>
     <string name="dnd_manual_toggle">Pausar ilha</string>
@@ -476,13 +465,6 @@ Novas notificações substituem as mais antigas automaticamente.</string>
     <string name="trigger_app_desc">Selecione quais eventos acionam a ilha para este aplicativo.</string>
     <string name="enable_triggers">Ativar gatilhos específicos</string>
     <string name="open_source_licenses">Licenças de código aberto</string>
-    <string name="remove_original_notification">Remove original notification</string>
-    <string name="remove_original_notification_desc">Dispensar automaticamente a notificação da fonte quando uma atualização ao vivo estiver ativa.</string>
-    <string name="dismiss_with_original">Dispensar com o original</string>
-    <string name="dismiss_with_original_desc">A ilha desaparecerá quando você limpar a notificação original.</string>
-    <string name="enable_inline_reply">Ativar resposta em linha</string>
-    <string name="enable_inline_reply_desc">Ao responder a partir da ilha, abra a sobreposição de resposta personalizada embutida.</string>
-    <string name="remove_original_notification_hidden_warning">Observação: Quando ativado, o Hyper Bridge não poderá responder nem marcar mensagens como lidas. As ações Responder e Marcar como lida ficarão ocultas.</string>
     <string name="color_mode">Modo de cor</string>
     <string name="color_mode_select">Selecione o modo de cor</string>
     <string name="color_mode_change_cd">Alterar modo de cor</string>
@@ -530,7 +512,6 @@ Novas notificações substituem as mais antigas automaticamente.</string>
     <string name="migration_title">Hyper Bridge Update</string>
     <string name="migration_message">Migração de banco de dados para armazenamento protegido por dispositivo…</string>
     <string name="migration_complete">Atualização concluída</string>
-    <string name="notification_management">Gerenciamento de Notificações</string>
     <string name="inline_reply_title">Resposta em linha</string>
     <string name="customize_inline_reply">Personalize a sobreposição de resposta em linha</string>
     <string name="reply_hint">Reply...</string>

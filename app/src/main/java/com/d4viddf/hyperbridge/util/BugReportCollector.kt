@@ -117,7 +117,7 @@ object BugReportCollector {
         preferences: AppPreferences
     ): ThemeDiagnosticInfo {
         val activeTheme = themeRepo.activeTheme.value
-        val nativeEngine = preferences.useNativeLiveUpdates.first()
+        val nativeEngine = false
         return if (activeTheme == null) {
             ThemeDiagnosticInfo(
                 isDefaultTheme = true,
@@ -134,7 +134,7 @@ object BugReportCollector {
                 themeTitle = activeTheme.meta.name,
                 themeAuthor = activeTheme.meta.author,
                 themeVersion = activeTheme.meta.version.toString(),
-                useNativeEngine = activeTheme.global.useNativeLiveUpdates ?: nativeEngine
+                useNativeEngine = nativeEngine
             )
         }
     }

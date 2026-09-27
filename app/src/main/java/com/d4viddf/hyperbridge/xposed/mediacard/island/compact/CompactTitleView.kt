@@ -7,9 +7,11 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.Shader
 import android.text.TextPaint
 import android.view.View
+import android.view.ViewGroup
 import java.lang.ref.WeakReference
 import kotlin.math.ceil
 
@@ -48,8 +50,7 @@ internal class CompactTitleView(context: Context) : View(context) {
 
     private var areaRef: WeakReference<View>? = null
     private var textWidthCache = -1f
-    private val location = IntArray(2)
-    private val areaLocation = IntArray(2)
+    private val offsetRect = Rect()
     private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
     }
@@ -79,14 +80,19 @@ internal class CompactTitleView(context: Context) : View(context) {
         area.addOnLayoutChangeListener(relayoutListener)
     }
 
-    /** Part of this view that is not hidden past the end of `area_left`. */
+    /**
+     * Part of this view that is not hidden past the end of `area_left`, in untransformed
+     * layout coordinates. Screen positions would be scaled by the island's entry animation
+     * while view widths are not, which pushes the cutout shade over the text.
+     */
     fun visibleWidth(): Int {
-        val area = areaRef?.get() ?: return width
+        val area = areaRef?.get() as? ViewGroup ?: return width
         if (width <= 0 || area.width <= 0) return width
-        getLocationInWindow(location)
-        area.getLocationInWindow(areaLocation)
-        val right = areaLocation[0] + area.width - area.paddingRight
-        return (right - location[0]).coerceIn(0, width)
+        offsetRect.set(0, 0, 0, 0)
+        val offset = runCatching { area.offsetDescendantRectToMyCoords(this, offsetRect) }
+        if (offset.isFailure) return width
+        val right = area.width - area.paddingRight
+        return (right - offsetRect.left).coerceIn(0, width)
     }
 
     /** Distance to scroll so the last glyph lands just before the cutout shade. */

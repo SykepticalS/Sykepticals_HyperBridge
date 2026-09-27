@@ -5,11 +5,7 @@ import com.d4viddf.hyperbridge.data.theme.ThemeRepository
 import com.d4viddf.hyperbridge.models.NavContent
 import com.d4viddf.hyperbridge.models.theme.HyperTheme
 import com.d4viddf.hyperbridge.models.theme.NavigationModule
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 
 /**
  * A fast, in-memory resolver for Translators to look up effective
@@ -41,14 +37,10 @@ class ConfigResolver(context: Context) {
         val theme = activeTheme.value
         val themeAppOverride = theme?.apps?.get(packageName)
 
-        // 1. Resolve Engine
-        val effectiveEngine = themeAppOverride?.useNativeLiveUpdates
-            ?: preferences.useNativeLiveUpdates.stateIn(CoroutineScope(Dispatchers.IO), SharingStarted.Eagerly, true).value
-
-        // 2. Resolve Visuals
+        // 1. Resolve Visuals
         val effectiveVisuals = themeAppOverride?.navigation
 
-        // 3. Resolve Content (A bit tricky as it requires reading DB, but we do it fast)
+        // 2. Resolve Content (A bit tricky as it requires reading DB, but we do it fast)
         // Note: For absolute zero-latency, you might want to cache globalNavLayoutFlow in memory too!
         var leftContent = NavContent.DISTANCE_ETA
         var rightContent = NavContent.INSTRUCTION
@@ -59,7 +51,7 @@ class ConfigResolver(context: Context) {
         }
 
         return ResolvedNavConfig(
-            useNativeEngine = effectiveEngine,
+            useNativeEngine = false,
             leftContent = leftContent,
             rightContent = rightContent,
             themeVisuals = effectiveVisuals
