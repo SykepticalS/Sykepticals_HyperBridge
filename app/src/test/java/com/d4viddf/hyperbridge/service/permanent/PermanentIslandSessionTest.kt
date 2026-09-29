@@ -72,6 +72,47 @@ class PermanentIslandSessionTest {
     }
 
     @Test
+    fun reopeningDuringClosingInvalidatesLateCallbacks() {
+        val session = PermanentIslandSession()
+        session.requestClose("app", "source")
+        session.markStarted("app")
+
+        assertTrue(session.clearIfForeground("app"))
+        assertEquals(PermanentIslandSession.State.Blank, session.state)
+        assertNull(session.complete("app"))
+    }
+
+    @Test
+    fun sourceRemovalDuringClosingInvalidatesLateCallbacks() {
+        val session = PermanentIslandSession()
+        session.requestClose("app", "source")
+
+        assertTrue(session.clearIfSource("source"))
+        assertEquals(PermanentIslandSession.State.Blank, session.state)
+        assertNull(session.markStarted("app"))
+    }
+
+    @Test
+    fun activeSourceIsExposedInClosingAndShowingStates() {
+        val session = PermanentIslandSession()
+        session.requestClose("app", "source")
+
+        assertEquals("source", session.activeSourceKey())
+        assertEquals("app", session.activePackageName())
+        assertTrue(session.hasActiveSource())
+
+        session.markStarted("app")
+        session.complete("app")
+        assertEquals("source", session.activeSourceKey())
+        assertEquals("app", session.activePackageName())
+
+        session.reset()
+        assertNull(session.activeSourceKey())
+        assertNull(session.activePackageName())
+        assertFalse(session.hasActiveSource())
+    }
+
+    @Test
     fun expansionOrRemovalOnlyClearsTheAdoptedSource() {
         val session = showingSession()
 
