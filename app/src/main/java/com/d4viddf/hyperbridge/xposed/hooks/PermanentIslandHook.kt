@@ -149,15 +149,10 @@ object PermanentIslandHook {
                     val result = chain.proceed()
                     val data = chain.args.getOrNull(0)
                     val sourceKey = data?.let(::resolveDataKey)
-                    if (data != null && updatingAnchor.get() != true) {
-                        if (isAnchorKey(sourceKey) && !session.hasActiveSource() &&
-                            !anchorSuspendedForSecondary
-                        ) {
-                            blankAnchorData = cloneData(data, forceShowOnce = true)
-                        }
-                        if (sourceKey == session.activeSourceKey()) {
-                            updateAnchorData(module, chain.thisObject, data, "source_update")
-                        }
+                    if (data != null && updatingAnchor.get() != true &&
+                        sourceKey == session.activeSourceKey()
+                    ) {
+                        updateAnchorData(module, chain.thisObject, data, "source_update")
                     }
                     result
                 }
@@ -192,6 +187,31 @@ object PermanentIslandHook {
                         }
                     }
                 }
+
+            runCatching {
+                val coordinator = loader.loadClass(EVENT_COORDINATOR)
+                coordinator.declaredMethods.filter {
+                    it.name == "onStateChange" && it.parameterCount == 2 &&
+                        it.parameterTypes.firstOrNull() == String::class.java
+                }.forEach { method ->
+                    module.hook(method).intercept { chain ->
+                        val result = chain.proceed()
+                        val transition = chain.args.getOrNull(0) as? String
+                        val view = chain.args.getOrNull(1)
+                        if (transition in SECONDARY_HIDDEN_TRANSITIONS) {
+                            resolveViewKey(view)?.let { key ->
+                                removeSecondarySource(module, key, "secondary_$transition")
+                            }
+                        }
+                        result
+                    }
+                }
+            }.onFailure {
+                module.log(
+                    "HyperBridge: permanent-island secondary lifecycle hook unavailable " +
+                        "loader=${loader.hashCode()}: ${it.message}",
+                )
+            }
 
             module.log("HyperBridge: permanent-island plugin hooks installed loader=${loader.hashCode()}")
         }.onFailure {
@@ -232,7 +252,11 @@ object PermanentIslandHook {
         originalResult: Any?,
     ): Any? {
         if (!HookConfig.permanentIslandEnabled()) {
-            if (session.reset()) restoreBlankAnchor(module, "disabled")
+            session.reset()
+            clearPendingTransaction()
+            secondarySources.clear()
+            anchorSuspendedForSecondary = false
+            blankAnchorData = null
             return originalResult
         }
         if (packageName.isNullOrBlank()) return originalResult
@@ -254,16 +278,49 @@ object PermanentIslandHook {
                     ) {
                         originalResult
                     } else {
-                        blankAnchorData = WeakReference(cloneData(anchorData, forceShowOnce = true))
-                        val generation = session.requestClose(packageName, sourceKey)
-                        pendingSourceData = WeakReference(sourceData)
-                        pendingGeneration = generation
-                        appliedGeneration = -1L
-                        Bundle(originalResult).apply { putParcelable(POSITION, Rect(cutout)) }.also {
+                        val currentSource = session.activeSourceKey()
+                        if (currentSource != null && currentSource != sourceKey) {
+                            // A permanent-island source already owns the center slot. Do not
+                            // overwrite it or replace Xiaomi's close rectangle: the vendor state
+                            // machine will place the new island in its native secondary/right slot.
+                            secondarySources[sourceKey] = packageName
                             module.log(
-                                "HyperBridge: permanent-island target override pkg=$packageName " +
-                                    "gen=$generation rect=${cutout.width()}x${cutout.height()}",
+                                "HyperBridge: permanent-island secondary tracked pkg=$packageName " +
+                                    "key=$sourceKey",
                             )
+                            originalResult
+                        } else if (currentSource != null) {
+                            originalResult
+                        } else {
+                            // Capture the real blank state once, before any source content is
+                            // written to the anchor. Never re-learn it from an adopted update.
+                            if (blankAnchorData == null) {
+                                blankAnchorData = cloneData(anchorData, forceShowOnce = true)
+                            }
+                            val generation = session.requestClose(packageName, sourceKey)
+                            pendingSourceData = sourceData
+                            pendingGeneration = generation
+                            appliedGeneration = -1L
+
+                            // request_close_position is the earliest authoritative app-close
+                            // callback. Applying here advances the visual update by one native
+                            // close phase without an arbitrary timer.
+                            if (updateAnchorData(module, controller, sourceData, "close_request")) {
+                                appliedGeneration = generation
+                                module.log(
+                                    "HyperBridge: permanent-island content pre-applied " +
+                                        "pkg=$packageName gen=$generation",
+                                )
+                            }
+
+                            Bundle(originalResult).apply {
+                                putParcelable(POSITION, Rect(cutout))
+                            }.also {
+                                module.log(
+                                    "HyperBridge: permanent-island target override pkg=$packageName " +
+                                        "gen=$generation rect=${cutout.width()}x${cutout.height()}",
+                                )
+                            }
                         }
                     }
                 }
@@ -271,7 +328,7 @@ object PermanentIslandHook {
 
             CLOSE_APP_START -> {
                 session.markStarted(packageName)?.let { generation ->
-                    val sourceData = pendingSourceData.get()
+                    val sourceData = pendingSourceData
                         ?.takeIf { pendingGeneration == generation }
                     if (sourceData != null && updateAnchorData(
                             module,
@@ -297,7 +354,7 @@ object PermanentIslandHook {
                     val fallbackApplied = if (alreadyApplied) {
                         true
                     } else {
-                        pendingSourceData.get()
+                        pendingSourceData
                             ?.takeIf { pendingGeneration == showing.generation }
                             ?.let { updateAnchorData(module, controller, it, "close_end_fallback") }
                             ?: false
@@ -314,20 +371,22 @@ object PermanentIslandHook {
                                 "pkg=$packageName gen=${showing.generation}",
                         )
                     }
-                    pendingSourceData.clear()
-                    pendingGeneration = -1L
-                    appliedGeneration = -1L
+                    clearPendingTransaction()
                 }
                 originalResult
             }
 
             APP_TO_RECENT -> {
                 if (session.abort(packageName)) {
-                    pendingSourceData.clear()
-                    pendingGeneration = -1L
-                    appliedGeneration = -1L
-                    restoreBlankAnchor(module, "app_to_recent")
+                    clearPendingTransaction()
+                    handlePrimaryCleared(module, "app_to_recent")
                     module.log("HyperBridge: permanent-island close aborted pkg=$packageName")
+                } else {
+                    removeSecondarySourcesForPackage(
+                        module,
+                        packageName,
+                        "secondary_app_to_recent",
+                    )
                 }
                 originalResult
             }
@@ -336,15 +395,107 @@ object PermanentIslandHook {
         }
     }
 
+    private fun clearPendingTransaction() {
+        pendingSourceData = null
+        pendingGeneration = -1L
+        appliedGeneration = -1L
+    }
+
+    private fun handlePrimaryCleared(module: XposedModule, reason: String) {
+        if (secondarySources.isNotEmpty() && suspendAnchorForSecondaries(module)) {
+            module.log(
+                "HyperBridge: permanent-island primary cleared reason=$reason " +
+                    "secondaryCount=${secondarySources.size}",
+            )
+            return
+        }
+        restoreBlankAnchor(module, reason)
+    }
+
     private fun restoreBlankAnchor(module: XposedModule, reason: String) {
-        if (!HookConfig.permanentIslandEnabled()) return
+        if (!HookConfig.permanentIslandEnabled() || anchorSuspendedForSecondary) return
         val controller = controllerRef.get() ?: return
-        val blank = blankAnchorData.get() ?: findAnchorData(controller)?.also {
-            blankAnchorData = WeakReference(cloneData(it, forceShowOnce = true))
-        } ?: return
+        val blank = blankAnchorData
+        if (blank == null) {
+            // The notification itself still contains the original blank payload. Reposting is a
+            // safer recovery than cloning whatever content currently happens to occupy the anchor.
+            repostAnchorNotification(module, "missing_blank_$reason")
+            return
+        }
         if (invokeUpdate(controller, cloneData(blank, forceShowOnce = true))) {
             module.log("HyperBridge: permanent-island blank restored reason=$reason")
+        } else {
+            repostAnchorNotification(module, "update_failed_$reason")
         }
+    }
+
+    private fun handleSourceRemoved(module: XposedModule, sourceKey: String?) {
+        if (sourceKey.isNullOrBlank()) return
+        if (session.clearIfSource(sourceKey)) {
+            clearPendingTransaction()
+            handlePrimaryCleared(module, "source_removed")
+        }
+        removeSecondarySource(module, sourceKey, "secondary_source_removed")
+    }
+
+    private fun removeSecondarySourcesForPackage(
+        module: XposedModule,
+        packageName: String?,
+        reason: String,
+    ) {
+        if (packageName.isNullOrBlank()) return
+        secondarySources.entries
+            .filter { it.value == packageName }
+            .map { it.key }
+            .forEach { key -> removeSecondarySource(module, key, reason) }
+    }
+
+    private fun removeSecondarySource(module: XposedModule, sourceKey: String, reason: String) {
+        if (secondarySources.remove(sourceKey) == null) return
+        module.log(
+            "HyperBridge: permanent-island secondary cleared reason=$reason " +
+                "remaining=${secondarySources.size}",
+        )
+        if (anchorSuspendedForSecondary && secondarySources.isEmpty()) {
+            anchorSuspendedForSecondary = false
+            repostAnchorNotification(module, "secondary_finished_$reason")
+        }
+    }
+
+    private fun suspendAnchorForSecondaries(module: XposedModule): Boolean {
+        if (anchorSuspendedForSecondary) return true
+        if (!ActiveIslandDismissHook.isActive()) return false
+        val controller = controllerRef.get() ?: return false
+        val anchorKey = findAnchorData(controller)?.let(::resolveDataKey)
+            ?: blankAnchorData?.let(::resolveDataKey)
+            ?: return false
+        anchorSuspendedForSecondary = true
+        ActiveIslandDismissHook.dismissKey(anchorKey)
+        module.log("HyperBridge: permanent-island anchor hidden for secondary promotion")
+        return true
+    }
+
+    private fun repostAnchorNotification(module: XposedModule, reason: String): Boolean {
+        val ctx = context.get() ?: return false
+        val manager = ctx.getSystemService(NotificationManager::class.java) ?: return false
+        val anchor = manager.activeNotifications.orEmpty().firstOrNull { sbn ->
+            sbn.id == IslandProtocol.PERMANENT_ANCHOR_ID &&
+                sbn.notification.extras.getBoolean(
+                    IslandProtocol.EXTRA_PERMANENT_ANCHOR,
+                    false,
+                )
+        } ?: return false
+        return runCatching {
+            manager.notify(anchor.tag, anchor.id, anchor.notification)
+            module.log("HyperBridge: permanent-island anchor reposted reason=$reason")
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun resolveViewKey(view: Any?): String? {
+        view ?: return null
+        return invokeNoArg(view, "getCurrentIslandData")?.let(::resolveDataKey)
+            ?: (invokeNoArg(view, "getIslandKey") as? String)
     }
 
     private fun findPluginSourceData(controller: Any?, packageName: String): Any? {
@@ -377,10 +528,7 @@ object PermanentIslandHook {
         reason: String,
     ): Boolean {
         val target = controller ?: controllerRef.get() ?: return false
-        val anchorData = findAnchorData(target) ?: blankAnchorData.get() ?: return false
-        if (blankAnchorData.get() == null) {
-            blankAnchorData = WeakReference(cloneData(anchorData, forceShowOnce = true))
-        }
+        val anchorData = findAnchorData(target) ?: blankAnchorData ?: return false
         val anchorKey = resolveDataKey(anchorData) ?: return false
         val adopted = cloneData(sourceData, key = anchorKey, forceShowOnce = true)
         return invokeUpdate(target, adopted).also { updated ->
