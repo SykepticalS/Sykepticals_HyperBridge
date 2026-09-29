@@ -157,14 +157,15 @@ object PermanentIslandHook {
                     val result = chain.proceed()
                     val data = chain.args.getOrNull(0)
                     val sourceKey = data?.let(::resolveDataKey)
-                    if (data != null && updatingAnchor.get() != true &&
+                    if (data != null && sourceKey != null &&
+                        updatingAnchor.get() != true &&
                         sourceKey == session.activeSourceKey()
                     ) {
                         if (isMediaData(data) && !mediaDataIsActive(data)) {
                             if (session.clearIfSource(sourceKey)) {
                                 clearPendingTransaction()
                                 clearMediaMonitor()
-                                        handlePrimaryCleared(module, "media_paused_update")
+                                handlePrimaryCleared(module, "media_paused_update")
                             }
                         } else {
                             updateAnchorData(module, chain.thisObject, data, "source_update")
