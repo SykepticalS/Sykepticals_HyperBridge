@@ -1,10 +1,16 @@
 package com.d4viddf.hyperbridge.xposed.hooks
 
+import android.app.Notification
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Rect
+import android.media.session.MediaController
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.StatusBarNotification
 import android.view.View
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
@@ -65,6 +71,7 @@ object PermanentIslandHook {
     )
 
     private val session = PermanentIslandSession()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val secondarySources = ConcurrentHashMap<String, String>()
     @Volatile private var context = WeakReference<Context>(null)
     @Volatile private var controllerRef = WeakReference<Any>(null)
@@ -75,6 +82,9 @@ object PermanentIslandHook {
     @Volatile private var pendingGeneration = -1L
     @Volatile private var appliedGeneration = -1L
     @Volatile private var anchorSuspendedForSecondary = false
+    @Volatile private var mediaController: MediaController? = null
+    @Volatile private var mediaCallback: MediaController.Callback? = null
+    @Volatile private var mediaSourceKey: String? = null
     private val updatingAnchor = ThreadLocal.withInitial { false }
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
@@ -132,6 +142,7 @@ object PermanentIslandHook {
                     val packageName = (chain.args.getOrNull(0) as? ComponentName)?.packageName
                     if (session.clearIfForeground(packageName)) {
                         clearPendingTransaction()
+                        clearMediaMonitor()
                         handlePrimaryCleared(module, "source_foreground")
                     }
                     removeSecondarySourcesForPackage(module, packageName, "secondary_foreground")
@@ -146,10 +157,20 @@ object PermanentIslandHook {
                     val result = chain.proceed()
                     val data = chain.args.getOrNull(0)
                     val sourceKey = data?.let(::resolveDataKey)
-                    if (data != null && updatingAnchor.get() != true &&
+                    if (data != null && sourceKey != null &&
+                        updatingAnchor.get() != true &&
                         sourceKey == session.activeSourceKey()
                     ) {
-                        updateAnchorData(module, chain.thisObject, data, "source_update")
+                        if (isMediaData(data) && !mediaDataIsActive(data)) {
+                            if (session.clearIfSource(sourceKey)) {
+                                clearPendingTransaction()
+                                clearMediaMonitor()
+                                handlePrimaryCleared(module, "media_paused_update")
+                            }
+                        } else {
+                            updateAnchorData(module, chain.thisObject, data, "source_update")
+                            bindMediaMonitor(module, data, sourceKey)
+                        }
                     }
                     result
                 }
@@ -159,13 +180,42 @@ object PermanentIslandHook {
             content.declaredMethods.filter { it.name == "onIslandClick" && it.parameterCount == 0 }
                 .forEach { method ->
                     module.hook(method).intercept { chain ->
-                        if (isAnchorContent(chain.thisObject) && !session.hasActiveSource()) {
+                        if (!isAnchorContent(chain.thisObject)) {
+                            return@intercept chain.proceed()
+                        }
+                        val sourceKey = session.activeSourceKey()
+                        val packageName = session.activePackageName()
+                        if (sourceKey == null || packageName == null) {
                             module.log("HyperBridge: permanent blank anchor click blocked")
-                            null
-                        } else {
-                            // Informative anchor content must remain fully interactive. Restoring
-                            // blank immediately after the click raced Xiaomi's Big -> Expanded
-                            // transition and made the permanent island appear non-expandable.
+                            return@intercept null
+                        }
+                        val source = findPluginSource(controllerRef.get(), packageName)
+                        if (source == null || source.key != sourceKey) {
+                            module.log(
+                                "HyperBridge: permanent active anchor click source unavailable " +
+                                    "pkg=$packageName key=$sourceKey",
+                            )
+                            return@intercept chain.proceed()
+                        }
+                        val sourceClick = findMethod(source.contentView.javaClass, "onIslandClick")
+                        runCatching {
+                            sourceClick.apply { isAccessible = true }.invoke(source.contentView)
+                        }.onSuccess {
+                            if (session.clearIfSource(sourceKey)) {
+                                clearPendingTransaction()
+                                clearMediaMonitor()
+                                restoreBlankAnchor(module, "source_expand")
+                            }
+                            module.log(
+                                "HyperBridge: permanent active anchor click delegated " +
+                                    "pkg=$packageName key=$sourceKey",
+                            )
+                        }.onFailure {
+                            module.log(
+                                "HyperBridge: permanent active anchor click delegation failed: " +
+                                    it.message,
+                            )
+                        }.getOrElse {
                             chain.proceed()
                         }
                     }
@@ -195,8 +245,9 @@ object PermanentIslandHook {
                         val result = chain.proceed()
                         val transition = chain.args.getOrNull(0) as? String
                         val view = chain.args.getOrNull(1)
+                        val viewKey = resolveViewKey(view)
                         if (transition in SECONDARY_HIDDEN_TRANSITIONS) {
-                            resolveViewKey(view)?.let { key ->
+                            viewKey?.let { key ->
                                 removeSecondarySource(module, key, "secondary_$transition")
                             }
                         }
@@ -251,6 +302,7 @@ object PermanentIslandHook {
         if (!HookConfig.permanentIslandEnabled()) {
             session.reset()
             clearPendingTransaction()
+            clearMediaMonitor()
             secondarySources.clear()
             anchorSuspendedForSecondary = false
             blankAnchorData = null
@@ -312,10 +364,18 @@ object PermanentIslandHook {
                             if (blankAnchorData == null) {
                                 blankAnchorData = cloneData(anchorData, forceShowOnce = true)
                             }
+                            if (isMediaData(sourceData) && !mediaDataIsActive(sourceData)) {
+                                module.log(
+                                    "HyperBridge: permanent-island ignored inactive media " +
+                                        "pkg=$packageName key=$sourceKey",
+                                )
+                                return originalResult
+                            }
                             val generation = session.requestClose(packageName, sourceKey)
                             pendingSourceData = sourceData
                             pendingGeneration = generation
                             appliedGeneration = -1L
+                                bindMediaMonitor(module, sourceData, sourceKey)
 
                             // request_close_position is the earliest authoritative app-close
                             // callback. Applying here advances the visual update by one native
@@ -394,6 +454,7 @@ object PermanentIslandHook {
             APP_TO_RECENT -> {
                 if (session.abort(packageName)) {
                     clearPendingTransaction()
+                    clearMediaMonitor()
                     handlePrimaryCleared(module, "app_to_recent")
                     module.log("HyperBridge: permanent-island close aborted pkg=$packageName")
                 } else {
@@ -448,6 +509,7 @@ object PermanentIslandHook {
         if (sourceKey.isNullOrBlank()) return
         if (session.clearIfSource(sourceKey)) {
             clearPendingTransaction()
+            clearMediaMonitor()
             handlePrimaryCleared(module, "source_removed")
         }
         removeSecondarySource(module, sourceKey, "secondary_source_removed")
@@ -560,11 +622,13 @@ object PermanentIslandHook {
             add("miui.systemui.plugin")
             add("com.android.systemui")
         }.distinct()
-        val gap = resolveDimension(resources, "island_space", packageNames) ?: return null
+        val gap = resolveDimension(resources, "island_space", packageNames) ?: 0
         val width = smallView?.width?.takeIf { it > 0 }
             ?: resolveDimension(resources, "small_island_width", packageNames)
-            ?: return null
-        val height = smallView?.height?.takeIf { it > 0 } ?: cutout.height()
+            ?: cutout.width()
+        val height = smallView?.height?.takeIf { it > 0 }
+            ?: resolveDimension(resources, "small_island_height", packageNames)
+            ?: cutout.height()
         if (width <= 0 || height <= 0) return null
 
         val left = cutout.right + gap
@@ -574,6 +638,115 @@ object PermanentIslandHook {
             validCutout(it) && it.left >= cutout.right &&
                 it.right <= resources.displayMetrics.widthPixels
         }
+    }
+
+    private fun bindMediaMonitor(module: XposedModule, data: Any, sourceKey: String) {
+        val sbn = resolveSourceSbn(data) ?: run {
+            clearMediaMonitor()
+            return
+        }
+        if (!isMediaNotification(sbn.notification)) {
+            clearMediaMonitor()
+            return
+        }
+        val token = sbn.notification.extras
+            ?.getParcelable(Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+            ?: run {
+                clearMediaMonitor()
+                return
+            }
+        val ctx = context.get() ?: return
+        if (mediaSourceKey == sourceKey && mediaController?.sessionToken == token) return
+
+        clearMediaMonitor()
+        val controller = runCatching { MediaController(ctx, token) }.getOrNull() ?: return
+        val callback = object : MediaController.Callback() {
+            override fun onPlaybackStateChanged(state: PlaybackState?) {
+                if (mediaSourceKey != sourceKey) return
+                if (isPlaybackActive(state)) return
+                if (session.clearIfSource(sourceKey)) {
+                    clearPendingTransaction()
+                    clearMediaMonitor()
+                    handlePrimaryCleared(module, "media_paused")
+                    module.log(
+                        "HyperBridge: permanent media cleared on playback stop key=$sourceKey " +
+                            "state=${state?.state}",
+                    )
+                }
+            }
+
+            override fun onSessionDestroyed() {
+                if (mediaSourceKey != sourceKey) return
+                if (session.clearIfSource(sourceKey)) {
+                    clearPendingTransaction()
+                    clearMediaMonitor()
+                    handlePrimaryCleared(module, "media_session_destroyed")
+                }
+            }
+        }
+        mediaController = controller
+        mediaCallback = callback
+        mediaSourceKey = sourceKey
+        runCatching { controller.registerCallback(callback, mainHandler) }
+            .onFailure {
+                clearMediaMonitor()
+                module.log("HyperBridge: permanent media monitor unavailable: ${it.message}")
+            }
+        val initial = runCatching { controller.playbackState }.getOrNull()
+        if (initial != null && !isPlaybackActive(initial) && session.clearIfSource(sourceKey)) {
+            clearPendingTransaction()
+            clearMediaMonitor()
+            handlePrimaryCleared(module, "media_inactive_initial")
+        }
+    }
+
+    private fun clearMediaMonitor() {
+        val controller = mediaController
+        val callback = mediaCallback
+        mediaController = null
+        mediaCallback = null
+        mediaSourceKey = null
+        if (controller != null && callback != null) {
+            runCatching { controller.unregisterCallback(callback) }
+        }
+    }
+
+    private fun isMediaData(data: Any): Boolean =
+        resolveSourceSbn(data)?.notification?.let(::isMediaNotification) == true
+
+    private fun mediaDataIsActive(data: Any): Boolean {
+        val sbn = resolveSourceSbn(data) ?: return true
+        if (!isMediaNotification(sbn.notification)) return true
+        val token = sbn.notification.extras
+            ?.getParcelable(Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
+            ?: return true
+        val ctx = context.get() ?: return true
+        val state = runCatching { MediaController(ctx, token).playbackState }.getOrNull()
+        return state == null || isPlaybackActive(state)
+    }
+
+    private fun resolveSourceSbn(data: Any?): StatusBarNotification? {
+        val extras = data?.let { invokeNoArg(it, "getExtras") as? Bundle } ?: return null
+        return extras.getParcelable(IslandProtocol.MIUI_SBN, StatusBarNotification::class.java)
+    }
+
+    private fun isMediaNotification(notification: Notification): Boolean {
+        if (notification.category == Notification.CATEGORY_TRANSPORT) return true
+        val extras = notification.extras ?: return false
+        if (extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) return true
+        return extras.getString(Notification.EXTRA_TEMPLATE).orEmpty().contains("MediaStyle")
+    }
+
+    private fun isPlaybackActive(state: PlaybackState?): Boolean = when (state?.state) {
+        PlaybackState.STATE_PLAYING,
+        PlaybackState.STATE_BUFFERING,
+        PlaybackState.STATE_CONNECTING,
+        PlaybackState.STATE_FAST_FORWARDING,
+        PlaybackState.STATE_REWINDING,
+        PlaybackState.STATE_SKIPPING_TO_NEXT,
+        PlaybackState.STATE_SKIPPING_TO_PREVIOUS,
+        PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM -> true
+        else -> false
     }
 
     private fun resolveDimension(
