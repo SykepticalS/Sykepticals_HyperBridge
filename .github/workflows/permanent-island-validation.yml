@@ -35,8 +35,18 @@ jobs:
 
       - name: Unit tests and debug APK
         run: |
+          set -o pipefail
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee gradle-build.log
+
+      - name: Upload Gradle log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HyperBridge-gradle-log
+          path: gradle-build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
