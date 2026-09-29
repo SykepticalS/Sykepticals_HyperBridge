@@ -277,7 +277,10 @@ object PermanentIslandHook {
                         originalResult
                     } else {
                         val currentSource = session.activeSourceKey()
-                        if (currentSource != null && currentSource != sourceKey) {
+                        if (
+                            (currentSource != null && currentSource != sourceKey) ||
+                            (currentSource == null && anchorSuspendedForSecondary)
+                        ) {
                             // The permanent anchor is ShowOnce/property-0, which makes stock Xiaomi
                             // prefer the physical cutout even when another island should animate
                             // into the right-hand secondary slot. Preserve an already-correct native
@@ -551,7 +554,7 @@ object PermanentIslandHook {
                 if (view.id != View.NO_ID) {
                     runCatching { resources.getResourcePackageName(view.id) }
                         .getOrNull()
-                        ?.let(::add)
+                        ?.let { packageName -> add(packageName) }
                 }
             }
             add("miui.systemui.plugin")
