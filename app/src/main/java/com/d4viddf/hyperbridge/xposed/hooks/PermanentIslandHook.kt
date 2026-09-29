@@ -1,9 +1,12 @@
 package com.d4viddf.hyperbridge.xposed.hooks
 
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.StatusBarNotification
 import android.view.View
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
@@ -16,6 +19,7 @@ import java.lang.ref.WeakReference
 import java.lang.reflect.Method
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 
 /**
@@ -31,6 +35,8 @@ object PermanentIslandHook {
         "miui.systemui.dynamicisland.window.DynamicIslandWindowView"
     private const val FOCUS_CONTROLLER =
         "com.android.systemui.statusbar.notification.focus.FocusNotificationController"
+    private const val EVENT_COORDINATOR =
+        "miui.systemui.dynamicisland.event.DynamicIslandEventCoordinator"
 
     private const val REQUEST_CLOSE_POSITION = "request_close_position"
     private const val CLOSE_APP_START = "close_app_start"
@@ -38,6 +44,15 @@ object PermanentIslandHook {
     private const val APP_TO_RECENT = "app_to_recent"
     private const val POSITION = "position"
     private const val PACKAGE_NAME = "packageName"
+    private val SECONDARY_HIDDEN_TRANSITIONS = setOf(
+        "big_to_hidden",
+        "small_to_hidden",
+        "expanded_to_hidden",
+        "app_to_hidden",
+        "sub_app_to_hidden",
+        "mini_window_to_hidden",
+        "sub_mini_window_to_hidden",
+    )
 
     private val pluginLoaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
@@ -45,13 +60,24 @@ object PermanentIslandHook {
     private val focusLoaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
     )
+    private data class PluginSource(
+        val contentView: Any,
+        val data: Any,
+        val key: String,
+    )
+
     private val session = PermanentIslandSession()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val secondarySources = ConcurrentHashMap<String, String>()
     @Volatile private var context = WeakReference<Context>(null)
     @Volatile private var controllerRef = WeakReference<Any>(null)
-    @Volatile private var blankAnchorData = WeakReference<Any>(null)
-    @Volatile private var pendingSourceData = WeakReference<Any>(null)
+    // Keep one bounded strong snapshot for the plugin lifetime. A WeakReference made the only
+    // blank state collectible, which could strand stale adopted content with nothing to restore.
+    @Volatile private var blankAnchorData: Any? = null
+    @Volatile private var pendingSourceData: Any? = null
     @Volatile private var pendingGeneration = -1L
     @Volatile private var appliedGeneration = -1L
+    @Volatile private var anchorSuspendedForSecondary = false
     private val updatingAnchor = ThreadLocal.withInitial { false }
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
@@ -64,9 +90,7 @@ object PermanentIslandHook {
     }
 
     fun onNotificationRemoved(module: XposedModule, sbn: StatusBarNotification) {
-        if (session.clearIfSource(sbn.key)) {
-            restoreBlankAnchor(module, "source_removed")
-        }
+        handleSourceRemoved(module, sbn.key)
     }
 
     private fun hookPlugin(module: XposedModule, loader: ClassLoader) {
@@ -110,8 +134,10 @@ object PermanentIslandHook {
                     val result = chain.proceed()
                     val packageName = (chain.args.getOrNull(0) as? ComponentName)?.packageName
                     if (session.clearIfForeground(packageName)) {
-                        restoreBlankAnchor(module, "source_foreground")
+                        clearPendingTransaction()
+                        handlePrimaryCleared(module, "source_foreground")
                     }
+                    removeSecondarySourcesForPackage(module, packageName, "secondary_foreground")
                     result
                 }
             }
@@ -123,10 +149,15 @@ object PermanentIslandHook {
                     val result = chain.proceed()
                     val data = chain.args.getOrNull(0)
                     val sourceKey = data?.let(::resolveDataKey)
-                    if (data != null && updatingAnchor.get() != true &&
-                        sourceKey == session.adoptedSourceKey()
-                    ) {
-                        updateAnchorData(module, chain.thisObject, data, "source_update")
+                    if (data != null && updatingAnchor.get() != true) {
+                        if (isAnchorKey(sourceKey) && !session.hasActiveSource() &&
+                            !anchorSuspendedForSecondary
+                        ) {
+                            blankAnchorData = cloneData(data, forceShowOnce = true)
+                        }
+                        if (sourceKey == session.activeSourceKey()) {
+                            updateAnchorData(module, chain.thisObject, data, "source_update")
+                        }
                     }
                     result
                 }
@@ -136,17 +167,13 @@ object PermanentIslandHook {
             content.declaredMethods.filter { it.name == "onIslandClick" && it.parameterCount == 0 }
                 .forEach { method ->
                     module.hook(method).intercept { chain ->
-                        if (isAnchorContent(chain.thisObject)) {
-                            if (session.adoptedSourceKey() == null) {
-                                module.log("HyperBridge: permanent blank anchor click blocked")
-                                null
-                            } else {
-                                val result = chain.proceed()
-                                session.reset()
-                                restoreBlankAnchor(module, "source_expand")
-                                result
-                            }
+                        if (isAnchorContent(chain.thisObject) && !session.hasActiveSource()) {
+                            module.log("HyperBridge: permanent blank anchor click blocked")
+                            null
                         } else {
+                            // Informative anchor content must remain fully interactive. Restoring
+                            // blank immediately after the click raced Xiaomi's Big -> Expanded
+                            // transition and made the permanent island appear non-expandable.
                             chain.proceed()
                         }
                     }
@@ -157,8 +184,8 @@ object PermanentIslandHook {
                 .forEach { method ->
                     module.hook(method).intercept { chain ->
                         val candidate = chain.args.getOrNull(1) ?: chain.args.getOrNull(0)
-                        if (isAnchorContent(candidate)) {
-                            module.log("HyperBridge: permanent anchor long-press blocked")
+                        if (isAnchorContent(candidate) && !session.hasActiveSource()) {
+                            module.log("HyperBridge: permanent blank anchor long-press blocked")
                             null
                         } else {
                             chain.proceed()
@@ -186,9 +213,7 @@ object PermanentIslandHook {
                 module.hook(method).intercept { chain ->
                     val removed = chain.args.firstOrNull { it is StatusBarNotification } as? StatusBarNotification
                     val result = chain.proceed()
-                    if (session.clearIfSource(removed?.key)) {
-                        restoreBlankAnchor(module, "source_removed")
-                    }
+                    removed?.key?.let { handleSourceRemoved(module, it) }
                     result
                 }
             }
