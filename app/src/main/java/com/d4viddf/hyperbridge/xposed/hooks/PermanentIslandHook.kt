@@ -5,8 +5,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.service.notification.StatusBarNotification
 import android.view.View
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
@@ -67,7 +65,6 @@ object PermanentIslandHook {
     )
 
     private val session = PermanentIslandSession()
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val secondarySources = ConcurrentHashMap<String, String>()
     @Volatile private var context = WeakReference<Context>(null)
     @Volatile private var controllerRef = WeakReference<Any>(null)
@@ -270,25 +267,40 @@ object PermanentIslandHook {
                     originalResult
                 } else {
                     val anchorData = findAnchorData(controller)
-                    val sourceData = findPluginSourceData(controller, packageName)
-                    val sourceKey = sourceData?.let(::resolveDataKey)
+                    val source = findPluginSource(controller, packageName)
+                    val sourceData = source?.data
+                    val sourceKey = source?.key
                     val cutout = sourceKey?.let { resolveCutoutRect(controller) }
-                    if (anchorData == null || sourceData == null || sourceKey == null ||
-                        cutout == null || !validCutout(cutout)
+                    if (anchorData == null || source == null || sourceData == null ||
+                        sourceKey == null || cutout == null || !validCutout(cutout)
                     ) {
                         originalResult
                     } else {
                         val currentSource = session.activeSourceKey()
                         if (currentSource != null && currentSource != sourceKey) {
-                            // A permanent-island source already owns the center slot. Do not
-                            // overwrite it or replace Xiaomi's close rectangle: the vendor state
-                            // machine will place the new island in its native secondary/right slot.
+                            // The permanent anchor is ShowOnce/property-0, which makes stock Xiaomi
+                            // prefer the physical cutout even when another island should animate
+                            // into the right-hand secondary slot. Preserve an already-correct native
+                            // target; otherwise derive the slot from Xiaomi's own small-island view
+                            // dimensions/resources instead of hard-coding device pixels.
                             secondarySources[sourceKey] = packageName
+                            val secondaryTarget = resolveSecondaryTarget(
+                                originalResult = originalResult,
+                                contentView = source.contentView,
+                                cutout = cutout,
+                            )
                             module.log(
                                 "HyperBridge: permanent-island secondary tracked pkg=$packageName " +
-                                    "key=$sourceKey",
+                                    "key=$sourceKey target=" +
+                                    (secondaryTarget?.let { "${it.width()}x${it.height()}" } ?: "native"),
                             )
-                            originalResult
+                            if (secondaryTarget == null) {
+                                originalResult
+                            } else {
+                                Bundle(originalResult).apply {
+                                    putParcelable(POSITION, Rect(secondaryTarget))
+                                }
+                            }
                         } else if (currentSource != null) {
                             originalResult
                         } else {
@@ -498,7 +510,7 @@ object PermanentIslandHook {
             ?: (invokeNoArg(view, "getIslandKey") as? String)
     }
 
-    private fun findPluginSourceData(controller: Any?, packageName: String): Any? {
+    private fun findPluginSource(controller: Any?, packageName: String): PluginSource? {
         val view = controller?.let { invokeNoArg(it, "getView") } ?: return null
         val request = findMethod(
             type = view.javaClass,
@@ -509,8 +521,82 @@ object PermanentIslandHook {
             request.apply { isAccessible = true }.invoke(view, packageName) as? List<*>
         }.getOrNull().orEmpty()
         return islandViews.asReversed().firstNotNullOfOrNull { islandView ->
-            islandView?.let { invokeNoArg(it, "getCurrentIslandData") }
+            val contentView = islandView ?: return@firstNotNullOfOrNull null
+            val data = invokeNoArg(contentView, "getCurrentIslandData")
+                ?: return@firstNotNullOfOrNull null
+            val key = resolveDataKey(data) ?: return@firstNotNullOfOrNull null
+            if (isAnchorKey(key)) null else PluginSource(contentView, data, key)
         }
+    }
+
+    private fun resolveSecondaryTarget(
+        originalResult: Bundle,
+        contentView: Any,
+        cutout: Rect,
+    ): Rect? {
+        val native = originalResult.getParcelable(POSITION, Rect::class.java)
+        if (native != null && validCutout(native) && native.centerX() > cutout.right) {
+            return null
+        }
+
+        val smallView = invokeNoArg(contentView, "getSmallIslandView") as? View
+        val measured = smallView?.let(::viewRectOnScreen)
+        if (measured != null && validCutout(measured) && measured.centerX() > cutout.right) {
+            return measured
+        }
+
+        val resources = smallView?.resources ?: (contentView as? View)?.resources ?: return null
+        val packageNames = buildList {
+            sequenceOf(smallView, contentView as? View).filterNotNull().forEach { view ->
+                if (view.id != View.NO_ID) {
+                    runCatching { resources.getResourcePackageName(view.id) }
+                        .getOrNull()
+                        ?.let(::add)
+                }
+            }
+            add("miui.systemui.plugin")
+            add("com.android.systemui")
+        }.distinct()
+        val gap = resolveDimension(resources, "island_space", packageNames) ?: return null
+        val width = smallView?.width?.takeIf { it > 0 }
+            ?: resolveDimension(resources, "small_island_width", packageNames)
+            ?: return null
+        val height = smallView?.height?.takeIf { it > 0 } ?: cutout.height()
+        if (width <= 0 || height <= 0) return null
+
+        val left = cutout.right + gap
+        val top = cutout.centerY() - height / 2
+        val derived = Rect(left, top, left + width, top + height)
+        return derived.takeIf {
+            validCutout(it) && it.left >= cutout.right &&
+                it.right <= resources.displayMetrics.widthPixels
+        }
+    }
+
+    private fun resolveDimension(
+        resources: android.content.res.Resources,
+        name: String,
+        packageNames: List<String>,
+    ): Int? {
+        packageNames.forEach { packageName ->
+            val id = resources.getIdentifier(name, "dimen", packageName)
+            if (id != 0) {
+                runCatching { resources.getDimensionPixelSize(id) }.getOrNull()?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun viewRectOnScreen(view: View): Rect? {
+        if (view.width <= 0 || view.height <= 0) return null
+        val location = IntArray(2)
+        runCatching { view.getLocationOnScreen(location) }.getOrNull() ?: return null
+        return Rect(
+            location[0],
+            location[1],
+            location[0] + view.width,
+            location[1] + view.height,
+        )
     }
 
     private fun findAnchorData(controller: Any?): Any? {
