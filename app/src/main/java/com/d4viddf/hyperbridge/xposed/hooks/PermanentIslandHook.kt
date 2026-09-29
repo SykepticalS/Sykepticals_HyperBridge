@@ -57,15 +57,6 @@ object PermanentIslandHook {
         "mini_window_to_hidden",
         "sub_mini_window_to_hidden",
     )
-    private val EXPANSION_TRANSITIONS = setOf(
-        "big_to_expanded",
-        "small_to_expanded",
-        "hidden_to_expanded",
-        "app_to_expanded",
-        "sub_app_to_expanded",
-        "mini_window_to_expanded",
-        "sub_mini_window_to_expanded",
-    )
 
     private val pluginLoaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
@@ -91,7 +82,6 @@ object PermanentIslandHook {
     @Volatile private var pendingGeneration = -1L
     @Volatile private var appliedGeneration = -1L
     @Volatile private var anchorSuspendedForSecondary = false
-    @Volatile private var pendingExpansionSourceKey: String? = null
     @Volatile private var mediaController: MediaController? = null
     @Volatile private var mediaCallback: MediaController.Callback? = null
     @Volatile private var mediaSourceKey: String? = null
@@ -153,7 +143,6 @@ object PermanentIslandHook {
                     if (session.clearIfForeground(packageName)) {
                         clearPendingTransaction()
                         clearMediaMonitor()
-                        pendingExpansionSourceKey = null
                         handlePrimaryCleared(module, "source_foreground")
                     }
                     removeSecondarySourcesForPackage(module, packageName, "secondary_foreground")
@@ -175,8 +164,7 @@ object PermanentIslandHook {
                             if (session.clearIfSource(sourceKey)) {
                                 clearPendingTransaction()
                                 clearMediaMonitor()
-                                pendingExpansionSourceKey = null
-                                handlePrimaryCleared(module, "media_paused_update")
+                                        handlePrimaryCleared(module, "media_paused_update")
                             }
                         } else {
                             updateAnchorData(module, chain.thisObject, data, "source_update")
@@ -209,16 +197,19 @@ object PermanentIslandHook {
                             return@intercept chain.proceed()
                         }
                         val sourceClick = findMethod(source.contentView.javaClass, "onIslandClick")
-                        pendingExpansionSourceKey = sourceKey
                         runCatching {
                             sourceClick.apply { isAccessible = true }.invoke(source.contentView)
                         }.onSuccess {
+                            if (session.clearIfSource(sourceKey)) {
+                                clearPendingTransaction()
+                                clearMediaMonitor()
+                                restoreBlankAnchor(module, "source_expand")
+                            }
                             module.log(
                                 "HyperBridge: permanent active anchor click delegated " +
                                     "pkg=$packageName key=$sourceKey",
                             )
                         }.onFailure {
-                            pendingExpansionSourceKey = null
                             module.log(
                                 "HyperBridge: permanent active anchor click delegation failed: " +
                                     it.message,
@@ -254,22 +245,6 @@ object PermanentIslandHook {
                         val transition = chain.args.getOrNull(0) as? String
                         val view = chain.args.getOrNull(1)
                         val viewKey = resolveViewKey(view)
-                        val pendingExpansion = pendingExpansionSourceKey
-                        if (pendingExpansion != null &&
-                            transition in EXPANSION_TRANSITIONS &&
-                            (viewKey == null || viewKey == pendingExpansion)
-                        ) {
-                            pendingExpansionSourceKey = null
-                            if (session.clearIfSource(pendingExpansion)) {
-                                clearPendingTransaction()
-                                clearMediaMonitor()
-                                restoreBlankAnchor(module, "source_expand")
-                                module.log(
-                                    "HyperBridge: permanent source expanded key=$pendingExpansion " +
-                                        "transition=$transition",
-                                )
-                            }
-                        }
                         if (transition in SECONDARY_HIDDEN_TRANSITIONS) {
                             viewKey?.let { key ->
                                 removeSecondarySource(module, key, "secondary_$transition")
@@ -327,7 +302,6 @@ object PermanentIslandHook {
             session.reset()
             clearPendingTransaction()
             clearMediaMonitor()
-            pendingExpansionSourceKey = null
             secondarySources.clear()
             anchorSuspendedForSecondary = false
             blankAnchorData = null
@@ -400,8 +374,7 @@ object PermanentIslandHook {
                             pendingSourceData = sourceData
                             pendingGeneration = generation
                             appliedGeneration = -1L
-                            pendingExpansionSourceKey = null
-                            bindMediaMonitor(module, sourceData, sourceKey)
+                                bindMediaMonitor(module, sourceData, sourceKey)
 
                             // request_close_position is the earliest authoritative app-close
                             // callback. Applying here advances the visual update by one native
@@ -481,7 +454,6 @@ object PermanentIslandHook {
                 if (session.abort(packageName)) {
                     clearPendingTransaction()
                     clearMediaMonitor()
-                    pendingExpansionSourceKey = null
                     handlePrimaryCleared(module, "app_to_recent")
                     module.log("HyperBridge: permanent-island close aborted pkg=$packageName")
                 } else {
@@ -537,7 +509,6 @@ object PermanentIslandHook {
         if (session.clearIfSource(sourceKey)) {
             clearPendingTransaction()
             clearMediaMonitor()
-            pendingExpansionSourceKey = null
             handlePrimaryCleared(module, "source_removed")
         }
         removeSecondarySource(module, sourceKey, "secondary_source_removed")
@@ -695,7 +666,6 @@ object PermanentIslandHook {
                 if (session.clearIfSource(sourceKey)) {
                     clearPendingTransaction()
                     clearMediaMonitor()
-                    pendingExpansionSourceKey = null
                     handlePrimaryCleared(module, "media_paused")
                     module.log(
                         "HyperBridge: permanent media cleared on playback stop key=$sourceKey " +
@@ -709,7 +679,6 @@ object PermanentIslandHook {
                 if (session.clearIfSource(sourceKey)) {
                     clearPendingTransaction()
                     clearMediaMonitor()
-                    pendingExpansionSourceKey = null
                     handlePrimaryCleared(module, "media_session_destroyed")
                 }
             }
@@ -726,7 +695,6 @@ object PermanentIslandHook {
         if (initial != null && !isPlaybackActive(initial) && session.clearIfSource(sourceKey)) {
             clearPendingTransaction()
             clearMediaMonitor()
-            pendingExpansionSourceKey = null
             handlePrimaryCleared(module, "media_inactive_initial")
         }
     }
