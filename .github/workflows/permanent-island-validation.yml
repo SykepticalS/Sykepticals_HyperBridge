@@ -23,9 +23,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android 37 platform
+      - name: Prepare Android 16 build SDK
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0" >/dev/null
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" >/dev/null
+          # CI-only compatibility override. The committed project stays compile/target 37.
+          sed -i 's/version = release(37)/version = release(36)/' app/build.gradle.kts
+          sed -i 's/targetSdk = 37/targetSdk = 36/' app/build.gradle.kts
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
