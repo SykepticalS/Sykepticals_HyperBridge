@@ -62,16 +62,26 @@ class PermanentIslandSession {
 
     @Synchronized
     fun clearIfForeground(packageName: String?): Boolean {
-        val current = state as? State.Showing ?: return false
-        if (packageName == null || current.packageName != packageName) return false
+        if (packageName == null) return false
+        val matches = when (val current = state) {
+            is State.Closing -> current.packageName == packageName
+            is State.Showing -> current.packageName == packageName
+            State.Blank -> false
+        }
+        if (!matches) return false
         state = State.Blank
         return true
     }
 
     @Synchronized
     fun clearIfSource(sourceKey: String?): Boolean {
-        val current = state as? State.Showing ?: return false
-        if (sourceKey == null || current.sourceKey != sourceKey) return false
+        if (sourceKey == null) return false
+        val matches = when (val current = state) {
+            is State.Closing -> current.sourceKey == sourceKey
+            is State.Showing -> current.sourceKey == sourceKey
+            State.Blank -> false
+        }
+        if (!matches) return false
         state = State.Blank
         return true
     }
@@ -84,5 +94,19 @@ class PermanentIslandSession {
     }
 
     @Synchronized
-    fun adoptedSourceKey(): String? = (state as? State.Showing)?.sourceKey
+    fun activeSourceKey(): String? = when (val current = state) {
+        is State.Closing -> current.sourceKey
+        is State.Showing -> current.sourceKey
+        State.Blank -> null
+    }
+
+    @Synchronized
+    fun activePackageName(): String? = when (val current = state) {
+        is State.Closing -> current.packageName
+        is State.Showing -> current.packageName
+        State.Blank -> null
+    }
+
+    @Synchronized
+    fun hasActiveSource(): Boolean = state !is State.Blank
 }
