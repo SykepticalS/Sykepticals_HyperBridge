@@ -6,6 +6,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class HyperIslandProtocolExtensionsTest {
+    @Test fun supportsXiaomiShowOnceProperty() {
+        val patched = patchHyperIslandJson(
+            """{"param_v2":{"param_island":{"islandProperty":1}}}""",
+            HyperIslandProtocolOptions(islandProperty = 0),
+        )
+        val island = JsonParser.parseString(patched).asJsonObject
+            .getAsJsonObject("param_v2").getAsJsonObject("param_island")
+        assertEquals(0, island["islandProperty"].asInt)
+    }
+
     @Test fun exposesActionPropertyAndCorrectsToolkitCountUpClock() {
         val patched = patchHyperIslandJson(
             """{"param_v2":{"param_island":{"islandProperty":1,"bigIslandArea":{"sameWidthDigitInfo":{"timerInfo":{"timerType":1,"timerWhen":1000,"timerTotal":1000,"timerSystemCurrent":1000}}}}}}""",

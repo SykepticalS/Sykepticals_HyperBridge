@@ -92,6 +92,7 @@ class LiveUpdateTranslator(
                     action.actionIntent,
                     action.remoteInputs!![0].resultKey,
                     sbn?.packageName,
+                    sbn?.key,
                 )
             } else {
                 action.actionIntent

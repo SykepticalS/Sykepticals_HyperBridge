@@ -81,6 +81,25 @@ object NotificationTypeEnablementPolicy {
     }
 }
 
+/**
+ * Recorder notifications are never rendered by the generic notification pipeline. When the
+ * replacement is enabled, the dedicated screen-recording controller owns the complete lifecycle;
+ * when it is disabled, Xiaomi's native recorder UI owns it. Keeping this boundary explicit also
+ * prevents an active recorder notification recovered after a SystemUI restart from recreating a
+ * HyperBridge island while the replacement toggle is off.
+ */
+object ScreenRecordingNotificationRoutingPolicy {
+    fun shouldUseGenericPipeline(
+        isActiveScreenRecording: Boolean,
+        isSavedScreenRecording: Boolean,
+    ): Boolean = !isActiveScreenRecording && !isSavedScreenRecording
+
+    fun shouldSuppressSourceHeadsUp(
+        isActiveScreenRecording: Boolean,
+        replacementEnabled: Boolean,
+    ): Boolean = isActiveScreenRecording && replacementEnabled
+}
+
 /** Bounded refresh policy used after an allowed callback has already claimed a generation. */
 object NotificationRefreshPolicy {
     const val MAX_REFRESH_ATTEMPTS = 2

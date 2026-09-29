@@ -14,10 +14,12 @@ object InlineReplyIntents {
         replyAction: PendingIntent,
         resultKey: String,
         sourcePackage: String? = null,
+        sourceKey: String? = null,
     ): Intent = Intent(context, InlineReplyActivity::class.java).apply {
         putExtra(InlineReplyActivity.EXTRA_PENDING_INTENT, replyAction)
         putExtra(InlineReplyActivity.EXTRA_RESULT_KEY, resultKey)
         sourcePackage?.let { putExtra(InlineReplyActivity.EXTRA_PACKAGE_NAME, it) }
+        sourceKey?.let { putExtra(InlineReplyActivity.EXTRA_SOURCE_KEY, it) }
         addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
@@ -31,6 +33,7 @@ object InlineReplyIntents {
         replyAction: PendingIntent,
         resultKey: String,
         sourcePackage: String? = null,
+        sourceKey: String? = null,
     ): PendingIntent = PendingIntent.getBroadcast(
         context,
         requestCode,
@@ -39,6 +42,7 @@ object InlineReplyIntents {
             putExtra(InlineReplyActivity.EXTRA_PENDING_INTENT, replyAction)
             putExtra(InlineReplyActivity.EXTRA_RESULT_KEY, resultKey)
             sourcePackage?.let { putExtra(InlineReplyActivity.EXTRA_PACKAGE_NAME, it) }
+            sourceKey?.let { putExtra(InlineReplyActivity.EXTRA_SOURCE_KEY, it) }
             putExtra(EXTRA_INLINE_REPLY, true)
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,

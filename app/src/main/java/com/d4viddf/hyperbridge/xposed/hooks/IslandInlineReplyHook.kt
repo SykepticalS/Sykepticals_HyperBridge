@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.service.notification.StatusBarNotification
 import android.text.InputType
 import android.util.Log
 import android.util.TypedValue
@@ -31,6 +32,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.models.IslandWindowImePolicy
 import com.d4viddf.hyperbridge.ui.InlineReplyActivity
 import com.d4viddf.hyperbridge.ui.InlineReplyIntents
@@ -275,9 +277,14 @@ object IslandInlineReplyHook {
         IslandReplyComposer.markOpening()
         handling.set(true)
         return try {
-            IslandReplyComposer.openNow(context, payload, module, source)
-            Log.i("HyperBridge", "island reply intercept swallowed activity fallback")
-            true
+            val opened = IslandReplyComposer.openNow(context, payload, module, source)
+            if (opened) {
+                Log.i("HyperBridge", "island reply intercept swallowed activity fallback")
+            } else {
+                IslandReplyComposer.markAborted()
+                Log.w("HyperBridge", "island reply target ambiguous; skipped unsafe cross-island injection")
+            }
+            opened
         } finally {
             handling.set(false)
         }
@@ -314,7 +321,9 @@ object IslandInlineReplyHook {
                     IslandReplyComposer.dismiss()
                     return@intercept chain.proceed()
                 }
-                if (name in stayExpandedCallbacks && IslandReplyComposer.shouldStayExpanded()) {
+                if (name in stayExpandedCallbacks &&
+                    IslandReplyComposer.ownsCallback(chain.args.getOrNull(1) as? Bundle)
+                ) {
                     Log.i("HyperBridge", "island reply holding expanded, skipped $name")
                     return@intercept null
                 }
@@ -425,13 +434,19 @@ private object IslandLifetimeHold {
 
     fun install(module: XposedModule, safeguards: Class<*>) {
         runCatching {
-            val delay = safeguards.getDeclaredMethod(
-                "delayDeleted",
-                String::class.java,
-                java.lang.Long.TYPE,
-            ).apply { isAccessible = true }
-            val cancel = safeguards.getDeclaredMethod("cancelDelayDeleted", String::class.java)
-                .apply { isAccessible = true }
+            val delay = safeguards.declaredMethods.first {
+                it.name == "delayDeleted" && it.parameterTypes.size == 2 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[1] in arrayOf(
+                        java.lang.Long.TYPE,
+                        java.lang.Long::class.java,
+                        java.lang.Integer.TYPE,
+                        java.lang.Integer::class.java,
+                    )
+            }.apply { isAccessible = true }
+            val cancel = safeguards.declaredMethods.first {
+                it.name == "cancelDelayDeleted" && it.parameterTypes.contentEquals(arrayOf(String::class.java))
+            }.apply { isAccessible = true }
             delayMethod = delay
             cancelMethod = cancel
             module.hook(delay).intercept { chain ->
@@ -463,16 +478,16 @@ private object IslandLifetimeHold {
                 chain.proceed()
             }
             safeguards.declaredMethods
-                .filter { it.name == "delayDeleted\$lambda\$1" && it.parameterCount == 2 }
+                .filter { it.name.startsWith("delayDeleted\$lambda") }
                 .forEach { method ->
                     module.hook(method).intercept { chain ->
-                        val key = chain.args.getOrNull(0) as? String
-                        val owner = chain.args.getOrNull(1)
+                        val key = chain.args.firstOrNull { it is String } as? String
+                        val owner = chain.args.firstOrNull { safeguards.isInstance(it) }
                         synchronized(this) {
                             if (key != null) scheduled.remove(key)
                             if (held && key != null && owner != null) {
-                                paused[key] = Paused(owner, 1000L)
-                                return@intercept null
+                                if (!paused.containsKey(key)) paused[key] = Paused(owner, 1000L)
+                                return@intercept heldResult(method)
                             }
                         }
                         chain.proceed()
@@ -485,7 +500,7 @@ private object IslandLifetimeHold {
     }
 
     fun pause() {
-        val cancel = cancelMethod ?: return
+        val cancel = cancelMethod
         val toCancel = synchronized(this) {
             if (held) return
             held = true
@@ -499,7 +514,9 @@ private object IslandLifetimeHold {
         }
         internalCall = true
         try {
-            toCancel.forEach { (key, owner) -> runCatching { cancel.invoke(owner, key) } }
+            if (cancel != null) {
+                toCancel.forEach { (key, owner) -> runCatching { cancel.invoke(owner, key) } }
+            }
         } finally {
             internalCall = false
         }
@@ -507,7 +524,7 @@ private object IslandLifetimeHold {
     }
 
     fun resume() {
-        val delay = delayMethod ?: return
+        val delay = delayMethod
         val toResume = synchronized(this) {
             if (!held) return
             held = false
@@ -515,11 +532,24 @@ private object IslandLifetimeHold {
             paused.clear()
             snapshot
         }
+        if (delay == null) return
         toResume.forEach { (key, timer) ->
             val seconds = ((timer.remainingMs + 999L) / 1000L).coerceAtLeast(1L)
-            runCatching { delay.invoke(timer.owner, key, seconds) }
+            val value: Any = if (delay.parameterTypes[1] == java.lang.Integer.TYPE ||
+                delay.parameterTypes[1] == java.lang.Integer::class.java
+            ) seconds.coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else seconds
+            runCatching { delay.invoke(timer.owner, key, value) }
         }
         if (toResume.isNotEmpty()) Log.i("HyperBridge", "island lifetime resumed count=${toResume.size}")
+    }
+
+    private fun heldResult(method: java.lang.reflect.Method): Any? = when (method.returnType) {
+        java.lang.Boolean.TYPE -> false
+        java.lang.Integer.TYPE -> 0
+        java.lang.Long.TYPE -> 0L
+        java.lang.Float.TYPE -> 0f
+        java.lang.Double.TYPE -> 0.0
+        else -> null
     }
 }
 
@@ -527,13 +557,21 @@ internal data class IslandReplyPayload(
     val replyAction: PendingIntent,
     val resultKey: String,
     val sourcePackage: String?,
+    val sourceKey: String?,
 )
 
 internal object IslandReplyComposer {
     private const val TAG = "hyperbridge.island_reply"
+    private const val EMBED_TIMEOUT_MS = 1_500L
     private val main = Handler(Looper.getMainLooper())
     private var overlay = WeakReference<View>(null)
-    private var imeFlags: Pair<Int, Int>? = null
+    private data class ImeWindowSession(
+        val root: WeakReference<View>,
+        val flags: Int,
+        val softInputMode: Int,
+    )
+    private var imeSession: ImeWindowSession? = null
+    private var openGeneration = 0L
     @Volatile private var intendedOpen = false
     private var lastPayload: IslandReplyPayload? = null
     private var lastModule: XposedModule? = null
@@ -553,13 +591,27 @@ internal object IslandReplyComposer {
         module: XposedModule,
         source: Any? = null,
     ): Boolean {
+        val previousSourceKey = lastPayload?.sourceKey
+        if (intendedOpen && previousSourceKey != payload.sourceKey) {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                dismiss()
+            } else {
+                val dismissed = java.util.concurrent.CountDownLatch(1)
+                main.postAtFrontOfQueue {
+                    dismiss()
+                    dismissed.countDown()
+                }
+                dismissed.await(400, java.util.concurrent.TimeUnit.MILLISECONDS)
+            }
+        }
+        val generation = ++openGeneration
         lastPayload = payload
         lastModule = module
         lastContext = WeakReference(context)
         lastSource = source
         intendedOpen = true
-        MarqueeHook.holdAutoHide()
-        SystemUiDispatcher.notifyReplyComposer(true)
+        MarqueeHook.holdAutoHide(payload.sourceKey)
+        SystemUiDispatcher.notifyReplyComposer(true, payload.sourceKey)
         IslandReplyCollapseGuard.cancelScheduledCollapse()
         pauseLifetime()
         val run = {
@@ -568,12 +620,12 @@ internal object IslandReplyComposer {
                 .getOrDefault(false)
         }
         return if (Looper.myLooper() == Looper.getMainLooper()) {
-            run() || scheduleRetry(payload, module, source)
+            run() || scheduleRetry(generation, payload, module, source)
         } else {
             var shown = false
             val posted = java.util.concurrent.CountDownLatch(1)
             main.postAtFrontOfQueue {
-                shown = run() || scheduleRetry(payload, module, source)
+                shown = run() || scheduleRetry(generation, payload, module, source)
                 posted.countDown()
             }
             posted.await(400, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -586,28 +638,60 @@ internal object IslandReplyComposer {
     }
 
     private fun scheduleRetry(
+        generation: Long,
         payload: IslandReplyPayload,
         module: XposedModule,
         source: Any?,
     ): Boolean {
+        val retryRoot = viewFrom(source)?.rootView ?: findUnambiguousExpandedView()?.rootView
+        if (retryRoot == null) return false
         main.postDelayed({
-            if (!intendedOpen) return@postDelayed
+            if (!isCurrentAttempt(generation)) return@postDelayed
             if (overlay.get()?.isAttachedToWindow == true) return@postDelayed
             runCatching { embed(payload, module, source) }
         }, 50)
         main.postDelayed({
-            if (!intendedOpen) return@postDelayed
+            if (!isCurrentAttempt(generation)) return@postDelayed
             if (overlay.get()?.isAttachedToWindow == true) return@postDelayed
             runCatching { embed(payload, module, source) }
         }, 160)
+        main.postDelayed({
+            if (!isCurrentAttempt(generation)) return@postDelayed
+            if (overlay.get()?.isAttachedToWindow == true) return@postDelayed
+            module.log("HyperBridge: island reply aborted: composer host unavailable")
+            Log.w("HyperBridge", "island reply aborted: composer host unavailable")
+            dismiss()
+        }, EMBED_TIMEOUT_MS)
         return true
     }
 
+    private fun isCurrentAttempt(generation: Long): Boolean =
+        intendedOpen && generation == openGeneration
+
     fun isOpen(): Boolean = intendedOpen
+
+    fun ownsWindow(view: View): Boolean {
+        if (!intendedOpen) return false
+        val root = view.rootView
+        return imeSession?.root?.get() === root || overlay.get()?.rootView === root
+    }
+
+    fun ownsCallback(bundle: Bundle?): Boolean {
+        if (!intendedOpen) return false
+        val expectedSourceKey = lastPayload?.sourceKey ?: return false
+        val sbn = if (Build.VERSION.SDK_INT >= 33) {
+            bundle?.getParcelable(IslandProtocol.MIUI_SBN, StatusBarNotification::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            bundle?.getParcelable(IslandProtocol.MIUI_SBN) as? StatusBarNotification
+        } ?: return false
+        val actualSourceKey = sbn.notification.extras.getString(IslandProtocol.EXTRA_SOURCE_KEY)
+            ?: sbn.key
+        return actualSourceKey == expectedSourceKey
+    }
 
     fun markOpening() {
         intendedOpen = true
-        MarqueeHook.holdAutoHide()
         IslandReplyCollapseGuard.cancelScheduledCollapse()
         pauseLifetime()
     }
@@ -615,6 +699,12 @@ internal object IslandReplyComposer {
     fun markAborted() {
         if (overlay.get()?.isAttachedToWindow == true) return
         intendedOpen = false
+        openGeneration++
+        restoreImeWindow(null)
+        val sourceKey = lastPayload?.sourceKey
+        SystemUiDispatcher.notifyReplyComposer(false, sourceKey)
+        MarqueeHook.releaseAutoHide(sourceKey)
+        lastPayload = null
         resumeTimers()
     }
 
@@ -728,29 +818,43 @@ internal object IslandReplyComposer {
             return
         }
         intendedOpen = false
+        openGeneration++
+        val sourceKey = lastPayload?.sourceKey
         clearLayoutRetry()
         restoreHiddenButtons()
         val view = overlay.get()
         overlay = WeakReference(null)
         if (view != null) {
             hideIme(view)
-            (view.parent as? ViewGroup)?.removeView(view)
-            restoreImeWindow(view)
+        }
+        restoreImeWindow(view?.rootView)
+        view?.let { attachedView ->
+            (attachedView.parent as? ViewGroup)?.removeView(attachedView)
         }
         activeRow = null
         lastSource = null
-        MarqueeHook.releaseAutoHide()
+        MarqueeHook.releaseAutoHide(sourceKey)
         resumeTimers()
-        SystemUiDispatcher.notifyReplyComposer(false)
+        SystemUiDispatcher.notifyReplyComposer(false, sourceKey)
+        lastPayload = null
     }
 
-    private fun dismissKeepingIntent() {
+    private fun dismissKeepingIntent(nextRoot: View?) {
         restoreHiddenButtons()
-        val view = overlay.get() ?: return
+        val view = overlay.get()
+        if (view == null) {
+            val oldRoot = imeSession?.root?.get()
+            if (oldRoot != null && oldRoot !== nextRoot) restoreImeWindow(oldRoot)
+            return
+        }
         overlay = WeakReference(null)
-        hideIme(view)
+        val oldRoot = imeSession?.root?.get() ?: view.rootView
+        val switchesWindow = oldRoot !== nextRoot
+        if (switchesWindow) {
+            hideIme(view)
+            restoreImeWindow(oldRoot)
+        }
         (view.parent as? ViewGroup)?.removeView(view)
-        restoreImeWindow(view)
     }
 
     private fun restoreHiddenButtons() {
@@ -777,6 +881,7 @@ internal object IslandReplyComposer {
             replyAction = replyAction,
             resultKey = resultKey,
             sourcePackage = intent.getStringExtra(InlineReplyActivity.EXTRA_PACKAGE_NAME),
+            sourceKey = intent.getStringExtra(InlineReplyActivity.EXTRA_SOURCE_KEY),
         )
     }
 
@@ -785,6 +890,9 @@ internal object IslandReplyComposer {
         module: XposedModule,
         source: Any?,
     ): Boolean {
+        val candidateRoot = viewFrom(source)?.rootView
+            ?: findUnambiguousExpandedView()?.rootView
+        captureImeWindow(candidateRoot)
         val row = findButtonRow(source)?.takeIf { host ->
             host.javaClass.simpleName.contains("Window", ignoreCase = true).not() &&
                 host.childCount <= 12
@@ -800,7 +908,8 @@ internal object IslandReplyComposer {
         dumpedMissingHost = false
         val existing = overlay.get()
         if (existing?.parent === row && existing.isAttachedToWindow) return true
-        dismissKeepingIntent()
+        val windowRoot = row.rootView
+        dismissKeepingIntent(windowRoot)
         val hostHeight = row.height - row.paddingTop - row.paddingBottom
         val composer = buildComposer(row.context, payload, module, hostHeight)
         hiddenButtons = (0 until row.childCount).map { row.getChildAt(it) }.filter { it !== composer }
@@ -825,7 +934,18 @@ internal object IslandReplyComposer {
         activeRow = row
         overlay = WeakReference(composer)
         intendedOpen = true
-        IslandWindowImeHook.sanitize(row)
+        composer.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) = Unit
+
+            override fun onViewDetachedFromWindow(view: View) {
+                if (overlay.get() !== view || !intendedOpen) return
+                main.post {
+                    if (overlay.get() !== view || view.isAttachedToWindow || !intendedOpen) return@post
+                    Log.w("HyperBridge", "island reply composer detached unexpectedly; releasing IME")
+                    dismissUnexpectedDetach(view, windowRoot)
+                }
+            }
+        })
         composer.post {
             val field = composer.findViewWithTag<EditText>("$TAG.field") ?: return@post
             showKeyboard(field)
@@ -864,6 +984,23 @@ internal object IslandReplyComposer {
         longArrayOf(120L, 300L, 600L).forEach { delay -> field.postDelayed({ show() }, delay) }
     }
 
+    private fun dismissUnexpectedDetach(view: View, windowRoot: View) {
+        intendedOpen = false
+        openGeneration++
+        val sourceKey = lastPayload?.sourceKey
+        clearLayoutRetry()
+        restoreHiddenButtons()
+        overlay = WeakReference(null)
+        hideIme(view)
+        restoreImeWindow(windowRoot)
+        activeRow = null
+        lastSource = null
+        MarqueeHook.releaseAutoHide(sourceKey)
+        resumeTimers()
+        SystemUiDispatcher.notifyReplyComposer(false, sourceKey)
+        lastPayload = null
+    }
+
     private fun installLayoutRetry(
         payload: IslandReplyPayload,
         module: XposedModule,
@@ -871,7 +1008,7 @@ internal object IslandReplyComposer {
     ) {
         if (retryListener != null) return
         val root = viewFrom(source)?.rootView
-            ?: findNamedInWindows("DynamicIslandExpandedView")?.rootView
+            ?: findUnambiguousExpandedView()?.rootView
             ?: return
         val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             if (!intendedOpen || overlay.get()?.isAttachedToWindow == true) return@OnLayoutChangeListener
@@ -912,7 +1049,7 @@ internal object IslandReplyComposer {
         viewFrom(source)?.let { view ->
             (fullWidthHost(view) ?: buttonRowAround(view))?.let { return it }
         }
-        val expanded = findNamedInWindows("DynamicIslandExpandedView") as? ViewGroup ?: return null
+        val expanded = findUnambiguousExpandedView() ?: return null
         val clickable = mutableListOf<TextView>()
         collectClickableTexts(expanded, clickable)
         val replyText = clickable.firstOrNull { text ->
@@ -1001,24 +1138,42 @@ internal object IslandReplyComposer {
             is View -> return source
             null -> return null
         }
-        val clazz = source!!.javaClass
+        val clazz = source.javaClass
         val names = arrayOf("itemView", "view", "mView", "rootView", "binding")
+        val candidates = LinkedHashSet<View>()
         for (name in names) {
             var current: Class<*>? = clazz
             while (current != null) {
-                val field = runCatching { current!!.getDeclaredField(name).apply { isAccessible = true } }.getOrNull()
+                val owner = current
+                val field = runCatching { owner.getDeclaredField(name).apply { isAccessible = true } }.getOrNull()
                 if (field != null) {
-                    when (val value = runCatching { field.get(source) }.getOrNull()) {
-                        is View -> return value
-                    }
+                    extractView(runCatching { field.get(source) }.getOrNull())?.let(candidates::add)
                 }
-                current = current.superclass
+                current = owner.superclass
             }
         }
-        return clazz.declaredFields.firstNotNullOfOrNull { field ->
-            field.isAccessible = true
-            runCatching { field.get(source) as? View }.getOrNull()
+        var current: Class<*>? = clazz
+        while (current != null) {
+            val owner = current
+            owner.declaredFields.forEach { field ->
+                field.isAccessible = true
+                extractView(runCatching { field.get(source) }.getOrNull())?.let(candidates::add)
+            }
+            current = owner.superclass
         }
+        return candidates.firstOrNull { it.isAttachedToWindow && expandedAncestor(it) != null }
+            ?: candidates.firstOrNull { it.isAttachedToWindow }
+            ?: candidates.firstOrNull()
+    }
+
+    private fun extractView(value: Any?): View? {
+        if (value is View) return value
+        value ?: return null
+        return runCatching {
+            value.javaClass.methods.firstOrNull {
+                it.name == "getRoot" && it.parameterCount == 0 && View::class.java.isAssignableFrom(it.returnType)
+            }?.invoke(value) as? View
+        }.getOrNull()
     }
 
     private fun collectClickableTexts(view: View, out: MutableList<TextView>) {
@@ -1036,6 +1191,22 @@ internal object IslandReplyComposer {
             findNamed(root, simpleName)?.let { return it }
         }
         return null
+    }
+
+    private fun findUnambiguousExpandedView(): ViewGroup? {
+        val matches = mutableListOf<ViewGroup>()
+        fun collect(view: View) {
+            if (view.javaClass.simpleName == "DynamicIslandExpandedView" &&
+                view is ViewGroup && view.isAttachedToWindow && view.isShown
+            ) {
+                matches += view
+            }
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) collect(view.getChildAt(index))
+            }
+        }
+        windowRoots().forEach(::collect)
+        return matches.distinct().singleOrNull()
     }
 
     private fun buildComposer(
@@ -1156,24 +1327,41 @@ internal object IslandReplyComposer {
     private fun prepareImeWindow(view: View) {
         val root = view.rootView
         val params = root.layoutParams as? WindowManager.LayoutParams ?: return
-        if (imeFlags == null) imeFlags = params.flags to params.softInputMode
+        captureImeWindow(root)
         params.flags = IslandWindowImePolicy.composerFlags(params.flags)
         params.softInputMode = IslandWindowImePolicy.composerSoftInputMode(params.softInputMode)
         runCatching {
-            view.context.getSystemService(WindowManager::class.java)?.updateViewLayout(root, params)
-        }
+            IslandWindowImeHook.updateViewLayout(root, params, composerOpen = true)
+        }.onFailure { Log.e("HyperBridge", "island reply IME prepare failed", it) }
     }
 
-    private fun restoreImeWindow(view: View) {
-        val state = imeFlags ?: return
-        imeFlags = null
-        val root = view.rootView
+    private fun captureImeWindow(root: View?) {
+        root ?: return
         val params = root.layoutParams as? WindowManager.LayoutParams ?: return
-        params.flags = IslandWindowImePolicy.idleFlags(state.first)
-        params.softInputMode = state.second
+        val sessionRoot = imeSession?.root?.get()
+        if (sessionRoot === root) return
+        if (sessionRoot != null) restoreImeWindow(sessionRoot)
+        imeSession = ImeWindowSession(
+            root = WeakReference(root),
+            flags = params.flags,
+            softInputMode = params.softInputMode,
+        )
+    }
+
+    private fun restoreImeWindow(fallbackRoot: View?) {
+        val session = imeSession
+        imeSession = null
+        val root = session?.root?.get() ?: fallbackRoot ?: return
+        val params = root.layoutParams as? WindowManager.LayoutParams ?: return
+        params.flags = IslandWindowImePolicy.idleFlags(session?.flags ?: params.flags)
+        params.softInputMode = IslandWindowImePolicy.idleSoftInputMode(
+            session?.softInputMode ?: params.softInputMode,
+        )
         runCatching {
-            view.context.getSystemService(WindowManager::class.java)?.updateViewLayout(root, params)
-        }
+            IslandWindowImeHook.updateViewLayout(root, params, composerOpen = false)
+        }.onSuccess {
+            Log.i("HyperBridge", "island reply IME restored")
+        }.onFailure { Log.e("HyperBridge", "island reply IME restore failed", it) }
     }
 
     private fun hideIme(view: View) {

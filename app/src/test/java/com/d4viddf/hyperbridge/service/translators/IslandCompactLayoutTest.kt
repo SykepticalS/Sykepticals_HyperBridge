@@ -65,6 +65,15 @@ class IslandCompactLayoutTest {
     }
 
     @Test
+    fun marqueeEnabledLeftTextKeepsTheFullSourceForRuntimeMeasurement() {
+        val original = "a voice caller or transfer title that is genuinely long"
+        val left = IslandCompactLayout.left("pic", original, marqueeEnabled = true)
+
+        assertEquals(original, IslandCompactLayout.compactLeftText(original, marqueeEnabled = true))
+        assertEquals(original, left.textInfo?.title)
+    }
+
+    @Test
     fun leftTextOfFifteenCharactersStillShows() {
         val value = "123456789012345"
         assertEquals(15, value.length)

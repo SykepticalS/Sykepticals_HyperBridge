@@ -40,4 +40,17 @@ class SourceHeadsUpReplacementPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `screen recorder is not suppressed when its replacement is disabled`() {
+        assertFalse(
+            SourceHeadsUpReplacementPolicy.expectsReplacement(
+                packageName = "com.miui.screenrecorder",
+                semanticType = "SCREEN_RECORDING",
+                enabledTypes = setOf("SCREEN_RECORDING"),
+                directMessagingStyle = false,
+                screenRecorderReplacementEnabled = false,
+            ),
+        )
+    }
 }

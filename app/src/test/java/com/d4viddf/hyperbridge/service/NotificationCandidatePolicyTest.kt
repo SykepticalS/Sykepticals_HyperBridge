@@ -204,6 +204,42 @@ class NotificationCandidatePolicyTest {
     }
 
     @Test
+    fun activeScreenRecordingNeverFallsBackToGenericPipeline() {
+        assertFalse(
+            ScreenRecordingNotificationRoutingPolicy.shouldUseGenericPipeline(
+                isActiveScreenRecording = true,
+                isSavedScreenRecording = false,
+            )
+        )
+    }
+
+    @Test
+    fun savedScreenRecordingNeverFallsBackToGenericPipeline() {
+        assertFalse(
+            ScreenRecordingNotificationRoutingPolicy.shouldUseGenericPipeline(
+                isActiveScreenRecording = false,
+                isSavedScreenRecording = true,
+            )
+        )
+    }
+
+    @Test
+    fun recorderHeadsUpIsOnlySuppressedWhileReplacementIsEnabled() {
+        assertTrue(
+            ScreenRecordingNotificationRoutingPolicy.shouldSuppressSourceHeadsUp(
+                isActiveScreenRecording = true,
+                replacementEnabled = true,
+            )
+        )
+        assertFalse(
+            ScreenRecordingNotificationRoutingPolicy.shouldSuppressSourceHeadsUp(
+                isActiveScreenRecording = true,
+                replacementEnabled = false,
+            )
+        )
+    }
+
+    @Test
     fun whatsappStandardAcceptanceNeedsNoAggregateCategorySetting() {
         assertFalse(
             NotificationAcceptancePolicy.isJunk(

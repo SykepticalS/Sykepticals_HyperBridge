@@ -18,6 +18,7 @@ object IslandWindowImeHook {
     private val windowLoaders = ConcurrentHashMap.newKeySet<Int>()
     @Volatile private var windowManagerHooked = false
     @Volatile private var active = false
+    private val composerOverride = ThreadLocal<Boolean?>()
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         hookWindowManager(module)
@@ -31,6 +32,23 @@ object IslandWindowImeHook {
         val root = view?.rootView ?: return
         if (!isIslandRoot(root)) return
         applyToParams(root, root.layoutParams as? WindowManager.LayoutParams ?: return, commit = true)
+    }
+
+    /**
+     * Commits an island window state without letting the global WindowManager hook
+     * reinterpret a teardown as another open-composer update.
+     */
+    internal fun updateViewLayout(
+        view: View,
+        params: WindowManager.LayoutParams,
+        composerOpen: Boolean,
+    ) {
+        composerOverride.set(composerOpen)
+        try {
+            view.context.getSystemService(WindowManager::class.java)?.updateViewLayout(view, params)
+        } finally {
+            composerOverride.remove()
+        }
     }
 
     private fun hookWindowManager(module: XposedModule) {
@@ -84,13 +102,11 @@ object IslandWindowImeHook {
     }
 
     private fun applyToParams(view: View, params: WindowManager.LayoutParams, commit: Boolean) {
-        val composerOpen = IslandReplyComposer.isOpen()
+        val composerOpen = composerOverride.get() ?: IslandReplyComposer.ownsWindow(view)
         val nextFlags = IslandWindowImePolicy.apply(params.flags, composerOpen)
         val nextSoftInput = if (composerOpen) {
             IslandWindowImePolicy.composerSoftInputMode(params.softInputMode)
-        } else {
-            params.softInputMode
-        }
+        } else IslandWindowImePolicy.idleSoftInputMode(params.softInputMode)
         val changed = nextFlags != params.flags || nextSoftInput != params.softInputMode
         if (!changed) return
         params.flags = nextFlags

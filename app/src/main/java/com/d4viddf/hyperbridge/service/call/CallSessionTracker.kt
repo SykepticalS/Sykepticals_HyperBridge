@@ -27,7 +27,8 @@ data class CallSessionInput(
     val showsChronometer: Boolean,
     val chronometerBase: Long,
     val observedAt: Long,
-    val isVideoCall: Boolean = false
+    val isVideoCall: Boolean = false,
+    val isRecovery: Boolean = false
 )
 
 data class CallSession(
@@ -296,6 +297,25 @@ class CallSessionTracker(
         }
 
         val elapsed = plausibleBase?.let { input.observedAt - it }
+        if (previous == null &&
+            input.isRecovery &&
+            classification.activeEvidence == CallActiveEvidence.CHRONOMETER_PRESENT &&
+            classification.state != CallState.INCOMING_RINGING &&
+            !classification.hasAnswer &&
+            plausibleBase != null
+        ) {
+            // During ingress bootstrap the answer transition happened before HyperBridge was
+            // listening. The resident CallStyle chronometer is therefore the authoritative
+            // connected-at time, even when the call has been active for only a few seconds or
+            // the source app exposes no mute/speaker action.
+            return ResolvedState(
+                CallState.ACTIVE,
+                plausibleBase,
+                ConnectedAtSource.SOURCE_CHRONOMETER,
+                CallActiveEvidence.CHRONOMETER_PRESENT,
+                "recovered-resident-chronometer"
+            )
+        }
         val recoveredByControls = classification.hasConnectedControl &&
             elapsed != null &&
             elapsed >= RECOVERED_ACTIVE_ELAPSED_MS

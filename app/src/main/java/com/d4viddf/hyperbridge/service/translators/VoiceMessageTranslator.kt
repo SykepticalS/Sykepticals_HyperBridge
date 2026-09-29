@@ -110,12 +110,12 @@ class VoiceMessageTranslator(
         }
         if (compactDuration) {
             builder.setBigIslandInfo(
-                left = IslandCompactLayout.left(picKey, plan.compactLeft),
+                left = IslandCompactLayout.left(picKey, plan.compactLeft, config.marqueeEnabled == true),
                 right = IslandCompactLayout.right(clock),
             )
         } else {
             builder.setBigIslandInfo(
-                left = IslandCompactLayout.left(picKey, plan.compactLeft),
+                left = IslandCompactLayout.left(picKey, plan.compactLeft, config.marqueeEnabled == true),
                 progressText = ProgressTextInfo(
                     progressInfo = CircularProgressInfo(progress = plan.percent),
                     textInfo = IslandCompactLayout.text(""),

@@ -22,7 +22,8 @@ internal object IslandCompactLayout {
 
     fun text(value: String): TextInfo = TextInfo(title = value, content = null)
 
-    fun compactLeftText(value: String): String {
+    fun compactLeftText(value: String, marqueeEnabled: Boolean = false): String {
+        if (marqueeEnabled) return value
         if (value.length <= LEFT_MAX_CHARACTERS) return value
         return value.take(LEFT_MAX_CHARACTERS) + ELLIPSIS
     }
@@ -37,8 +38,8 @@ internal object IslandCompactLayout {
     fun hasOverflow(presentation: IslandTextPresentation): Boolean =
         leftShouldMarquee(presentation.left) || rightShouldMarquee(presentation.right)
 
-    fun left(picKey: String, value: String): ImageTextInfoLeft {
-        val compact = compactLeftText(value)
+    fun left(picKey: String, value: String, marqueeEnabled: Boolean = false): ImageTextInfoLeft {
+        val compact = compactLeftText(value, marqueeEnabled)
         return ImageTextInfoLeft(
             type = 1,
             picInfo = PicInfo(type = 1, pic = picKey),

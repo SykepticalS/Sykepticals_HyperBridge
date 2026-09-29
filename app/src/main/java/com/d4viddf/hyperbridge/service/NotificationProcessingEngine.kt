@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Parcel
 import android.service.notification.StatusBarNotification
@@ -63,6 +64,8 @@ import com.d4viddf.hyperbridge.island.backend.IslandBackend
 import com.d4viddf.hyperbridge.island.backend.IslandMetadata
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.island.backend.IslandVisualExtras
+import com.d4viddf.hyperbridge.integration.xiaomi.HyperIslandProtocolOptions
+import com.d4viddf.hyperbridge.integration.xiaomi.buildJsonParam
 import com.d4viddf.hyperbridge.service.visual.AppIconPalette
 import com.d4viddf.hyperbridge.models.IslandGlowResolver
 import com.d4viddf.hyperbridge.models.IslandVisualMetadata
@@ -99,6 +102,10 @@ import com.d4viddf.hyperbridge.receiver.LoginCodeCopyReceiver
 import com.d4viddf.hyperbridge.service.logincode.LoginCodeExtractor
 import com.d4viddf.hyperbridge.service.logincode.LoginCodePresentation
 import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
+import io.github.d4viddf.hyperisland_kit.HyperPicture
+import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft
+import io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight
+import io.github.d4viddf.hyperisland_kit.models.TextInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -236,8 +243,7 @@ class NotificationProcessingEngine private constructor(
 
     @Volatile
     private var isScreenOn = true
-    @Volatile
-    private var replyComposerHold = false
+    private val replyComposerHolds = ReplyComposerHoldRegistry()
 
     private val systemReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -256,7 +262,10 @@ class NotificationProcessingEngine private constructor(
     private val replyComposerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != IslandProtocol.ACTION_REPLY_COMPOSER) return
-            replyComposerHold = intent.getBooleanExtra(IslandProtocol.EXTRA_REPLY_COMPOSER_OPEN, false)
+            replyComposerHolds.update(
+                open = intent.getBooleanExtra(IslandProtocol.EXTRA_REPLY_COMPOSER_OPEN, false),
+                sourceKey = intent.getStringExtra(IslandProtocol.EXTRA_SOURCE_KEY),
+            )
         }
     }
 
@@ -415,6 +424,7 @@ class NotificationProcessingEngine private constructor(
             }
         } else if (intent?.action == ACTION_RELOAD_THEME) {
             serviceScope.launch {
+                syncPermanentAnchor()
                 val themeId = preferences.activeThemeIdFlow.first()
                 if (themeId != null) {
                     Log.d(TAG, "Hot-reloading theme: $themeId")
@@ -431,6 +441,63 @@ class NotificationProcessingEngine private constructor(
                 }
             }
         }
+    }
+
+    /** Posts the persistent blank center-slot anchor, or removes it when the feature is off. */
+    private fun syncPermanentAnchor(): Boolean {
+        if (!HookConfigSync.permanentIslandEnabled(this)) {
+            islandBackend.cancel(
+                IslandProtocol.PERMANENT_ANCHOR_ID,
+                IslandProtocol.PERMANENT_ANCHOR_TOKEN,
+            )
+            return true
+        }
+
+        val transparent = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        val island = HyperIslandNotification.Builder(
+            this,
+            IslandProtocol.PERMANENT_ANCHOR_TOKEN,
+            " ",
+        ).apply {
+            addPicture(HyperPicture("permanent_anchor_pixel", transparent))
+            setSmallIsland("permanent_anchor_pixel")
+            setBigIslandInfo(
+                left = ImageTextInfoLeft(type = 1, textInfo = TextInfo(title = " ")),
+                right = ImageTextInfoRight(type = 2, textInfo = TextInfo(title = "")),
+            )
+            setEnableFloat(false)
+            setIslandFirstFloat(false)
+            setShowNotification(false)
+            setIslandConfig(timeout = Int.MAX_VALUE, dismissible = false)
+        }
+        // Property 0 is Xiaomi's ShowOnce/system-island lane. Keeping the permanent anchor in
+        // that lane pins it over the cutout while app islands collapse behind it.
+        val data = HyperIslandData(
+            island.buildResourceBundle(),
+            island.buildJsonParam(HyperIslandProtocolOptions(islandProperty = 0)),
+        )
+        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(" ")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addExtras(data.resources)
+            .build()
+        notification.extras.putString("miui.focus.param", data.jsonParam)
+        notification.extras.putBoolean("miui.enableFloat", false)
+        notification.extras.putBoolean("miui.island.updateNoFloat", true)
+        notification.extras.putBoolean(IslandProtocol.EXTRA_PERMANENT_ANCHOR, true)
+        notification.extras.putString(IslandProtocol.EXTRA_SOURCE_KEY, IslandProtocol.PERMANENT_ANCHOR_TOKEN)
+        notification.extras.putString(IslandProtocol.EXTRA_SOURCE_PACKAGE, IslandProtocol.APP_PACKAGE)
+
+        return postIsland(
+            id = IslandProtocol.PERMANENT_ANCHOR_ID,
+            notification = notification,
+            logicalToken = IslandProtocol.PERMANENT_ANCHOR_TOKEN,
+            generation = System.currentTimeMillis(),
+            inPlaceUpdate = true,
+        )
     }
 
     private fun showMigrationProgress(progress: Int) {
@@ -900,7 +967,10 @@ class NotificationProcessingEngine private constructor(
             job = serviceScope.launch {
                 var remaining = timeoutMs
                 while (remaining > 0) {
-                    if (replyComposerHold) {
+                    val sourceKey = activeIslands[originalKey]?.sourceKey
+                    if (replyComposerHolds.holds(originalKey) ||
+                        (!sourceKey.isNullOrBlank() && replyComposerHolds.holds(sourceKey))
+                    ) {
                         delay(150.milliseconds)
                         continue
                     }
@@ -1612,11 +1682,22 @@ class NotificationProcessingEngine private constructor(
                 )
                 // #endregion
             }
-            if (
-                typeBeforeRules == NotificationType.SCREEN_RECORDING &&
-                HookConfigSync.replaceScreenRecorder(this)
-            ) {
-                markSourceHeadsUpSuppressed(sbn)
+            val isActiveScreenRecording = typeBeforeRules == NotificationType.SCREEN_RECORDING
+            val replaceScreenRecorder = HookConfigSync.replaceScreenRecorder(this)
+            if (isActiveScreenRecording) {
+                if (ScreenRecordingNotificationRoutingPolicy.shouldSuppressSourceHeadsUp(
+                        isActiveScreenRecording = true,
+                        replacementEnabled = replaceScreenRecorder,
+                    )
+                ) {
+                    markSourceHeadsUpSuppressed(sbn)
+                }
+                DiagnosticsStore.record(
+                    typeBeforeRules.name,
+                    "ignored",
+                    sbn.packageName,
+                    if (replaceScreenRecorder) "dedicated-recorder-controller" else "recorder-replacement-disabled",
+                )
                 return
             }
 
@@ -1632,7 +1713,11 @@ class NotificationProcessingEngine private constructor(
                 )
                 // #endregion
             }
-            if (isSavedScreenRecording && HookConfigSync.replaceScreenRecorder(this)) {
+            if (!ScreenRecordingNotificationRoutingPolicy.shouldUseGenericPipeline(
+                    isActiveScreenRecording = false,
+                    isSavedScreenRecording = isSavedScreenRecording,
+                )
+            ) {
                 return
             }
             if (
@@ -1710,7 +1795,8 @@ class NotificationProcessingEngine private constructor(
                         showsChronometer = signals.showsChronometer,
                         chronometerBase = signals.whenTime,
                         observedAt = now,
-                        isVideoCall = signals.isVideoCall
+                        isVideoCall = signals.isVideoCall,
+                        isRecovery = recovery
                     )
                 )
                 val participantPresent = !resolveCallParticipantId(sbn).isNullOrBlank()
@@ -3131,6 +3217,20 @@ class NotificationProcessingEngine private constructor(
         // The first connection still clears leftovers and restores live sessions.
         if (!preserveVisibleIslands) {
             islandBackend.cancelAllOwned()
+            serviceScope.launch {
+                // cancelAllOwned is a protected broadcast, while posts use the attached Binder.
+                // Let the queued cleanup complete before posting the anchor or it can cancel the
+                // newer notification. This is a one-shot startup ordering barrier, not polling.
+                delay(1_000)
+                if (!syncPermanentAnchor()) {
+                    delay(500)
+                    syncPermanentAnchor()
+                }
+            }
+        } else if (!syncPermanentAnchor()) {
+            // SystemUI can reconnect while replacing its dispatcher Binder. One bounded retry is
+            // enough to cover that handoff without introducing a resident poller.
+            serviceScope.launch { delay(500); syncPermanentAnchor() }
         }
         syncNotifications(refresh = true, restoreLiveSources = !preserveVisibleIslands)
         syncJob?.cancel()
@@ -3191,6 +3291,14 @@ class NotificationProcessingEngine private constructor(
                         if (!shouldRestoreLiveSource(sbn)) continue
                         enqueueSourceNotification(sbn, recovery = true)
                     }
+                } else if (refresh) {
+                    // SCREEN_ON already performs this reconciliation. Re-evaluate only CallStyle
+                    // sources so an answer/connect transition withheld by the vendor while the
+                    // display was off is recovered without polling, alarms, or wake locks.
+                    for (sbn in currentNotifications) {
+                        if (!isCallSource(sbn)) continue
+                        enqueueSourceNotification(sbn, recovery = true)
+                    }
                 }
 
                 val currentKeys = currentNotifications.map { it.key }.toSet()
@@ -3249,6 +3357,7 @@ class NotificationProcessingEngine private constructor(
                     // source-to-translation maps. Do not mistake it for an orphan during the
                     // reconciliation pass and cancel its backing island.
                     if (id == VpnIslandController.NOTIFICATION_ID) continue
+                    if (id == IslandProtocol.PERMANENT_ANCHOR_ID) continue
                     if (id >= WIDGET_ID_BASE) continue
                     if (id in (WATCH_RELAY_ID_BASE - 0x0F)..WATCH_RELAY_ID_BASE) continue
                     if ((sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) continue
@@ -3295,6 +3404,16 @@ class NotificationProcessingEngine private constructor(
         val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
         return template.contains("MediaStyle") || template.contains("CallStyle") ||
             extras.containsKey(Notification.EXTRA_PROGRESS)
+    }
+
+    private fun isCallSource(sbn: StatusBarNotification): Boolean {
+        if (sbn.packageName == packageName || isOwnedBridgeNotification(sbn)) return false
+        val notification = sbn.notification
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return false
+        if (notification.category == Notification.CATEGORY_CALL) return true
+        val extras = notification.extras ?: return false
+        return extras.containsKey(Notification.EXTRA_CALL_TYPE) ||
+            extras.getString(Notification.EXTRA_TEMPLATE).orEmpty().contains("CallStyle")
     }
 
     private fun progressIslandStillLive(logicalKey: String, removedSourceKey: String): Boolean {
@@ -3420,6 +3539,7 @@ class NotificationProcessingEngine private constructor(
         if (::vpnIslandController.isInitialized) vpnIslandController.stop()
         unregisterReceiver(systemReceiver)
         unregisterReceiver(replyComposerReceiver)
+        replyComposerHolds.clear()
         unregisterReceiver(loginCodeCopiedReceiver)
         unregisterReceiver(packageLifecycleReceiver)
         syncJob?.cancel()

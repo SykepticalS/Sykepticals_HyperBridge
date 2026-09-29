@@ -16,7 +16,9 @@ internal object SourceHeadsUpReplacementPolicy {
         semanticType: String,
         enabledTypes: Set<String>,
         directMessagingStyle: Boolean,
+        screenRecorderReplacementEnabled: Boolean = true,
     ): Boolean {
+        if (semanticType == "SCREEN_RECORDING" && !screenRecorderReplacementEnabled) return false
         if (semanticType in enabledTypes) return true
         if (semanticType != "MESSAGE" || "STANDARD" !in enabledTypes) return false
         return directMessagingStyle || packageName in whatsappPackages

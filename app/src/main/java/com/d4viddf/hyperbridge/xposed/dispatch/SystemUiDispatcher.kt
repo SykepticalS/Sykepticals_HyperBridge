@@ -260,12 +260,13 @@ object SystemUiDispatcher {
         context.sendBroadcast(reply, null, options)
     }
 
-    fun notifyReplyComposer(open: Boolean) {
+    fun notifyReplyComposer(open: Boolean, sourceKey: String? = null) {
         val context = systemUiContext.get() ?: return
         val intent = Intent(IslandProtocol.ACTION_REPLY_COMPOSER).apply {
             setPackage(IslandProtocol.APP_PACKAGE)
             putExtra(IslandProtocol.EXTRA_PROTOCOL, IslandProtocol.VERSION)
             putExtra(IslandProtocol.EXTRA_REPLY_COMPOSER_OPEN, open)
+            sourceKey?.let { putExtra(IslandProtocol.EXTRA_SOURCE_KEY, it) }
         }
         val options = BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle()
         context.sendBroadcast(intent, null, options)

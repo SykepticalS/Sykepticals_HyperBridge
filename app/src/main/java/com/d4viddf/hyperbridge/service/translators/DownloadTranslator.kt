@@ -139,7 +139,7 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
         } else {
             if (paused && !showMeter) {
                 builder.setBigIslandInfo(
-                    left = IslandCompactLayout.left(picKey, title),
+                    left = IslandCompactLayout.left(picKey, title, config.marqueeEnabled == true),
                     right = IslandCompactLayout.right(pausedDetail),
                 )
                 builder.setSmallIsland(picKey)
@@ -155,7 +155,11 @@ class DownloadTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
                 // The small island's right slot is the progress indicator only. Status text
                 // stays on the expanded island via chat info.
                 builder.setBigIslandInfo(
-                    left = IslandCompactLayout.left(picKey, presentation.left.ifBlank { title }),
+                    left = IslandCompactLayout.left(
+                        picKey,
+                        presentation.left.ifBlank { title },
+                        config.marqueeEnabled == true,
+                    ),
                 )
                 builder.setSmallIsland(picKey)
             } else {

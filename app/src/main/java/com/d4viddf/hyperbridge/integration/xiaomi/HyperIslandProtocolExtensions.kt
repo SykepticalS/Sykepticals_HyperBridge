@@ -10,7 +10,7 @@ data class HyperIslandProtocolOptions(
     val timerSystemCurrentMillis: Long? = null
 ) {
     init {
-        require(islandProperty > 0)
+        require(islandProperty >= 0)
         require(timerSystemCurrentMillis == null || timerSystemCurrentMillis >= 0)
     }
 }

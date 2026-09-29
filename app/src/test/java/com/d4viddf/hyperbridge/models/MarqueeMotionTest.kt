@@ -5,6 +5,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MarqueeMotionTest {
+    @Test fun continuouslyUpdatingIslandTypesPreserveActiveMotion() {
+        listOf("CALL", "VOICE_MESSAGE", "DOWNLOAD", "PROGRESS").forEach {
+            assertTrue(MarqueeMotion.preservesMotionAcrossUpdates(it))
+        }
+        assertTrue(!MarqueeMotion.preservesMotionAcrossUpdates("MESSAGE"))
+        assertTrue(!MarqueeMotion.preservesMotionAcrossUpdates(null))
+    }
+
     @Test fun overflowDistanceStopsAtTheLastGlyphWithoutBlankSpace() {
         assertEquals(60f, MarqueeMotion.overflowDistance(260f, 200), 0.001f)
         assertEquals(0f, MarqueeMotion.overflowDistance(200f, 200), 0.001f)
@@ -36,24 +44,6 @@ class MarqueeMotionTest {
         )
     }
 
-    @Test fun renderedRightEdgeControlsWhetherAndHowFarTextScrolls() {
-        assertEquals(
-            0f,
-            MarqueeMotion.clippedRightOverflow(248f, 250f, tolerancePx = 1f),
-            0.001f,
-        )
-        assertEquals(
-            0f,
-            MarqueeMotion.clippedRightOverflow(250.8f, 250f, tolerancePx = 1f),
-            0.001f,
-        )
-        assertEquals(
-            18f,
-            MarqueeMotion.clippedRightOverflow(268f, 250f, tolerancePx = 1f),
-            0.001f,
-        )
-    }
-
     @Test fun endPaddingIsVisibleRoomNotABlankStop() {
         assertEquals(
             200,
@@ -75,6 +65,19 @@ class MarqueeMotionTest {
                 clipRight = 212,
             ),
         )
+    }
+
+    @Test fun alreadyClippedStartInsetIsNotAddedToScrollDistance() {
+        val available = MarqueeMotion.visibleSlotWidth(
+            textOrigin = 8,
+            viewRight = 220,
+            rightDrawableInset = 0,
+            clipLeft = 20,
+            clipRight = 208,
+        )
+
+        assertEquals(200, available)
+        assertEquals(40f, MarqueeMotion.overflowDistance(240f, available), 0.001f)
     }
 
     @Test fun carouselGeometryMustRemainStableBeforeMarqueeStarts() {

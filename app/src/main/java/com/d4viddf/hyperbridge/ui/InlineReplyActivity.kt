@@ -179,6 +179,7 @@ class InlineReplyActivity : ComponentActivity() {
         const val EXTRA_PENDING_INTENT = "pending_intent"
         const val EXTRA_RESULT_KEY = "result_key"
         const val EXTRA_PACKAGE_NAME = "package_name"
+        const val EXTRA_SOURCE_KEY = "source_key"
         private const val TAG = "InlineReplyActivity"
     }
 }

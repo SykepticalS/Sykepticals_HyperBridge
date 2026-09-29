@@ -8,6 +8,12 @@ object MarqueeMotion {
     private const val MIN_RETURN_MS = 180L
     private const val MAX_RETURN_MS = 520L
 
+    /** Islands whose compact text can be rebound several times while it is still displayed. */
+    fun preservesMotionAcrossUpdates(semanticType: String?): Boolean = when (semanticType) {
+        "CALL", "VOICE_MESSAGE", "DOWNLOAD", "PROGRESS" -> true
+        else -> false
+    }
+
     fun overflowDistance(
         textWidthPx: Float,
         availableWidthPx: Int,
@@ -15,21 +21,6 @@ object MarqueeMotion {
     ): Float {
         if (textWidthPx <= 0f || availableWidthPx <= 0) return 0f
         val overflow = (textWidthPx - availableWidthPx.toFloat()).coerceAtLeast(0f)
-        return overflow.takeIf { it > tolerancePx.coerceAtLeast(0f) } ?: 0f
-    }
-
-    /**
-     * Returns only the part of the rendered text that is actually beyond the clip edge.
-     * Keeping both values in the same coordinate space accounts for TextView gravity,
-     * asymmetric island slots, and parent clipping without estimating a viewport width.
-     */
-    fun clippedRightOverflow(
-        renderedTextRightPx: Float,
-        clipRightPx: Float,
-        tolerancePx: Float = 0f,
-    ): Float {
-        if (!renderedTextRightPx.isFinite() || !clipRightPx.isFinite()) return 0f
-        val overflow = (renderedTextRightPx - clipRightPx).coerceAtLeast(0f)
         return overflow.takeIf { it > tolerancePx.coerceAtLeast(0f) } ?: 0f
     }
 
@@ -58,9 +49,11 @@ object MarqueeMotion {
         clipRight: Int,
     ): Int {
         if (viewRight <= textOrigin || clipRight <= clipLeft) return 0
-        val start = maxOf(textOrigin, clipLeft)
         val end = minOf(viewRight - rightDrawableInset.coerceAtLeast(0), clipRight)
-        return (end - start).coerceAtLeast(0)
+        // If the TextView starts before its parent's clip, that inset is already hidden.
+        // Starting at clipLeft would count it again in overflowDistance and scroll the
+        // final glyph the same number of pixels past the right edge, exposing a blank gap.
+        return (end - textOrigin).coerceAtLeast(0)
     }
 
     /** Tracks consecutive identical viewport samples while Xiaomi's carousel spring settles. */

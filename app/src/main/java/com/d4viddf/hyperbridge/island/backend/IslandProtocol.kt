@@ -73,6 +73,8 @@ object IslandProtocol {
     const val EXTRA_UPDATABLE = "hyperbridge.updatable"
     const val EXTRA_TEXT_UPDATE_ANIMATION = "hyperbridge.text_update_animation"
     const val EXTRA_REPLY_COMPOSER_OPEN = "hyperbridge.reply_composer_open"
+    /** Marks the blank transport notification that reserves the permanent center slot. */
+    const val EXTRA_PERMANENT_ANCHOR = "hyperbridge.permanent_anchor"
     const val MIUI_SBN = "miui.sbn"
     const val MIUI_BIG_ISLAND_EFFECT = "miui.bigIsland.effect.src"
     const val MIUI_EFFECT = "miui.effect.src"
@@ -96,6 +98,9 @@ object IslandProtocol {
     const val MAX_PARCEL_BYTES = 700 * 1024
     const val HEARTBEAT_LEASE_MS = 45_000L
     const val REMOTE_PREFS = "HyperBridgeHookConfig"
+
+    const val PERMANENT_ANCHOR_TOKEN = "permanent-anchor"
+    const val PERMANENT_ANCHOR_ID = 0x48425049
 
     fun compatible(version: Int): Boolean = version == VERSION
 }

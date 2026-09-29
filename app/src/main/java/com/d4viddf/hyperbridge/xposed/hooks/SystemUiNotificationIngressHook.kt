@@ -103,6 +103,21 @@ object SystemUiNotificationIngressHook {
 
     fun isActive(): Boolean = active
 
+    fun findFocusSource(packageName: String): StatusBarNotification? = activeSources.values
+        .asSequence()
+        .filter { sbn ->
+            val extras = sbn.notification.extras
+            extras.containsKey("miui.focus.param") || extras.containsKey("miui.system.focus.param")
+        }
+        .filterNot { it.notification.extras.getBoolean(IslandProtocol.EXTRA_PERMANENT_ANCHOR, false) }
+        .filter { sbn ->
+            val extras = sbn.notification.extras
+            extras.getString(IslandProtocol.EXTRA_SOURCE_PACKAGE) == packageName ||
+                extras.getString("miui.pkg.name") == packageName ||
+                sbn.packageName == packageName
+        }
+        .maxByOrNull(StatusBarNotification::getPostTime)
+
     /** WhatsApp can float its separate group summary after its child was replaced. */
     fun hasReplacedGroupChild(summary: StatusBarNotification): Boolean {
         if (summary.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0) return false
@@ -208,6 +223,7 @@ object SystemUiNotificationIngressHook {
                 }
                 val result = chain.proceed()
                 if (sbn != null) {
+                    PermanentIslandHook.onNotificationRemoved(module, sbn)
                     pendingPosts.remove(sbn.key)
                     activeSources.computeIfPresent(sbn.key) { _, current ->
                         current.takeUnless { sameGeneration(it, sbn) }
@@ -282,9 +298,11 @@ object SystemUiNotificationIngressHook {
                 putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
             }
             val replaced = remote.processPosted(request)
-            resident[sbn.key] = incoming
             applySourceFocusDecoration(sbn, request)
             allowCallShadeDismissal(sbn, request)
+            // Decoration can intentionally disable a pre-connected CallStyle chronometer.
+            // Record the final source identity so the listener's second callback is deduplicated.
+            resident[sbn.key] = identityOf(sbn)
             if (replaced) markSourceHeadsUpSuppressed(sbn)
             if (replaced) module.log(
                 "HyperBridge: pre-snapshot replacement package=${sbn.packageName} " +
@@ -312,9 +330,9 @@ object SystemUiNotificationIngressHook {
                     putParcelable(NotificationProcessingService.KEY_NOTIFICATION, sbn)
                 }
                 val replaced = remote.processPosted(request)
-                resident[key] = incoming
                 applySourceFocusDecoration(sbn, request)
                 allowCallShadeDismissal(sbn, request)
+                resident[key] = identityOf(sbn)
                 if (replaced) markSourceHeadsUpSuppressed(sbn)
             }.onSuccess {
                 pendingPosts.remove(key, sbn)
@@ -424,7 +442,42 @@ object SystemUiNotificationIngressHook {
         android.os.SystemClock.elapsedRealtime() < replayFreezeUntil
 
     private fun identityOf(sbn: StatusBarNotification): ShadeEntryIdentity =
-        ShadeEntryIdentity(visibleHash(sbn), sbn.postTime)
+        ShadeEntryIdentity(
+            visibleHash = visibleHash(sbn),
+            postTime = sbn.postTime,
+            callLifecycleHash = callLifecycleHash(sbn),
+        )
+
+    private fun callLifecycleHash(sbn: StatusBarNotification): Int? {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val template = extras?.getString(Notification.EXTRA_TEMPLATE)
+        val isCall = notification.category == Notification.CATEGORY_CALL ||
+            template == "android.app.Notification\$CallStyle" ||
+            extras?.containsKey(Notification.EXTRA_CALL_TYPE) == true
+        if (!isCall) return null
+
+        val showsChronometer = extras?.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false) == true
+        val actions = notification.actions.orEmpty().map { action ->
+            listOf(
+                action.title?.toString(),
+                action.semanticAction,
+                action.actionIntent != null,
+                !action.remoteInputs.isNullOrEmpty(),
+            )
+        }
+        return listOf(
+            template,
+            extras?.containsKey(Notification.EXTRA_CALL_TYPE) == true,
+            extras?.getInt(Notification.EXTRA_CALL_TYPE, 0),
+            showsChronometer,
+            notification.`when`.takeIf { showsChronometer },
+            notification.flags and (
+                Notification.FLAG_ONGOING_EVENT or Notification.FLAG_FOREGROUND_SERVICE
+            ),
+            actions,
+        ).hashCode()
+    }
 
     private fun visibleHash(sbn: StatusBarNotification): Int {
         val extras = sbn.notification.extras

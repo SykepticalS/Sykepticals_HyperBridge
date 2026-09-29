@@ -532,6 +532,7 @@ abstract class BaseTranslator(
                     androidAction.actionIntent,
                     androidAction.remoteInputs!![0].resultKey,
                     sbn.packageName,
+                    sbn.key,
                 )
             } else {
                 androidAction.actionIntent

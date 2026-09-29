@@ -54,4 +54,13 @@ class IslandWindowImePolicyTest {
             mode and IslandWindowImePolicy.SOFT_INPUT_MASK_STATE,
         )
     }
+
+    @Test
+    fun idleImeClearsStaleVisibleAndAdjustmentState() {
+        val stale = IslandWindowImePolicy.SOFT_INPUT_STATE_VISIBLE or
+            IslandWindowImePolicy.SOFT_INPUT_ADJUST_NOTHING
+        val idle = IslandWindowImePolicy.idleSoftInputMode(stale)
+        assertEquals(0, idle and IslandWindowImePolicy.SOFT_INPUT_MASK_STATE)
+        assertEquals(0, idle and IslandWindowImePolicy.SOFT_INPUT_MASK_ADJUST)
+    }
 }

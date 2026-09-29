@@ -10,6 +10,8 @@ package com.d4viddf.hyperbridge.service
 data class ShadeEntryIdentity(
     val visibleHash: Int,
     val postTime: Long,
+    /** CallStyle state that can change while all rendered notification text stays identical. */
+    val callLifecycleHash: Int? = null,
 )
 
 /**
@@ -24,6 +26,13 @@ object ShadeReplayPolicy {
         bulkReplayActive: Boolean,
     ): Boolean {
         if (previous == null) return false
+        if (previous.callLifecycleHash != incoming.callLifecycleHash) {
+            // Answer/connect updates are frequently delivered while the screen is off without a
+            // visible text change. They must reach the call tracker. During a bulk shade rebuild,
+            // retain the existing post-time guard so a lock-screen privacy rewrite is not treated
+            // as a fresh lifecycle event.
+            return bulkReplayActive && incoming.postTime <= previous.postTime
+        }
         if (previous.visibleHash == incoming.visibleHash) return true
         if (!bulkReplayActive) return false
         // A shade rebuild can rewrite extras while keeping the original post time.

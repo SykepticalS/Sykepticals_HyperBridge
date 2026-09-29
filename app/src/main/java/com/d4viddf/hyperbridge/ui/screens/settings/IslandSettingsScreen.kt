@@ -41,6 +41,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.island.backend.HookConfigSync
+import com.d4viddf.hyperbridge.island.backend.SystemUiEngineCommands
 import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.ui.components.IslandSettingsControl
 import com.d4viddf.hyperbridge.ui.components.SectionLabel
@@ -73,6 +74,7 @@ fun IslandSettingsScreen(
         onUpdateConfig = { newConfig ->
             scope.launch { preferences.updateGlobalConfig(newConfig) }
         },
+        permanentIsland = { PermanentIslandSection() },
         visualTuning = { VisualTuningSection() },
     )
 }
@@ -83,6 +85,7 @@ fun IslandSettingsContent(
     globalConfig: IslandConfig,
     onBack: () -> Unit,
     onUpdateConfig: (IslandConfig) -> Unit,
+    permanentIsland: @Composable () -> Unit = {},
     visualTuning: @Composable () -> Unit = {},
 ) {
     Scaffold(
@@ -107,8 +110,36 @@ fun IslandSettingsContent(
                 config = globalConfig,
                 onUpdate = onUpdateConfig
             )
+            permanentIsland()
             visualTuning()
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun PermanentIslandSection() {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(HookConfigSync.permanentIslandEnabled(context)) }
+
+    SectionLabel("Permanent Island")
+    SettingsStack {
+        SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
+            SettingsRow(
+                icon = Icons.Default.Tune,
+                title = "Keep a blank island",
+                subtitle = "Reserve the camera slot and absorb active app-exit islands.",
+                trailing = {
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { next ->
+                            enabled = next
+                            HookConfigSync.setPermanentIslandEnabled(context, next)
+                            SystemUiEngineCommands.reload(context)
+                        },
+                    )
+                },
+            )
         }
     }
 }

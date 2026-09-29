@@ -137,14 +137,14 @@ class CallTranslator(
 
         if (isIncoming) {
             builder.setBigIslandInfo(
-                left = IslandCompactLayout.left(picKey, title),
+                left = IslandCompactLayout.left(picKey, title, config.marqueeEnabled == true),
                 right = IslandCompactLayout.right(context.getString(R.string.call_incoming)),
             )
         } else if (connectedAtForTimer != null) {
             builder.setBigIslandCountUp(connectedAtForTimer, picKey)
         } else {
             builder.setBigIslandInfo(
-                left = IslandCompactLayout.left(picKey, leftText),
+                left = IslandCompactLayout.left(picKey, leftText, config.marqueeEnabled == true),
                 right = IslandCompactLayout.right(rightText),
             )
         }
@@ -154,7 +154,7 @@ class CallTranslator(
                 if (!isIncoming && connectedAtForTimer != null) {
                     IslandVisualMetadata.injectCompactLeftTitle(
                         raw,
-                        IslandCompactLayout.compactLeftText(title),
+                        IslandCompactLayout.compactLeftText(title, config.marqueeEnabled == true),
                     )
                 } else {
                     raw

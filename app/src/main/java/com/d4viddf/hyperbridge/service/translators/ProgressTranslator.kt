@@ -128,7 +128,11 @@ class ProgressTranslator(context: Context, repo: ThemeRepository) : BaseTranslat
                     progress = "",
                 )
                 builder.setBigIslandInfo(
-                    left = IslandCompactLayout.left(picKey, presentation.left.ifBlank { title }),
+                    left = IslandCompactLayout.left(
+                        picKey,
+                        presentation.left.ifBlank { title },
+                        config.marqueeEnabled == true,
+                    ),
                     right = IslandCompactLayout.right(presentation.right.ifBlank { "Processing..." }),
                 )
                 builder.setSmallIsland(picKey)

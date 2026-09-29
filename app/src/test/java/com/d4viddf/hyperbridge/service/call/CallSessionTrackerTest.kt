@@ -48,6 +48,50 @@ class CallSessionTrackerTest {
     }
 
     @Test
+    fun residentOngoingChronometerRestoresActiveCallAndOriginalTime() {
+        val session = CallSessionTracker().resolve(
+            input(
+                classification(
+                    CallState.OUTGOING_CALLING,
+                    CallActiveEvidence.CHRONOMETER_PRESENT,
+                    presentation = CallPresentationType.ONGOING
+                ),
+                now = 10_000L,
+                showsChronometer = true,
+                base = 9_000L,
+                recovery = true
+            )
+        )
+
+        assertEquals(CallState.ACTIVE, session.state)
+        assertEquals(9_000L, session.connectedAt)
+        assertEquals(ConnectedAtSource.SOURCE_CHRONOMETER, session.connectedAtSource)
+        assertEquals(9_000L, CallTimerPolicy.connectedAtForTimer(session))
+        assertEquals("recovered-resident-chronometer", session.transitionReason)
+    }
+
+    @Test
+    fun residentIncomingChronometerRemainsRinging() {
+        val session = CallSessionTracker().resolve(
+            input(
+                classification(
+                    CallState.INCOMING_RINGING,
+                    CallActiveEvidence.CHRONOMETER_PRESENT,
+                    hasAnswer = true,
+                    hasHangUp = true
+                ),
+                now = 10_000L,
+                showsChronometer = true,
+                base = 9_000L,
+                recovery = true
+            )
+        )
+
+        assertEquals(CallState.INCOMING_RINGING, session.state)
+        assertNull(session.connectedAt)
+    }
+
+    @Test
     fun chronometerAlreadyRunningOnFirstSightWithControlsIsAnInProgressCall() {
         val session = CallSessionTracker().resolve(
             input(
@@ -757,7 +801,8 @@ class CallSessionTrackerTest {
         notificationId: Int = 7,
         showsChronometer: Boolean = false,
         base: Long = 0L,
-        isVideo: Boolean = false
+        isVideo: Boolean = false,
+        recovery: Boolean = false
     ) = CallSessionInput(
         sourceKey = sourceKey,
         packageName = "example.calls",
@@ -769,6 +814,7 @@ class CallSessionTrackerTest {
         showsChronometer = showsChronometer,
         chronometerBase = base,
         observedAt = now,
-        isVideoCall = isVideo
+        isVideoCall = isVideo,
+        isRecovery = recovery
     )
 }

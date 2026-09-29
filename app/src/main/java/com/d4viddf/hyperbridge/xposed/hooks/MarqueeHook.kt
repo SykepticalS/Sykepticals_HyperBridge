@@ -16,6 +16,7 @@ import com.d4viddf.hyperbridge.service.call.CallIslandTimeoutPolicy
 import com.d4viddf.hyperbridge.models.MarqueeDismissMode
 import com.d4viddf.hyperbridge.models.MarqueeMotion
 import com.d4viddf.hyperbridge.models.MarqueeTimeoutPolicy
+import com.d4viddf.hyperbridge.models.PausableTimeoutClock
 import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.log
 import io.github.libxposed.api.XposedModule
@@ -42,6 +43,7 @@ object MarqueeHook {
     private val controllers = WeakHashMap<TextView, Controller>()
     private val observed = WeakHashMap<TextView, Listeners>()
     private val islandEnabled = WeakHashMap<ViewGroup, Boolean>()
+    private val islandPreserveMotion = WeakHashMap<ViewGroup, Boolean>()
     private val islandSessions = WeakHashMap<ViewGroup, AutoHideSession>()
     private val islandTokens = Collections.synchronizedMap(WeakHashMap<ViewGroup, Any>())
     private val islandNotifications = Collections.synchronizedMap(WeakHashMap<View, StatusBarNotification>())
@@ -52,7 +54,8 @@ object MarqueeHook {
     private val compactAreas = WeakHashMap<TextView, WeakReference<ViewGroup>>()
     private val visibilityRetries = WeakHashMap<ViewGroup, ViewTreeObserver.OnPreDrawListener>()
     @Volatile private var active = false
-    @Volatile private var autoHideHeld = false
+    private val autoHideHeldSourceKeys = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var legacyGlobalAutoHideHold = false
 
     private data class Listeners(
         val layout: View.OnLayoutChangeListener,
@@ -62,12 +65,16 @@ object MarqueeHook {
 
     private class AutoHideSession(
         val islandKey: String,
+        val sourceKey: String?,
         val mode: MarqueeDismissMode,
         val timeoutMs: Long,
         val generation: Long,
         val notification: StatusBarNotification?,
         val ongoing: Boolean,
-        val startedAtMs: Long = SystemClock.elapsedRealtime(),
+        val clock: PausableTimeoutClock = PausableTimeoutClock(
+            durationMs = timeoutMs,
+            startedAtMs = SystemClock.elapsedRealtime(),
+        ),
         val scrollingViews: WeakHashMap<TextView, Int> = WeakHashMap(),
         val rightOverflow: WeakHashMap<TextView, Boolean> = WeakHashMap(),
         val rightPassOpen: WeakHashMap<TextView, Boolean> = WeakHashMap(),
@@ -85,15 +92,32 @@ object MarqueeHook {
 
     fun isActive(): Boolean = active
 
-    fun holdAutoHide() {
-        autoHideHeld = true
-        islandSessions.forEach { (island, session) -> cancelFallback(island, session) }
+    fun holdAutoHide(sourceKey: String?) {
+        val key = sourceKey?.takeIf { it.isNotBlank() }
+        if (key == null) legacyGlobalAutoHideHold = true else autoHideHeldSourceKeys += key
+        val now = SystemClock.elapsedRealtime()
+        islandSessions.forEach { (island, session) ->
+            if (isAutoHideHeld(session)) {
+                session.clock.pause(now)
+                cancelFallback(island, session)
+            }
+        }
     }
 
-    fun releaseAutoHide() {
-        autoHideHeld = false
-        islandSessions.forEach { (island, session) -> scheduleFallback(island, session) }
+    fun releaseAutoHide(sourceKey: String?) {
+        val key = sourceKey?.takeIf { it.isNotBlank() }
+        if (key == null) legacyGlobalAutoHideHold = false else autoHideHeldSourceKeys -= key
+        val now = SystemClock.elapsedRealtime()
+        islandSessions.forEach { (island, session) ->
+            if (!isAutoHideHeld(session)) {
+                session.clock.resume(now)
+                scheduleFallback(island, session)
+            }
+        }
     }
+
+    private fun isAutoHideHeld(session: AutoHideSession): Boolean =
+        legacyGlobalAutoHideHold || session.sourceKey?.let(autoHideHeldSourceKeys::contains) == true
 
     private fun hook(module: XposedModule, loader: ClassLoader) {
         val id = System.identityHashCode(loader)
@@ -117,11 +141,13 @@ object MarqueeHook {
                             IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION,
                             false,
                         )
-                    val preserveScroll = incoming?.extras?.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE) ==
-                        "VOICE_MESSAGE"
+                    val preserveBeforeUpdate = MarqueeMotion.preservesMotionAcrossUpdates(
+                        incoming?.extras?.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE),
+                    )
                     if (island != null) {
                         islandTokens[island] = token
-                        if (!preserveScroll) {
+                        islandPreserveMotion[island] = preserveBeforeUpdate
+                        if (!preserveBeforeUpdate) {
                             if (nativeTextUpdate) pauseIsland(island) else resetIsland(island)
                         }
                         islandKeys[island]?.let(ActiveIslandDismissHook::invalidate)
@@ -151,6 +177,8 @@ object MarqueeHook {
                         MarqueeDismissMode.OFF
                     }
                     val semanticType = extras.getString(IslandProtocol.EXTRA_SEMANTIC_TYPE)
+                    val preserveScroll = MarqueeMotion.preservesMotionAcrossUpdates(semanticType)
+                    islandPreserveMotion[island] = preserveScroll
                     val callLifetime = CallIslandTimeoutPolicy.ignoresConfiguredExpiry(semanticType)
                     val originalTimeout = if (callLifetime) {
                         0
@@ -359,19 +387,21 @@ object MarqueeHook {
         if (loops <= 0 && !holdForRightScroll) return
         val session = AutoHideSession(
             islandKey = islandKeys[island].orEmpty(),
+            sourceKey = notification?.notification?.extras?.getString(IslandProtocol.EXTRA_SOURCE_KEY),
             mode = mode,
             timeoutMs = originalTimeoutSecs.coerceAtLeast(0) * 1000L,
             generation = generation,
             notification = notification ?: islandNotifications[island],
             ongoing = ongoing,
         )
+        if (isAutoHideHeld(session)) session.clock.pause(SystemClock.elapsedRealtime())
         islandSessions[island] = session
         scheduleFallback(island, session)
     }
 
     private fun scheduleFallback(island: ViewGroup, session: AutoHideSession) {
         val blockedByActiveScroll = session.scrollingViews.isNotEmpty() && !session.mode.holdsForRightScroll
-        if (autoHideHeld || IslandReplyComposer.shouldStayExpanded() || !session.mode.overridesTimeout || session.dismissed ||
+        if (isAutoHideHeld(session) || !session.mode.overridesTimeout || session.dismissed ||
             blockedByActiveScroll || session.fallback != null || session.timeoutMs <= 0L
         ) return
         val delay = fallbackDelayMs(session) ?: return
@@ -403,14 +433,14 @@ object MarqueeHook {
 
     private fun fallbackDelayMs(session: AutoHideSession): Long? {
         val now = SystemClock.elapsedRealtime()
-        val expiresAt = session.startedAtMs + session.timeoutMs
+        val remainingMs = session.clock.remainingMs(now)
         if (!session.mode.holdsForRightScroll) {
-            return (expiresAt - now).coerceAtLeast(0L)
+            return remainingMs
         }
         val hold = rightScrollHold(session)
         return MarqueeTimeoutPolicy.rightScrollExpiryDelayMs(
             nowMs = now,
-            expiresAtMs = expiresAt,
+            expiresAtMs = now + remainingMs,
             rightOverflowing = hold.overflowing,
             rightRevealPending = hold.revealPending,
             lastReachedEndAtMs = hold.lastReachedEndAtMs,
@@ -529,13 +559,13 @@ object MarqueeHook {
         session.scrollingViews[view] = completed
         val loops = session.scrollingViews.values.toList()
         val minLoops = loops.minOrNull() ?: 0
-        if (MarqueeTimeoutPolicy.shouldDismiss(session.mode, minLoops, session.ongoing) && !autoHideHeld) {
+        if (MarqueeTimeoutPolicy.shouldDismiss(session.mode, minLoops, session.ongoing) && !isAutoHideHeld(session)) {
             dismissIsland(island, session)
         }
     }
 
     private fun dismissIsland(island: ViewGroup, session: AutoHideSession) {
-        if (session.dismissed || session.ongoing || autoHideHeld) return
+        if (session.dismissed || session.ongoing || isAutoHideHeld(session)) return
         val notification = session.notification ?: islandNotifications[island] ?: return
         session.dismissed = true
         cancelFallback(island, session)
@@ -565,7 +595,13 @@ object MarqueeHook {
             return
         }
         if (full != clean) view.text = clean
-        val overflow = marqueeOverflowDistance(view, clean) > 0f
+        val available = availableTextWidth(view)
+        if (available <= 0) return
+        val overflow = MarqueeMotion.overflowDistance(
+            textWidthPx = scrollingTextWidth(view, clean),
+            availableWidthPx = available,
+            tolerancePx = overflowTolerancePx(view),
+        ) > 0f
         noteRightOverflow(view, overflow)
         if (!overflow) {
             stopMarquee(view)
@@ -582,7 +618,8 @@ object MarqueeHook {
         view.isHorizontalFadingEdgeEnabled = true
         val controller = controllers.getOrPut(view) { Controller(view, HookConfig.marqueeSpeed()) }
         controller.speedPxPerSec = HookConfig.marqueeSpeed()
-        controller.start()
+        val preserveMotion = findIsland(view)?.let { islandPreserveMotion[it] } == true
+        controller.start(preserveMotion)
     }
 
     private fun stopMarquee(view: TextView) {
@@ -881,47 +918,6 @@ object MarqueeHook {
         )
     }
 
-    /**
-     * Measure the rendered line against its real visible right edge. The old
-     * textWidth - availableWidth calculation assumed that the line started at the
-     * clip's left edge. Xiaomi's area_right can offset the line inside a wider
-     * TextView, which made that estimate scroll past the final glyph.
-     */
-    private fun marqueeOverflowDistance(view: TextView, text: String): Float {
-        if (view.width <= 0 || text.isEmpty()) return 0f
-
-        val visible = Rect()
-        if (!view.getGlobalVisibleRect(visible) || visible.width() <= 0) return 0f
-        val location = IntArray(2)
-        view.getLocationOnScreen(location)
-        val clipRightInView = (visible.right - location[0]).toFloat()
-            .coerceAtMost(view.width.toFloat())
-
-        val layout = view.layout
-        val renderedRightInView = if (layout != null && layout.lineCount > 0) {
-            var widestRight = Float.NEGATIVE_INFINITY
-            for (line in 0 until layout.lineCount) {
-                val advanceWidth = layout.getLineWidth(line)
-                val visibleWidth = if (line == 0 && layout.lineCount == 1) {
-                    scrollingTextWidth(view, text)
-                } else {
-                    advanceWidth
-                }
-                val trailingAdvance = (advanceWidth - visibleWidth).coerceAtLeast(0f)
-                widestRight = maxOf(widestRight, layout.getLineRight(line) - trailingAdvance)
-            }
-            view.compoundPaddingLeft + widestRight
-        } else {
-            view.compoundPaddingLeft + scrollingTextWidth(view, text)
-        }
-
-        return MarqueeMotion.clippedRightOverflow(
-            renderedTextRightPx = renderedRightInView,
-            clipRightPx = clipRightInView,
-            tolerancePx = overflowTolerancePx(view),
-        )
-    }
-
     private fun laidOutTextWidth(view: TextView, fallbackText: String): Float {
         val layout = view.layout
         if (layout != null && layout.lineCount > 0) {
@@ -954,11 +950,15 @@ object MarqueeHook {
         private var completed = 0
         private var returnDurationMs = 0L
 
-        fun start() {
+        fun start(preserveMotion: Boolean = false) {
             val view = viewRef.get() ?: return
             val now = normalize(view.text?.toString().orEmpty())
             registerScrolling(view)
             if (running && text == now) return
+            if (running && preserveMotion) {
+                text = now
+                return
+            }
             if (text.isNotEmpty() && text != now) onRightTextRestarted(view)
             text = now
             running = true
@@ -988,7 +988,11 @@ object MarqueeHook {
                 startNanos = frameTimeNanos
                 lastNanos = frameTimeNanos
             }
-            val maxScroll = marqueeOverflowDistance(view, text)
+            val maxScroll = MarqueeMotion.overflowDistance(
+                textWidthPx = scrollingTextWidth(view, text),
+                availableWidthPx = availableTextWidth(view),
+                tolerancePx = overflowTolerancePx(view),
+            )
             if (maxScroll <= 0f) {
                 unregisterScrolling(view)
                 stop()
