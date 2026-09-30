@@ -93,23 +93,40 @@ class PermanentIslandSessionTest {
     }
 
     @Test
-    fun activeSourceIsExposedInClosingAndShowingStates() {
+    fun activeSourceIsExposedOnlyAfterTheCloseCommits() {
         val session = PermanentIslandSession()
         session.requestClose("app", "source")
 
-        assertEquals("source", session.activeSourceKey())
-        assertEquals("app", session.activePackageName())
-        assertTrue(session.hasActiveSource())
+        assertNull(session.activeSourceKey())
+        assertNull(session.activePackageName())
+        assertFalse(session.hasActiveSource())
 
         session.markStarted("app")
+        assertNull(session.activeSourceKey())
+        assertNull(session.activePackageName())
+        assertFalse(session.hasActiveSource())
+
         session.complete("app")
         assertEquals("source", session.activeSourceKey())
         assertEquals("app", session.activePackageName())
+        assertTrue(session.hasActiveSource())
 
         session.reset()
         assertNull(session.activeSourceKey())
         assertNull(session.activePackageName())
         assertFalse(session.hasActiveSource())
+    }
+
+    @Test
+    fun recentsAbortNeverExposesThePendingSource() {
+        val session = PermanentIslandSession()
+        session.requestClose("app", "source")
+        session.markStarted("app")
+
+        assertFalse(session.hasActiveSource())
+        assertTrue(session.abort("app"))
+        assertEquals(PermanentIslandSession.State.Blank, session.state)
+        assertNull(session.activeSourceKey())
     }
 
     @Test

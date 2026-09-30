@@ -94,19 +94,11 @@ class PermanentIslandSession {
     }
 
     @Synchronized
-    fun activeSourceKey(): String? = when (val current = state) {
-        is State.Closing -> current.sourceKey
-        is State.Showing -> current.sourceKey
-        State.Blank -> null
-    }
+    fun activeSourceKey(): String? = (state as? State.Showing)?.sourceKey
 
     @Synchronized
-    fun activePackageName(): String? = when (val current = state) {
-        is State.Closing -> current.packageName
-        is State.Showing -> current.packageName
-        State.Blank -> null
-    }
+    fun activePackageName(): String? = (state as? State.Showing)?.packageName
 
     @Synchronized
-    fun hasActiveSource(): Boolean = state !is State.Blank
+    fun hasActiveSource(): Boolean = state is State.Showing
 }

@@ -16,6 +16,7 @@ import com.d4viddf.hyperbridge.xposed.dispatch.SystemUiDispatcher
 import com.d4viddf.hyperbridge.service.FocusShadeUpdate
 import com.d4viddf.hyperbridge.service.NotificationProcessingService
 import com.d4viddf.hyperbridge.service.SourceFocusShadePolicy
+import com.d4viddf.hyperbridge.service.SourceReplacementReplayPolicy
 import com.d4viddf.hyperbridge.service.NotificationLifecyclePolicy
 import com.d4viddf.hyperbridge.service.ShadeEntryIdentity
 import com.d4viddf.hyperbridge.service.ShadeReplayPolicy
@@ -34,6 +35,8 @@ object SystemUiNotificationIngressHook {
     private val activeSources = ConcurrentHashMap<String, StatusBarNotification>()
     /** Shade entries already known to SystemUI. A rebuild must not present them again. */
     private val resident = ConcurrentHashMap<String, ShadeEntryIdentity>()
+    /** Sources whose ordinary heads-up was replaced by an island for their current content. */
+    private val replacedSources = ConcurrentHashMap<String, ShadeEntryIdentity>()
     @Volatile private var replayFreezeUntil = 0L
     /** Set once the listener has supplied a shade snapshot, so a later rebind keeps islands. */
     @Volatile private var listenerSnapshotReady = false
@@ -230,6 +233,7 @@ object SystemUiNotificationIngressHook {
                     }
                     if (!NotificationLifecyclePolicy.preservesActiveIsland(reason)) {
                         resident.remove(sbn.key)
+                        replacedSources.remove(sbn.key)
                     }
                     if (isOwnedProxy(sbn) &&
                         NotificationLifecyclePolicy.isUserInitiatedRemoval(reason) &&
@@ -284,6 +288,7 @@ object SystemUiNotificationIngressHook {
         val incoming = identityOf(sbn)
         if (ShadeReplayPolicy.shouldIgnore(resident[sbn.key], incoming, bulkReplayActive())) {
             resident[sbn.key] = incoming
+            restoreSourceSuppressionIfReplaced(sbn, incoming)
             pendingPosts.remove(sbn.key)
             return
         }
@@ -302,8 +307,14 @@ object SystemUiNotificationIngressHook {
             allowCallShadeDismissal(sbn, request)
             // Decoration can intentionally disable a pre-connected CallStyle chronometer.
             // Record the final source identity so the listener's second callback is deduplicated.
-            resident[sbn.key] = identityOf(sbn)
-            if (replaced) markSourceHeadsUpSuppressed(sbn)
+            val finalIdentity = identityOf(sbn)
+            resident[sbn.key] = finalIdentity
+            if (replaced) {
+                replacedSources[sbn.key] = finalIdentity
+                markSourceHeadsUpSuppressed(sbn)
+            } else {
+                replacedSources.remove(sbn.key)
+            }
             if (replaced) module.log(
                 "HyperBridge: pre-snapshot replacement package=${sbn.packageName} " +
                     "elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}",
@@ -322,6 +333,7 @@ object SystemUiNotificationIngressHook {
             val incoming = identityOf(sbn)
             if (ShadeReplayPolicy.shouldIgnore(resident[key], incoming, bulkReplayActive())) {
                 resident[key] = incoming
+                restoreSourceSuppressionIfReplaced(sbn, incoming)
                 pendingPosts.remove(key, sbn)
                 return@forEach
             }
@@ -332,8 +344,14 @@ object SystemUiNotificationIngressHook {
                 val replaced = remote.processPosted(request)
                 applySourceFocusDecoration(sbn, request)
                 allowCallShadeDismissal(sbn, request)
-                resident[key] = identityOf(sbn)
-                if (replaced) markSourceHeadsUpSuppressed(sbn)
+                val finalIdentity = identityOf(sbn)
+                resident[key] = finalIdentity
+                if (replaced) {
+                    replacedSources[key] = finalIdentity
+                    markSourceHeadsUpSuppressed(sbn)
+                } else {
+                    replacedSources.remove(key)
+                }
             }.onSuccess {
                 pendingPosts.remove(key, sbn)
             }.onFailure {
@@ -479,6 +497,15 @@ object SystemUiNotificationIngressHook {
         ).hashCode()
     }
 
+    private fun restoreSourceSuppressionIfReplaced(
+        sbn: StatusBarNotification,
+        incoming: ShadeEntryIdentity,
+    ) {
+        if (SourceReplacementReplayPolicy.shouldRestoreSuppression(replacedSources[sbn.key], incoming)) {
+            markSourceHeadsUpSuppressed(sbn)
+        }
+    }
+
     private fun visibleHash(sbn: StatusBarNotification): Int {
         val extras = sbn.notification.extras
         val remote = sbn.notification?.let { notification ->
@@ -514,9 +541,20 @@ object SystemUiNotificationIngressHook {
             target?.javaClass?.getMethod("getActiveNotifications")?.invoke(target) as? Array<*>
         }.getOrNull().orEmpty()
         activeSources.clear()
+        replacedSources.clear()
         values.filterIsInstance<StatusBarNotification>().forEach { sbn ->
             activeSources[sbn.key] = sbn
-            if (!isOwnedProxy(sbn)) resident[sbn.key] = identityOf(sbn)
+            if (!isOwnedProxy(sbn)) {
+                val identity = identityOf(sbn)
+                resident[sbn.key] = identity
+                if (sbn.notification.extras.getBoolean(
+                        IslandProtocol.EXTRA_SUPPRESS_SOURCE_HEADS_UP,
+                        false,
+                    )
+                ) {
+                    replacedSources[sbn.key] = identity
+                }
+            }
         }
     }
 

@@ -82,6 +82,9 @@ object PermanentIslandHook {
     @Volatile private var pendingGeneration = -1L
     @Volatile private var appliedGeneration = -1L
     @Volatile private var anchorSuspendedForSecondary = false
+    @Volatile private var expansionSourceKey: String? = null
+    @Volatile private var expansionPackageName: String? = null
+    @Volatile private var expansionConfirmed = false
     @Volatile private var mediaController: MediaController? = null
     @Volatile private var mediaCallback: MediaController.Callback? = null
     @Volatile private var mediaSourceKey: String? = null
@@ -145,6 +148,9 @@ object PermanentIslandHook {
                         clearMediaMonitor()
                         handlePrimaryCleared(module, "source_foreground")
                     }
+                    if (packageName != null && packageName == expansionPackageName) {
+                        finishExpandedPresentation(module, "source_foreground")
+                    }
                     removeSecondarySourcesForPackage(module, packageName, "secondary_foreground")
                     result
                 }
@@ -198,26 +204,19 @@ object PermanentIslandHook {
                             return@intercept chain.proceed()
                         }
                         val sourceClick = findMethod(source.contentView.javaClass, "onIslandClick")
-                        runCatching {
-                            sourceClick.apply { isAccessible = true }.invoke(source.contentView)
-                        }.onSuccess {
-                            if (session.clearIfSource(sourceKey)) {
-                                clearPendingTransaction()
-                                clearMediaMonitor()
-                                restoreBlankAnchor(module, "source_expand")
-                            }
+                        if (!beginExpansionHandoff(
+                                module = module,
+                                packageName = packageName,
+                                source = source,
+                                sourceClick = sourceClick,
+                            )
+                        ) {
                             module.log(
-                                "HyperBridge: permanent active anchor click delegated " +
+                                "HyperBridge: permanent active anchor expansion handoff unavailable " +
                                     "pkg=$packageName key=$sourceKey",
                             )
-                        }.onFailure {
-                            module.log(
-                                "HyperBridge: permanent active anchor click delegation failed: " +
-                                    it.message,
-                            )
-                        }.getOrElse {
-                            chain.proceed()
                         }
+                        null
                     }
                 }
 
@@ -250,6 +249,19 @@ object PermanentIslandHook {
                             viewKey?.let { key ->
                                 removeSecondarySource(module, key, "secondary_$transition")
                             }
+                        }
+                        result
+                    }
+                }
+                coordinator.declaredMethods.filter {
+                    it.name == "handleEvent" && it.parameterCount == 2
+                }.forEach { method ->
+                    module.hook(method).intercept { chain ->
+                        val result = chain.proceed()
+                        if (expansionConfirmed &&
+                            resolveExpandedSourceKey(chain.thisObject) != expansionSourceKey
+                        ) {
+                            finishExpandedPresentation(module, "source_collapsed")
                         }
                         result
                     }
@@ -305,6 +317,7 @@ object PermanentIslandHook {
             clearMediaMonitor()
             secondarySources.clear()
             anchorSuspendedForSecondary = false
+            clearExpansionState()
             blankAnchorData = null
             return originalResult
         }
@@ -375,18 +388,7 @@ object PermanentIslandHook {
                             pendingSourceData = sourceData
                             pendingGeneration = generation
                             appliedGeneration = -1L
-                                bindMediaMonitor(module, sourceData, sourceKey)
-
-                            // request_close_position is the earliest authoritative app-close
-                            // callback. Applying here advances the visual update by one native
-                            // close phase without an arbitrary timer.
-                            if (updateAnchorData(module, controller, sourceData, "close_request")) {
-                                appliedGeneration = generation
-                                module.log(
-                                    "HyperBridge: permanent-island content pre-applied " +
-                                        "pkg=$packageName gen=$generation",
-                                )
-                            }
+                            bindMediaMonitor(module, sourceData, sourceKey)
 
                             Bundle(originalResult).apply {
                                 putParcelable(POSITION, Rect(cutout))
@@ -414,8 +416,8 @@ object PermanentIslandHook {
                     ) {
                         appliedGeneration = generation
                         module.log(
-                            "HyperBridge: permanent-island content applied early pkg=$packageName " +
-                                "gen=$generation",
+                            "HyperBridge: permanent-island content prepared at close start " +
+                                "pkg=$packageName gen=$generation",
                         )
                     }
                     module.log("HyperBridge: permanent-island close started pkg=$packageName gen=$generation")
@@ -425,16 +427,12 @@ object PermanentIslandHook {
 
             CLOSE_APP_END -> {
                 session.complete(packageName)?.let { showing ->
-                    val alreadyApplied = appliedGeneration == showing.generation
-                    val fallbackApplied = if (alreadyApplied) {
-                        true
-                    } else {
-                        pendingSourceData
+                    val committed = appliedGeneration == showing.generation ||
+                        (pendingSourceData
                             ?.takeIf { pendingGeneration == showing.generation }
                             ?.let { updateAnchorData(module, controller, it, "close_end_fallback") }
-                            ?: false
-                    }
-                    if (fallbackApplied) {
+                            ?: false)
+                    if (committed) {
                         module.log(
                             "HyperBridge: permanent-island content committed pkg=$packageName " +
                                 "gen=${showing.generation}",
@@ -489,7 +487,9 @@ object PermanentIslandHook {
     }
 
     private fun restoreBlankAnchor(module: XposedModule, reason: String) {
-        if (!HookConfig.permanentIslandEnabled() || anchorSuspendedForSecondary) return
+        if (!HookConfig.permanentIslandEnabled() || anchorSuspendedForSecondary ||
+            expansionSourceKey != null
+        ) return
         val controller = controllerRef.get() ?: return
         val blank = blankAnchorData
         if (blank == null) {
@@ -507,6 +507,9 @@ object PermanentIslandHook {
 
     private fun handleSourceRemoved(module: XposedModule, sourceKey: String?) {
         if (sourceKey.isNullOrBlank()) return
+        if (sourceKey == expansionSourceKey) {
+            finishExpandedPresentation(module, "source_removed")
+        }
         if (session.clearIfSource(sourceKey)) {
             clearPendingTransaction()
             clearMediaMonitor()
@@ -550,6 +553,110 @@ object PermanentIslandHook {
         ActiveIslandDismissHook.dismissKey(anchorKey)
         module.log("HyperBridge: permanent-island anchor hidden for secondary promotion")
         return true
+    }
+
+    private fun beginExpansionHandoff(
+        module: XposedModule,
+        packageName: String,
+        source: PluginSource,
+        sourceClick: Method,
+    ): Boolean {
+        if (expansionSourceKey != null || !ActiveIslandDismissHook.isActive()) return false
+        val controller = controllerRef.get() ?: return false
+        val anchorKey = findAnchorData(controller)?.let(::resolveDataKey)
+            ?: blankAnchorData?.let(::resolveDataKey)
+            ?: return false
+
+        expansionSourceKey = source.key
+        expansionPackageName = packageName
+        expansionConfirmed = false
+        val enqueued = ActiveIslandDismissHook.dismissKey(anchorKey) { removed ->
+            if (expansionSourceKey != source.key) return@dismissKey
+            if (!removed) {
+                clearExpansionState()
+                module.log(
+                    "HyperBridge: permanent active anchor could not be suspended " +
+                        "pkg=$packageName key=${source.key}",
+                )
+                return@dismissKey
+            }
+            runCatching {
+                sourceClick.apply { isAccessible = true }.invoke(source.contentView)
+            }.onFailure { error ->
+                rejectExpansionHandoff(module, controller, source, "delegate_failed", error.message)
+            }.onSuccess {
+                // Xiaomi dispatches the click synchronously, but its view update may complete in
+                // the immediate UI coroutine. Verify on the next main-loop turn instead of
+                // treating a successful reflection call as a successful expansion.
+                mainHandler.post {
+                    if (expansionSourceKey != source.key) return@post
+                    if (resolveExpandedSourceKey(controller) == source.key) {
+                        expansionConfirmed = true
+                        session.clearIfSource(source.key)
+                        clearPendingTransaction()
+                        clearMediaMonitor()
+                        module.log(
+                            "HyperBridge: permanent active anchor expansion confirmed " +
+                                "pkg=$packageName key=${source.key}",
+                        )
+                    } else {
+                        rejectExpansionHandoff(
+                            module,
+                            controller,
+                            source,
+                            "not_expanded",
+                            null,
+                        )
+                    }
+                }
+            }
+        }
+        if (!enqueued) clearExpansionState()
+        return enqueued
+    }
+
+    private fun rejectExpansionHandoff(
+        module: XposedModule,
+        controller: Any,
+        source: PluginSource,
+        reason: String,
+        detail: String?,
+    ) {
+        clearExpansionState()
+        val restored = updateAnchorData(module, controller, source.data, "expansion_$reason")
+        if (!restored) repostAnchorNotification(module, "expansion_$reason")
+        module.log(
+            "HyperBridge: permanent active anchor expansion rejected reason=$reason " +
+                "key=${source.key}${detail?.let { " detail=$it" }.orEmpty()}",
+        )
+    }
+
+    private fun resolveExpandedSourceKey(controllerOrCoordinator: Any?): String? {
+        val coordinator = controllerOrCoordinator
+            ?.takeIf { it.javaClass.name == EVENT_COORDINATOR }
+            ?: controllerOrCoordinator
+                ?.let { invokeNoArg(it, "getView") }
+                ?.let { invokeNoArg(it, "getEventCoordinator") }
+            ?: return null
+        val handler = invokeNoArg(coordinator, "getExpandedStateHandler") ?: return null
+        val expanded = invokeNoArg(handler, "getCurrent") ?: return null
+        return resolveViewKey(expanded)
+    }
+
+    private fun finishExpandedPresentation(module: XposedModule, reason: String) {
+        val sourceKey = expansionSourceKey ?: return
+        clearExpansionState()
+        repostAnchorNotification(module, "expansion_finished_$reason")
+        module.log(
+            "HyperBridge: permanent active anchor restored after expansion " +
+                "reason=$reason key=$sourceKey",
+        )
+    }
+
+    private fun clearExpansionState() {
+        expansionSourceKey = null
+        expansionPackageName = null
+        expansionConfirmed = false
     }
 
     private fun repostAnchorNotification(module: XposedModule, reason: String): Boolean {

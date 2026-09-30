@@ -27,6 +27,7 @@ object ActiveIslandDismissHook {
         @Volatile var cancelled = false
         var expected: StatusBarNotification? = null
         var expectedGeneration: Long = Long.MIN_VALUE
+        var completion: ((Boolean) -> Unit)? = null
         lateinit var runnable: Runnable
     }
 
@@ -55,11 +56,15 @@ object ActiveIslandDismissHook {
         )
     }
 
-    fun dismissKey(notificationKey: String) {
-        enqueueDismissal(
+    fun dismissKey(
+        notificationKey: String,
+        completion: ((Boolean) -> Unit)? = null,
+    ): Boolean {
+        return enqueueDismissal(
             notificationKey = notificationKey,
             expected = null,
             expectedGeneration = Long.MAX_VALUE,
+            completion = completion,
         )
     }
 
@@ -67,37 +72,55 @@ object ActiveIslandDismissHook {
         notificationKey: String,
         expected: StatusBarNotification?,
         expectedGeneration: Long,
+        completion: ((Boolean) -> Unit)? = null,
     ): Boolean {
         if (notificationKey.isBlank()) return false
         val request = PendingDismissal()
         request.expected = expected
         request.expectedGeneration = expectedGeneration
+        request.completion = completion
         request.runnable = Runnable {
             if (request.cancelled || pending[notificationKey] !== request) return@Runnable
             pending.remove(notificationKey, request)
-            val target = controller.get() ?: return@Runnable
+            val target = controller.get()
+            if (target == null) {
+                request.completion?.invoke(false)
+                return@Runnable
+            }
             val current = resolveSbn(target, notificationKey)
             if (expected != null) {
-                if (current == null) return@Runnable
+                if (current == null) {
+                    request.completion?.invoke(false)
+                    return@Runnable
+                }
                 val generation = current.notification.extras.getLong(IslandProtocol.EXTRA_GENERATION, Long.MIN_VALUE)
-                if (!IslandGenerationGuard.isCurrent(expectedGeneration, generation, isOwned(current))) return@Runnable
-                if (current.postTime != expected.postTime) return@Runnable
+                if (!IslandGenerationGuard.isCurrent(expectedGeneration, generation, isOwned(current))) {
+                    request.completion?.invoke(false)
+                    return@Runnable
+                }
+                if (current.postTime != expected.postTime) {
+                    request.completion?.invoke(false)
+                    return@Runnable
+                }
             }
             val updateNoFloat = (current ?: expected)?.notification?.extras
                 ?.getBoolean("miui.island.updateNoFloat", false) == true
-            runCatching {
+            val removed = runCatching {
                 val islandOnly = target.javaClass.declaredMethods.firstOrNull {
                     it.name == "removeIslandDataByKey" && it.parameterCount == 2 &&
                         it.parameterTypes[0] == String::class.java &&
                         it.parameterTypes[1] == Boolean::class.javaPrimitiveType
-                } ?: return@runCatching
+                } ?: return@runCatching false
                 islandOnly.isAccessible = true
                 islandOnly.invoke(target, notificationKey, updateNoFloat)
-            }
+                true
+            }.getOrDefault(false)
+            request.completion?.invoke(removed)
         }
         pending.put(notificationKey, request)?.let { previous ->
             previous.cancelled = true
             mainHandler.removeCallbacks(previous.runnable)
+            previous.completion?.invoke(false)
         }
         mainHandler.post(request.runnable)
         return true
