@@ -128,7 +128,7 @@ private fun BetterAnimationsSection() {
             SettingsRow(
                 icon = Icons.Default.Tune,
                 title = "Better animations",
-                subtitle = "Center the first app-exit island; keep Xiaomi's native animation when an island is already active.",
+                subtitle = "Use the cutout exit animation for the first island and higher-priority handoffs.",
                 trailing = {
                     Switch(
                         checked = enabled,

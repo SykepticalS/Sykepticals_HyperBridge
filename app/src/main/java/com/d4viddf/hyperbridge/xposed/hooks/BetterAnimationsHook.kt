@@ -4,6 +4,7 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.Bundle
+import com.d4viddf.hyperbridge.service.animation.AppExitTargetBounds
 import com.d4viddf.hyperbridge.service.animation.BetterAnimationsPolicy
 import com.d4viddf.hyperbridge.service.animation.CenteredExitSession
 import com.d4viddf.hyperbridge.xposed.HookConfig
@@ -17,8 +18,9 @@ import java.util.IdentityHashMap
 import java.util.WeakHashMap
 
 /**
- * Sends only the first app island toward the camera cutout, then uses Xiaomi's native cutout-to-big
- * animation at the matching close-end handoff. Existing-island exits stay fully native.
+ * Retargets eligible primary app exits toward the camera cutout, then uses Xiaomi's native
+ * cutout-to-big reveal. Xiaomi still owns island priority and slot movement: during a priority
+ * handoff the previous lower-priority big island is moved to the right-hand small slot natively.
  */
 object BetterAnimationsHook {
     private const val WINDOW_CONTROLLER =
@@ -148,30 +150,39 @@ object BetterAnimationsHook {
         if (originalResult !is Bundle || packageName.isNullOrBlank()) return originalResult
         val view = invokeNoArg(controller, "getView") ?: return originalResult
         val closingViews = requestHasIsland(view, packageName).filter(::isAppExpanded)
-        val activeCount = countActiveIslands(view, closingViews) ?: return originalResult
+        val active = inspectActiveIslands(view, closingViews) ?: return originalResult
+        val cutout = (invokeNoArg(view, "getCutoutRect") as? Rect)
+            ?.takeIf { it.width() > 0 && it.height() > 0 }
+            ?: return originalResult
+        val nativeTarget = originalResult.getParcelable(POSITION, Rect::class.java)
+        val nativeTargetSlot = BetterAnimationsPolicy.classifyNativeTarget(
+            native = nativeTarget?.toExitTargetBounds(),
+            cutout = cutout.toExitTargetBounds(),
+        )
         if (!BetterAnimationsPolicy.shouldUseCenteredExit(
                 enabled = true,
                 freeform = freeform,
                 interrupted = interrupted,
                 hasClosingIsland = closingViews.isNotEmpty(),
-                activeIslandCount = activeCount,
+                activeIslandCount = active.count,
+                hasCurrentBigIsland = active.hasCurrentBigIsland,
+                nativeTargetSlot = nativeTargetSlot,
             )
         ) {
             return originalResult
         }
 
-        val cutout = (invokeNoArg(view, "getCutoutRect") as? Rect)
-            ?.takeIf { it.width() > 0 && it.height() > 0 }
-            ?: return originalResult
         val closingContent = closingViews.last()
         val generation = centeredExit.arm(packageName)
         centeredContent = WeakReference(closingContent)
         return Bundle(originalResult).apply {
             putParcelable(POSITION, Rect(cutout))
         }.also {
+            val mode = if (active.count == 0) "first" else "priority_handoff"
             module.log(
-                "HyperBridge: better-animations centered first app exit " +
-                    "pkg=$packageName gen=$generation rect=${cutout.width()}x${cutout.height()}",
+                "HyperBridge: better-animations centered app exit " +
+                    "mode=$mode pkg=$packageName gen=$generation " +
+                    "nativeTarget=$nativeTargetSlot rect=${cutout.width()}x${cutout.height()}",
             )
         }
     }
@@ -186,7 +197,7 @@ object BetterAnimationsHook {
         val view = invokeNoArg(controller, "getView") ?: return
         if (invokeNoArg(view, "getCurrentBigIslandState") !== content || !hasState(content, "BigIsland")) {
             module.log(
-                "HyperBridge: better-animations reveal skipped; first island no longer owns big slot " +
+                "HyperBridge: better-animations reveal skipped; closing island no longer owns big slot " +
                     "pkg=$packageName gen=$generation",
             )
             return
@@ -236,8 +247,13 @@ object BetterAnimationsHook {
     private fun hasState(contentView: Any, name: String): Boolean =
         invokeNoArg(contentView, "getState")?.javaClass?.simpleName == name
 
+    private data class ActiveIslandSnapshot(
+        val count: Int,
+        val hasCurrentBigIsland: Boolean,
+    )
+
     /** Returns null when this ROM does not expose the complete state surface; native wins then. */
-    private fun countActiveIslands(view: Any?, closingViews: List<Any>): Int? {
+    private fun inspectActiveIslands(view: Any?, closingViews: List<Any>): ActiveIslandSnapshot? {
         view ?: return null
         val methods = activeStateGetters.associateWith { name ->
             findMethod(view.javaClass, name, emptyArray()) ?: return null
@@ -245,15 +261,29 @@ object BetterAnimationsHook {
         val closing = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>()).apply {
             addAll(closingViews)
         }
+        val states = LinkedHashMap<String, Any?>()
         val active = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
-        methods.values.forEach { method ->
+        methods.forEach { (name, method) ->
             val state = runCatching {
                 method.apply { isAccessible = true }.invoke(view)
             }.getOrElse { return null }
+            states[name] = state
             if (state != null && state !in closing) active += state
         }
-        return active.size
+
+        val currentBig = states["getCurrentBigIslandState"]
+        return ActiveIslandSnapshot(
+            count = active.size,
+            hasCurrentBigIsland = currentBig != null && currentBig !in closing,
+        )
     }
+
+    private fun Rect.toExitTargetBounds(): AppExitTargetBounds = AppExitTargetBounds(
+        left = left,
+        top = top,
+        right = right,
+        bottom = bottom,
+    )
 
     private fun invokeNoArg(target: Any?, name: String): Any? {
         target ?: return null
