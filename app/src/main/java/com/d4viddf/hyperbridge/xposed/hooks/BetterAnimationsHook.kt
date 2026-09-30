@@ -3,29 +3,36 @@ package com.d4viddf.hyperbridge.xposed.hooks
 import android.graphics.Rect
 import android.os.Bundle
 import com.d4viddf.hyperbridge.service.animation.BetterAnimationsPolicy
+import com.d4viddf.hyperbridge.service.animation.CenteredExitSession
 import com.d4viddf.hyperbridge.xposed.HookConfig
 import com.d4viddf.hyperbridge.xposed.log
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.lang.reflect.Method
+import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.WeakHashMap
 
 /**
- * Sends only the first app island toward the camera cutout. Xiaomi remains responsible for the
- * app-exit state transition and the close-end reveal; existing-island exits stay fully native.
+ * Sends only the first app island toward the camera cutout, then uses Xiaomi's native cutout-to-big
+ * animation at the matching close-end handoff. Existing-island exits stay fully native.
  */
 object BetterAnimationsHook {
     private const val WINDOW_CONTROLLER =
         "miui.systemui.dynamicisland.window.DynamicIslandWindowViewController"
     private const val REQUEST_CLOSE_POSITION = "request_close_position"
+    private const val CLOSE_APP_START = "close_app_start"
+    private const val CLOSE_APP_END = "close_app_end"
+    private const val APP_TO_RECENT = "app_to_recent"
     private const val POSITION = "position"
     private const val PACKAGE_NAME = "packageName"
 
     private val pluginLoaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
     )
+    private val centeredExit = CenteredExitSession()
+    @Volatile private var centeredContent = WeakReference<Any>(null)
     private val activeStateGetters = listOf(
         "getCurrentBigIslandState",
         "getCurrentSmallIslandState",
@@ -63,38 +70,47 @@ object BetterAnimationsHook {
                 val request = chain.args.getOrNull(3) as? Bundle
                 val result = chain.proceed()
 
-                if (event != REQUEST_CLOSE_POSITION || result !is Bundle) {
-                    return@intercept result
-                }
                 val packageName = request?.getString(PACKAGE_NAME)
-                val view = invokeNoArg(chain.thisObject, "getView")
-                val closingViews = packageName
-                    ?.let { requestHasIsland(view, it) }
-                    .orEmpty()
-                    .filter(::isAppExpanded)
-                val activeCount = countActiveIslands(view, closingViews)
-                    ?: return@intercept result
-                if (!BetterAnimationsPolicy.shouldUseCenteredExit(
-                        enabled = HookConfig.betterAnimationsEnabled(),
-                        freeform = freeform,
-                        interrupted = interrupted,
-                        hasClosingIsland = closingViews.isNotEmpty(),
-                        activeIslandCount = activeCount,
-                    )
-                ) {
+                if (!HookConfig.betterAnimationsEnabled()) {
+                    clearCenteredExit()
                     return@intercept result
                 }
 
-                val cutout = (invokeNoArg(view, "getCutoutRect") as? Rect)
-                    ?.takeIf { it.width() > 0 && it.height() > 0 }
-                    ?: return@intercept result
-                Bundle(result).apply {
-                    putParcelable(POSITION, Rect(cutout))
-                }.also {
-                    module.log(
-                        "HyperBridge: better-animations centered first app exit " +
-                            "pkg=$packageName rect=${cutout.width()}x${cutout.height()}",
+                when (event) {
+                    REQUEST_CLOSE_POSITION -> prepareCenteredExit(
+                        module = module,
+                        controller = chain.thisObject,
+                        packageName = packageName,
+                        freeform = freeform,
+                        interrupted = interrupted,
+                        originalResult = result,
                     )
+
+                    CLOSE_APP_START -> {
+                        if (interrupted) clearCenteredExit() else centeredExit.markStarted(packageName)
+                        result
+                    }
+
+                    CLOSE_APP_END -> {
+                        if (interrupted) {
+                            clearCenteredExit()
+                            return@intercept result
+                        }
+                        val generation = centeredExit.complete(packageName)
+                        val content = centeredContent.get()
+                        centeredContent = WeakReference(null)
+                        if (generation != null && content != null) {
+                            animateCenteredReveal(module, chain.thisObject, content, packageName, generation)
+                        }
+                        result
+                    }
+
+                    APP_TO_RECENT -> {
+                        if (centeredExit.abort(packageName)) centeredContent = WeakReference(null)
+                        result
+                    }
+
+                    else -> result
                 }
             }
             module.log("HyperBridge: better-animations hook installed loader=${loader.hashCode()}")
@@ -105,6 +121,88 @@ object BetterAnimationsHook {
                     "loader=${loader.hashCode()}: ${it.message}",
             )
         }
+    }
+
+    private fun prepareCenteredExit(
+        module: XposedModule,
+        controller: Any,
+        packageName: String?,
+        freeform: Boolean,
+        interrupted: Boolean,
+        originalResult: Any?,
+    ): Any? {
+        clearCenteredExit()
+        if (originalResult !is Bundle || packageName.isNullOrBlank()) return originalResult
+        val view = invokeNoArg(controller, "getView") ?: return originalResult
+        val closingViews = requestHasIsland(view, packageName).filter(::isAppExpanded)
+        val activeCount = countActiveIslands(view, closingViews) ?: return originalResult
+        if (!BetterAnimationsPolicy.shouldUseCenteredExit(
+                enabled = true,
+                freeform = freeform,
+                interrupted = interrupted,
+                hasClosingIsland = closingViews.isNotEmpty(),
+                activeIslandCount = activeCount,
+            )
+        ) {
+            return originalResult
+        }
+
+        val cutout = (invokeNoArg(view, "getCutoutRect") as? Rect)
+            ?.takeIf { it.width() > 0 && it.height() > 0 }
+            ?: return originalResult
+        val closingContent = closingViews.last()
+        val generation = centeredExit.arm(packageName)
+        centeredContent = WeakReference(closingContent)
+        return Bundle(originalResult).apply {
+            putParcelable(POSITION, Rect(cutout))
+        }.also {
+            module.log(
+                "HyperBridge: better-animations centered first app exit " +
+                    "pkg=$packageName gen=$generation rect=${cutout.width()}x${cutout.height()}",
+            )
+        }
+    }
+
+    private fun animateCenteredReveal(
+        module: XposedModule,
+        controller: Any,
+        content: Any,
+        packageName: String?,
+        generation: Long,
+    ) {
+        val view = invokeNoArg(controller, "getView") ?: return
+        if (invokeNoArg(view, "getCurrentBigIslandState") !== content || !hasState(content, "BigIsland")) {
+            module.log(
+                "HyperBridge: better-animations reveal skipped; first island no longer owns big slot " +
+                    "pkg=$packageName gen=$generation",
+            )
+            return
+        }
+        val coordinator = invokeNoArg(content, "getDynamicIslandEventCoordinator") ?: return
+        val animationController = invokeNoArg(coordinator, "getAnimationController") ?: return
+        val animation = findCompatibleMethod(
+            animationController.javaClass,
+            "hiddenToBigIslandAnimation",
+            content.javaClass,
+        ) ?: return
+        runCatching {
+            animation.apply { isAccessible = true }.invoke(animationController, content)
+        }.onSuccess {
+            module.log(
+                "HyperBridge: better-animations native cutout-to-big reveal started " +
+                    "pkg=$packageName gen=$generation",
+            )
+        }.onFailure {
+            module.log(
+                "HyperBridge: better-animations reveal unavailable " +
+                    "pkg=$packageName gen=$generation: ${it.message}",
+            )
+        }
+    }
+
+    private fun clearCenteredExit() {
+        centeredExit.abort()
+        centeredContent = WeakReference(null)
     }
 
     private fun requestHasIsland(view: Any?, packageName: String): List<Any> {
@@ -119,9 +217,11 @@ object BetterAnimationsHook {
     }
 
     private fun isAppExpanded(contentView: Any): Boolean {
-        val state = invokeNoArg(contentView, "getState") ?: return false
-        return state.javaClass.simpleName == "AppExpanded"
+        return hasState(contentView, "AppExpanded")
     }
+
+    private fun hasState(contentView: Any, name: String): Boolean =
+        invokeNoArg(contentView, "getState")?.javaClass?.simpleName == name
 
     /** Returns null when this ROM does not expose the complete state surface; native wins then. */
     private fun countActiveIslands(view: Any?, closingViews: List<Any>): Int? {
@@ -153,6 +253,18 @@ object BetterAnimationsHook {
         while (current != null) {
             current.declaredMethods.firstOrNull {
                 it.name == name && it.parameterTypes.contentEquals(parameterTypes)
+            }?.let { return it }
+            current = current.superclass
+        }
+        return null
+    }
+
+    private fun findCompatibleMethod(type: Class<*>, name: String, argumentType: Class<*>): Method? {
+        var current: Class<*>? = type
+        while (current != null) {
+            current.declaredMethods.firstOrNull {
+                it.name == name && it.parameterCount == 1 &&
+                    it.parameterTypes[0].isAssignableFrom(argumentType)
             }?.let { return it }
             current = current.superclass
         }
