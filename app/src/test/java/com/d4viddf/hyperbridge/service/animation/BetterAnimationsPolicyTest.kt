@@ -45,12 +45,34 @@ class BetterAnimationsPolicyTest {
     }
 
     @Test
-    fun multipleExistingIslandsPreserveNativeTarget() {
-        assertFalse(
+    fun higherPriorityHandoffWithTwoExistingIslandsUsesCenteredExit() {
+        assertTrue(
             decide(
                 activeIslandCount = 2,
                 hasCurrentBigIsland = true,
                 nativeTargetSlot = AppExitTargetSlot.PRIMARY,
+            ),
+        )
+    }
+
+    @Test
+    fun higherPriorityHandoffWithThreeExistingIslandsUsesCenteredExit() {
+        assertTrue(
+            decide(
+                activeIslandCount = 3,
+                hasCurrentBigIsland = true,
+                nativeTargetSlot = AppExitTargetSlot.PRIMARY,
+            ),
+        )
+    }
+
+    @Test
+    fun lowerPriorityHandoffWithMultipleExistingIslandsStaysNative() {
+        assertFalse(
+            decide(
+                activeIslandCount = 3,
+                hasCurrentBigIsland = true,
+                nativeTargetSlot = AppExitTargetSlot.SECONDARY,
             ),
         )
     }

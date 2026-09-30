@@ -47,7 +47,7 @@ object BetterAnimationsPolicy {
         if (!enabled || freeform || interrupted || !hasClosingIsland) return false
         if (activeIslandCount == 0) return true
 
-        return activeIslandCount == 1 &&
+        return activeIslandCount >= 1 &&
             hasCurrentBigIsland &&
             nativeTargetSlot == AppExitTargetSlot.PRIMARY
     }
