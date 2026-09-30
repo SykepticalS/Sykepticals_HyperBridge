@@ -1,6 +1,8 @@
 package com.d4viddf.hyperbridge.xposed.hooks
 
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import com.d4viddf.hyperbridge.service.animation.BetterAnimationsPolicy
 import com.d4viddf.hyperbridge.service.animation.CenteredExitSession
@@ -87,7 +89,22 @@ object BetterAnimationsHook {
                     )
 
                     CLOSE_APP_START -> {
-                        if (interrupted) clearCenteredExit() else centeredExit.markStarted(packageName)
+                        if (interrupted) {
+                            clearCenteredExit()
+                        } else {
+                            val generation = centeredExit.markStarted(packageName)
+                            if (generation != null) {
+                                val content = centeredContent.get()
+                                if (content != null) {
+                                    val controller = chain.thisObject
+                                    val moduleRef = module
+                                    val pkg = packageName
+                                    Handler(Looper.getMainLooper()).postDelayed({
+                                        animateCenteredReveal(moduleRef, controller, content, pkg, generation)
+                                    }, 350)
+                                }
+                            }
+                        }
                         result
                     }
 
@@ -96,12 +113,8 @@ object BetterAnimationsHook {
                             clearCenteredExit()
                             return@intercept result
                         }
-                        val generation = centeredExit.complete(packageName)
-                        val content = centeredContent.get()
+                        centeredExit.complete(packageName)
                         centeredContent = WeakReference(null)
-                        if (generation != null && content != null) {
-                            animateCenteredReveal(module, chain.thisObject, content, packageName, generation)
-                        }
                         result
                     }
 
