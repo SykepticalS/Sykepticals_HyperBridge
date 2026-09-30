@@ -268,17 +268,29 @@ class CallSessionTracker(
         val compoundReplacementBoundary = sourceReplacement &&
                 (rawChronometerStarted || rawChronometerBaseReset) &&
                 rawConnectedActionsAppeared
-        // CallStyle turns the chronometer on while the UI still says Calling. Mute/speaker
-        // appearing, or the incoming Answer button disappearing, is the actual connect.
+
+        // A chronometer that is already present on the first outgoing callback is not enough to
+        // prove that the remote party answered. Once the same tracked source turns it on or
+        // materially resets its base, however, the dialer has exposed a real lifecycle boundary.
+        // Source replacements stay stricter because their initial payload can change both the
+        // chronometer and controls while the remote party is still ringing.
+        val chronometerStarted = rawChronometerStarted && !sourceReplacement
+        val chronometerBaseReset = rawChronometerBaseReset && !sourceReplacement
         val connectedActionsAppeared = rawConnectedActionsAppeared && !sourceReplacement
 
-        if (answeredIncoming || connectedActionsAppeared || compoundReplacementBoundary) {
+        if (chronometerStarted || chronometerBaseReset || answeredIncoming ||
+            connectedActionsAppeared || compoundReplacementBoundary
+        ) {
             val transitionEvidence = when {
+                chronometerStarted -> CallActiveEvidence.CHRONOMETER_STARTED
+                chronometerBaseReset -> CallActiveEvidence.CHRONOMETER_BASE_RESET
                 answeredIncoming -> CallActiveEvidence.INCOMING_ANSWERED
                 connectedActionsAppeared -> CallActiveEvidence.CONNECTED_ACTIONS_APPEARED
                 else -> CallActiveEvidence.COMPOUND_SOURCE_REPLACEMENT
             }
-            val usesChronometerBase = compoundReplacementBoundary && plausibleBase != null
+            val usesChronometerBase = chronometerStarted ||
+                    chronometerBaseReset ||
+                    compoundReplacementBoundary
             val connectedAt = when {
                 usesChronometerBase -> requireNotNull(plausibleBase)
                 else -> input.observedAt
@@ -288,6 +300,8 @@ class CallSessionTracker(
                 else -> ConnectedAtSource.OBSERVED_CONNECTION_TRANSITION
             }
             val reason = when (transitionEvidence) {
+                CallActiveEvidence.CHRONOMETER_STARTED -> "chronometer-start-transition"
+                CallActiveEvidence.CHRONOMETER_BASE_RESET -> "chronometer-base-reset-transition"
                 CallActiveEvidence.INCOMING_ANSWERED -> "incoming-answer-controls-disappeared"
                 CallActiveEvidence.CONNECTED_ACTIONS_APPEARED -> "connected-controls-transition"
                 CallActiveEvidence.COMPOUND_SOURCE_REPLACEMENT -> "replacement-chronometer-and-controls-transition"

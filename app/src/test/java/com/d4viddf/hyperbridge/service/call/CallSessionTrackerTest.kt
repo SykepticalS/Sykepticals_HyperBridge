@@ -161,10 +161,10 @@ class CallSessionTrackerTest {
     }
 
     @Test
-    fun chronometerAppearanceWhileCallingDoesNotStartTimer() {
+    fun chronometerAppearanceAfterCallingMarksAnsweredCallActive() {
         val tracker = CallSessionTracker()
         val calling = tracker.resolve(input(classification(CallState.OUTGOING_CALLING), 10_000L))
-        val stillCalling = tracker.resolve(
+        val active = tracker.resolve(
             input(
                 classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
                 12_000L,
@@ -173,14 +173,17 @@ class CallSessionTrackerTest {
             )
         )
 
-        assertEquals(calling.logicalCallId, stillCalling.logicalCallId)
-        assertEquals(CallState.OUTGOING_CALLING, stillCalling.state)
-        assertNull(stillCalling.connectedAt)
-        assertNull(CallTimerPolicy.connectedAtForTimer(stillCalling))
+        assertEquals(calling.logicalCallId, active.logicalCallId)
+        assertEquals(CallState.ACTIVE, active.state)
+        assertEquals(11_500L, active.connectedAt)
+        assertEquals(ConnectedAtSource.SOURCE_CHRONOMETER, active.connectedAtSource)
+        assertEquals(CallActiveEvidence.CHRONOMETER_STARTED, active.activeEvidence)
+        assertEquals(11_500L, CallTimerPolicy.connectedAtForTimer(active))
+        assertEquals("chronometer-start-transition", active.transitionReason)
     }
 
     @Test
-    fun materialChronometerBaseResetWhileCallingDoesNotStartTimer() {
+    fun materialChronometerBaseResetMarksAnsweredCallActive() {
         val tracker = CallSessionTracker()
         tracker.resolve(
             input(
@@ -190,7 +193,7 @@ class CallSessionTrackerTest {
                 base = 9_000L
             )
         )
-        val stillCalling = tracker.resolve(
+        val active = tracker.resolve(
             input(
                 classification(CallState.OUTGOING_CALLING, CallActiveEvidence.CHRONOMETER_PRESENT),
                 15_000L,
@@ -199,8 +202,12 @@ class CallSessionTrackerTest {
             )
         )
 
-        assertEquals(CallState.OUTGOING_CALLING, stillCalling.state)
-        assertNull(stillCalling.connectedAt)
+        assertEquals(CallState.ACTIVE, active.state)
+        assertEquals(14_000L, active.connectedAt)
+        assertEquals(ConnectedAtSource.SOURCE_CHRONOMETER, active.connectedAtSource)
+        assertEquals(CallActiveEvidence.CHRONOMETER_BASE_RESET, active.activeEvidence)
+        assertEquals(14_000L, CallTimerPolicy.connectedAtForTimer(active))
+        assertEquals("chronometer-base-reset-transition", active.transitionReason)
     }
 
     @Test
