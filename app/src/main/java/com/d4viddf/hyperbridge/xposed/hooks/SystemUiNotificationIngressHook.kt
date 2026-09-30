@@ -112,7 +112,6 @@ object SystemUiNotificationIngressHook {
             val extras = sbn.notification.extras
             extras.containsKey("miui.focus.param") || extras.containsKey("miui.system.focus.param")
         }
-        .filterNot { it.notification.extras.getBoolean(IslandProtocol.EXTRA_PERMANENT_ANCHOR, false) }
         .filter { sbn ->
             val extras = sbn.notification.extras
             extras.getString(IslandProtocol.EXTRA_SOURCE_PACKAGE) == packageName ||
@@ -226,7 +225,6 @@ object SystemUiNotificationIngressHook {
                 }
                 val result = chain.proceed()
                 if (sbn != null) {
-                    PermanentIslandHook.onNotificationRemoved(module, sbn)
                     pendingPosts.remove(sbn.key)
                     activeSources.computeIfPresent(sbn.key) { _, current ->
                         current.takeUnless { sameGeneration(it, sbn) }

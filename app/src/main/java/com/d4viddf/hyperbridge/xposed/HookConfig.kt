@@ -51,8 +51,8 @@ object HookConfig {
         prefs?.getString(HookConfigSync.KEY_SCREEN_RECORDER_ICON_STYLE, "screen_recorder")
             ?.takeIf { it.isNotBlank() }
             ?: "screen_recorder"
-    fun permanentIslandEnabled(): Boolean =
-        prefs?.getBoolean(HookConfigSync.KEY_PERMANENT_ISLAND_ENABLED, false) ?: false
+    fun betterAnimationsEnabled(): Boolean =
+        prefs?.getBoolean(HookConfigSync.KEY_BETTER_ANIMATIONS_ENABLED, false) ?: false
 
     /** Fast, local and fail-open prediction used before SystemUI evaluates heads-up state. */
     fun expectsReplacement(sbn: StatusBarNotification): Boolean {

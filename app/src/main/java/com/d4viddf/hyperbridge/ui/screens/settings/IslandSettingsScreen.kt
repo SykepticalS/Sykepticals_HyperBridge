@@ -74,7 +74,7 @@ fun IslandSettingsScreen(
         onUpdateConfig = { newConfig ->
             scope.launch { preferences.updateGlobalConfig(newConfig) }
         },
-        permanentIsland = { PermanentIslandSection() },
+        betterAnimations = { BetterAnimationsSection() },
         visualTuning = { VisualTuningSection() },
     )
 }
@@ -85,7 +85,7 @@ fun IslandSettingsContent(
     globalConfig: IslandConfig,
     onBack: () -> Unit,
     onUpdateConfig: (IslandConfig) -> Unit,
-    permanentIsland: @Composable () -> Unit = {},
+    betterAnimations: @Composable () -> Unit = {},
     visualTuning: @Composable () -> Unit = {},
 ) {
     Scaffold(
@@ -110,7 +110,7 @@ fun IslandSettingsContent(
                 config = globalConfig,
                 onUpdate = onUpdateConfig
             )
-            permanentIsland()
+            betterAnimations()
             visualTuning()
             Spacer(Modifier.height(16.dp))
         }
@@ -118,23 +118,23 @@ fun IslandSettingsContent(
 }
 
 @Composable
-private fun PermanentIslandSection() {
+private fun BetterAnimationsSection() {
     val context = LocalContext.current
-    var enabled by remember { mutableStateOf(HookConfigSync.permanentIslandEnabled(context)) }
+    var enabled by remember { mutableStateOf(HookConfigSync.betterAnimationsEnabled(context)) }
 
-    SectionLabel("Permanent Island")
+    SectionLabel("Animations")
     SettingsStack {
         SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
             SettingsRow(
                 icon = Icons.Default.Tune,
-                title = "Keep a blank island",
-                subtitle = "Reserve the camera slot and absorb active app-exit islands.",
+                title = "Better animations",
+                subtitle = "Center the first app-exit island; keep Xiaomi's native animation when an island is already active.",
                 trailing = {
                     Switch(
                         checked = enabled,
                         onCheckedChange = { next ->
                             enabled = next
-                            HookConfigSync.setPermanentIslandEnabled(context, next)
+                            HookConfigSync.setBetterAnimationsEnabled(context, next)
                             SystemUiEngineCommands.reload(context)
                         },
                     )

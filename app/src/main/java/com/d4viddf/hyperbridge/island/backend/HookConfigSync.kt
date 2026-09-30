@@ -21,7 +21,8 @@ object HookConfigSync {
     const val KEY_SCREEN_RECORDER_REPLACE = "screen_recorder_replace"
     const val KEY_SCREEN_RECORDER_IMMEDIATE_START = "screen_recorder_immediate_start"
     const val KEY_SCREEN_RECORDER_ICON_STYLE = "screen_recorder_icon_style"
-    const val KEY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
+    const val KEY_BETTER_ANIMATIONS_ENABLED = "better_animations_enabled"
+    private const val LEGACY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
 
     private fun local(context: Context) = context.getSharedPreferences(
         IslandProtocol.REMOTE_PREFS,
@@ -40,9 +41,14 @@ object HookConfigSync {
             .putString(KEY_GLOW_BASE_COLOR, migratedGlowBaseColor(local(context).getString(KEY_GLOW_BASE_COLOR, "")))
             .putBoolean(KEY_SCREEN_RECORDER_REPLACE, local(context).getBoolean(KEY_SCREEN_RECORDER_REPLACE, true))
             .putBoolean(
-                KEY_PERMANENT_ISLAND_ENABLED,
-                local(context).getBoolean(KEY_PERMANENT_ISLAND_ENABLED, false),
+                KEY_BETTER_ANIMATIONS_ENABLED,
+                if (local(context).contains(KEY_BETTER_ANIMATIONS_ENABLED)) {
+                    local(context).getBoolean(KEY_BETTER_ANIMATIONS_ENABLED, false)
+                } else {
+                    local(context).getBoolean(LEGACY_PERMANENT_ISLAND_ENABLED, false)
+                },
             )
+            .remove(LEGACY_PERMANENT_ISLAND_ENABLED)
             .putBoolean(
                 KEY_SCREEN_RECORDER_IMMEDIATE_START,
                 local(context).getBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, false),
@@ -109,11 +115,11 @@ object HookConfigSync {
         local(context).getBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, false)
     fun screenRecorderIconStyle(context: Context): String =
         local(context).getString(KEY_SCREEN_RECORDER_ICON_STYLE, "screen_recorder") ?: "screen_recorder"
-    fun permanentIslandEnabled(context: Context): Boolean =
-        local(context).getBoolean(KEY_PERMANENT_ISLAND_ENABLED, false)
+    fun betterAnimationsEnabled(context: Context): Boolean =
+        local(context).getBoolean(KEY_BETTER_ANIMATIONS_ENABLED, false)
 
-    fun setPermanentIslandEnabled(context: Context, enabled: Boolean) {
-        local(context).edit().putBoolean(KEY_PERMANENT_ISLAND_ENABLED, enabled).apply()
+    fun setBetterAnimationsEnabled(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_BETTER_ANIMATIONS_ENABLED, enabled).apply()
         sync(context)
     }
 

@@ -8,7 +8,7 @@ import com.d4viddf.hyperbridge.xposed.hooks.IslandClickCleanupHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandInlineReplyHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandWindowImeHook
 import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
-import com.d4viddf.hyperbridge.xposed.hooks.PermanentIslandHook
+import com.d4viddf.hyperbridge.xposed.hooks.BetterAnimationsHook
 import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
 import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandTextUpdateAnimationHook
@@ -38,7 +38,7 @@ class HyperBridgeModule : XposedModule() {
                 ActiveIslandDismissHook.install(this, param)
                 MarqueeHook.install(this, param)
                 IslandTextUpdateAnimationHook.install(this, param)
-                PermanentIslandHook.install(this, param)
+                BetterAnimationsHook.install(this, param)
                 MediaCardHook.install(this, param)
             }
             IslandProtocol.XMSF_PACKAGE -> {
