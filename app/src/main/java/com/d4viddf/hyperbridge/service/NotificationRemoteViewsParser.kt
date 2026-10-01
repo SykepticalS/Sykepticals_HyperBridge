@@ -25,8 +25,38 @@ data class NotificationRemoteViewsExtract(
     val clicks: List<RemoteViewClick> = emptyList(),
 )
 
+data class RemoteViewsPlaybackSnapshot(
+    val progress: Int = 0,
+    val progressMax: Int = 0,
+    val structureFingerprint: Int = 0,
+)
+
 /** Reads custom notification layouts when extras only have captions and a media thumbnail. */
 object NotificationRemoteViewsParser {
+    /**
+     * Bounded extraction for the high-frequency voice-player update gate. Unlike [collect], this
+     * never walks arbitrary object graphs, resolves application resources, or reads bitmaps and
+     * PendingIntents. Progress values are excluded from the structural fingerprint.
+     */
+    fun playbackSnapshot(notification: Notification): RemoteViewsPlaybackSnapshot {
+        val progressStates = linkedMapOf<Int, IntArray>()
+        val structure = mutableListOf<Any?>()
+        val visited = Collections.newSetFromMap(IdentityHashMap<RemoteViews, Boolean>())
+        listOfNotNull(
+            notification.contentView,
+            notification.bigContentView,
+            notification.headsUpContentView,
+        ).forEach { remoteViews ->
+            readPlaybackSnapshot(remoteViews, progressStates, structure, visited)
+        }
+        val progress = bestProgress(progressStates.values.map { it[0] to it[1] })
+        return RemoteViewsPlaybackSnapshot(
+            progress = progress.first,
+            progressMax = progress.second,
+            structureFingerprint = structure.hashCode(),
+        )
+    }
+
     fun collect(
         notification: Notification,
         context: Context? = null,
@@ -130,6 +160,46 @@ object NotificationRemoteViewsParser {
     fun bestProgress(samples: List<Pair<Int, Int>>): Pair<Int, Int> {
         val candidate = samples.filter { it.second > 0 }.maxByOrNull { it.second }
         return candidate ?: (0 to 0)
+    }
+
+    private fun readPlaybackSnapshot(
+        remoteViews: RemoteViews,
+        progressStates: MutableMap<Int, IntArray>,
+        structure: MutableList<Any?>,
+        visited: MutableSet<RemoteViews>,
+    ) {
+        if (!visited.add(remoteViews)) return
+        val actions = remoteViewsActions(remoteViews) ?: return
+        actions.forEach { action ->
+            val viewId = intField(action, "viewId") ?: intField(action, "mViewId") ?: 0
+            val method = stringField(action, "methodName") ?: stringField(action, "mMethodName").orEmpty()
+            val value = anyField(action, "value") ?: anyField(action, "mValue")
+            val state = progressStates.getOrPut(viewId) { intArrayOf(0, 0) }
+            (intField(action, "progress") ?: if (method == "setProgress") value as? Int else null)
+                ?.let { state[0] = it }
+            (intField(action, "max") ?: if (method == "setMax") value as? Int else null)
+                ?.takeIf { it > 0 }
+                ?.let { state[1] = it }
+
+            val textValue = (value as? CharSequence)?.toString()
+            val dynamicPlaybackText = method == "setText" &&
+                com.d4viddf.hyperbridge.service.voice.VoicePlaybackDetector.roleFor(textValue.orEmpty()) == null
+            if (method != "setProgress" && method != "setMax" && !dynamicPlaybackText) {
+                structure += viewId
+                structure += method
+                structure += when (value) {
+                    is CharSequence -> value.toString()
+                    is Icon -> runCatching { value.resId }.getOrDefault(0)
+                    is Number, is Boolean -> value
+                    else -> value?.javaClass?.name
+                }
+                intField(action, "imageRes")?.let(structure::add)
+                intField(action, "visibility")?.let(structure::add)
+            }
+            if (value is RemoteViews) {
+                readPlaybackSnapshot(value, progressStates, structure, visited)
+            }
+        }
     }
 
     private fun readStructuredActions(

@@ -71,6 +71,7 @@ object SettingsKeys {
     const val SCREEN_RECORDING_RIGHT_DESIGN = "screen_recording_right_design"
     const val SCREEN_RECORDING_REPLACE_FLOATING = "screen_recording_replace_floating"
     const val SCREEN_RECORDING_IMMEDIATE_START = "screen_recording_immediate_start"
+    const val SCREEN_RECORDING_COUNTDOWN_ENABLED = "screen_recording_countdown_enabled"
     const val SCREEN_RECORDING_ICON_STYLE = "screen_recording_icon_style"
 
     // Login code extractor

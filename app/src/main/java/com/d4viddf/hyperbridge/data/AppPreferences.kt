@@ -253,7 +253,9 @@ class AppPreferences internal constructor(
     }
 
     // --- CORE SETTINGS ---
-    val allowedPackagesFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.ALLOWED_PACKAGES).map { it.deserializeSet() }
+    val allowedPackagesFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.ALLOWED_PACKAGES).map { value ->
+        value?.deserializeSet() ?: setOf(DEFAULT_SCREEN_RECORDER_PACKAGE)
+    }
     val vpnIslandEnabledFlow: Flow<Boolean> = dao.getSettingFlow("vpn_island_enabled").map { it.toBoolean(true) }
     val isSetupComplete: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.SETUP_COMPLETE).map { it.toBoolean(false) }
     val lastSeenVersion: Flow<Int> = dao.getSettingFlow(SettingsKeys.LAST_VERSION).map { it.toInt(0) }
@@ -324,7 +326,7 @@ class AppPreferences internal constructor(
 
     suspend fun toggleApp(packageName: String, isEnabled: Boolean) {
         val currentString = dao.getSetting(SettingsKeys.ALLOWED_PACKAGES)
-        val currentSet = currentString.deserializeSet()
+        val currentSet = currentString?.deserializeSet() ?: setOf(DEFAULT_SCREEN_RECORDER_PACKAGE)
         val newSet = if (isEnabled) currentSet + packageName else currentSet - packageName
         save(SettingsKeys.ALLOWED_PACKAGES, newSet.serialize())
     }
@@ -532,10 +534,16 @@ class AppPreferences internal constructor(
         save(SettingsKeys.SCREEN_RECORDING_REPLACE_FLOATING, enabled.toString())
 
     val screenRecordingImmediateStartFlow: Flow<Boolean> =
-        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_IMMEDIATE_START).map { it.toBoolean(false) }
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_IMMEDIATE_START).map { it.toBoolean(true) }
 
     suspend fun setScreenRecordingImmediateStart(enabled: Boolean) =
         save(SettingsKeys.SCREEN_RECORDING_IMMEDIATE_START, enabled.toString())
+
+    val screenRecordingCountdownEnabledFlow: Flow<Boolean> =
+        dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_COUNTDOWN_ENABLED).map { it.toBoolean(true) }
+
+    suspend fun setScreenRecordingCountdownEnabled(enabled: Boolean) =
+        save(SettingsKeys.SCREEN_RECORDING_COUNTDOWN_ENABLED, enabled.toString())
 
     val screenRecordingIconStyleFlow: Flow<String> =
         dao.getSettingFlow(SettingsKeys.SCREEN_RECORDING_ICON_STYLE).map {
@@ -1063,6 +1071,7 @@ class AppPreferences internal constructor(
 
     companion object {
         const val SYSTEM_ISLAND_DEFAULT_TIMEOUT = 4
+        private const val DEFAULT_SCREEN_RECORDER_PACKAGE = "com.miui.screenrecorder"
     }
 
     @androidx.annotation.VisibleForTesting

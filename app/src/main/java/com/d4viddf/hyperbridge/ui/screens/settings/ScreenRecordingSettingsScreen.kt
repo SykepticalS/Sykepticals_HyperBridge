@@ -94,26 +94,30 @@ fun ScreenRecordingSettingsScreen(
         initial = AppPreferences.SYSTEM_ISLAND_DEFAULT_TIMEOUT
     )
     val replaceFloating by preferences.screenRecordingReplaceFloatingFlow.collectAsState(initial = true)
-    val immediateStart by preferences.screenRecordingImmediateStartFlow.collectAsState(initial = false)
+    val immediateStart by preferences.screenRecordingImmediateStartFlow.collectAsState(initial = true)
+    val countdownEnabled by preferences.screenRecordingCountdownEnabledFlow.collectAsState(initial = true)
     val iconStyle by preferences.screenRecordingIconStyleFlow.collectAsState(initial = "screen_recorder")
+    val tapToStart = immediateStart
 
     ScreenRecordingSettingsContent(
         leftDesign = leftDesign,
         rightDesign = rightDesign,
         savedTimeout = savedTimeout,
-        replaceFloating = replaceFloating,
-        immediateStart = immediateStart,
+        tapToStart = tapToStart,
+        countdownEnabled = countdownEnabled,
         iconStyle = iconStyle,
         onLeftDesignChange = { scope.launch { preferences.setScreenRecordingLeftDesign(it) } },
         onRightDesignChange = { scope.launch { preferences.setScreenRecordingRightDesign(it) } },
         onSavedTimeoutChange = { scope.launch { preferences.setScreenRecordingTimeout(it) } },
-        onReplaceFloatingChange = { enabled ->
+        onTapToStartChange = { enabled ->
             scope.launch {
-                preferences.setScreenRecordingReplaceFloating(enabled)
+                preferences.setScreenRecordingReplaceFloating(true)
+                preferences.setScreenRecordingImmediateStart(enabled)
                 HookConfigSync.setScreenRecorderReplacement(
                     context,
+                    true,
                     enabled,
-                    immediateStart,
+                    countdownEnabled,
                     iconStyle,
                 )
                 if (enabled) {
@@ -123,16 +127,28 @@ fun ScreenRecordingSettingsScreen(
                 }
             }
         },
-        onImmediateStartChange = { enabled ->
+        onCountdownEnabledChange = { enabled ->
             scope.launch {
-                preferences.setScreenRecordingImmediateStart(enabled)
-                HookConfigSync.setScreenRecorderReplacement(context, replaceFloating, enabled, iconStyle)
+                preferences.setScreenRecordingCountdownEnabled(enabled)
+                HookConfigSync.setScreenRecorderReplacement(
+                    context,
+                    replaceFloating,
+                    immediateStart,
+                    enabled,
+                    iconStyle,
+                )
             }
         },
         onIconStyleChange = { style ->
             scope.launch {
                 preferences.setScreenRecordingIconStyle(style)
-                HookConfigSync.setScreenRecorderReplacement(context, replaceFloating, immediateStart, style)
+                HookConfigSync.setScreenRecorderReplacement(
+                    context,
+                    replaceFloating,
+                    immediateStart,
+                    countdownEnabled,
+                    style,
+                )
             }
         },
         onBack = onBack
@@ -145,14 +161,14 @@ fun ScreenRecordingSettingsContent(
     leftDesign: ScreenRecordingLeftDesign,
     rightDesign: ScreenRecordingRightDesign,
     savedTimeout: Int,
-    replaceFloating: Boolean = true,
-    immediateStart: Boolean = false,
+    tapToStart: Boolean = true,
+    countdownEnabled: Boolean = true,
     iconStyle: String = "screen_recorder",
     onLeftDesignChange: (ScreenRecordingLeftDesign) -> Unit,
     onRightDesignChange: (ScreenRecordingRightDesign) -> Unit,
     onSavedTimeoutChange: (Int) -> Unit,
-    onReplaceFloatingChange: (Boolean) -> Unit = {},
-    onImmediateStartChange: (Boolean) -> Unit = {},
+    onTapToStartChange: (Boolean) -> Unit = {},
+    onCountdownEnabledChange: (Boolean) -> Unit = {},
     onIconStyleChange: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
@@ -222,10 +238,9 @@ fun ScreenRecordingSettingsContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Switch(checked = replaceFloating, onCheckedChange = onReplaceFloatingChange)
+                        Switch(checked = tapToStart, onCheckedChange = onTapToStartChange)
                     }
-                    AnimatedVisibility(visible = replaceFloating) {
-                        Column {
+                    Column {
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 20.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
@@ -271,20 +286,19 @@ fun ScreenRecordingSettingsContent(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = stringResource(R.string.screen_recording_immediate_start_title),
+                                        text = stringResource(R.string.screen_recording_countdown_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Spacer(Modifier.height(2.dp))
                                     Text(
-                                        text = stringResource(R.string.screen_recording_immediate_start_summary),
+                                        text = stringResource(R.string.screen_recording_countdown_summary),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Switch(checked = immediateStart, onCheckedChange = onImmediateStartChange)
+                                Switch(checked = countdownEnabled, onCheckedChange = onCountdownEnabledChange)
                             }
-                        }
                     }
                 }
             }

@@ -50,11 +50,23 @@ class CompactMediaIslandPolicyTest {
     }
 
     @Test fun cycleScrollFinishesInsideTheBudgetButNeverCrawls() {
+        assertEquals(100L, CompactMediaIslandPolicy.CYCLE_SCROLL_DELAY_MS)
         assertEquals(100f, CompactMediaIslandPolicy.cycleScrollSpeedPxPerSec(300f, 3_000L, 20), 0.01f)
         assertEquals(150f, CompactMediaIslandPolicy.cycleScrollSpeedPxPerSec(300f, 3_000L, 150), 0.01f)
         assertEquals(40f, CompactMediaIslandPolicy.cycleScrollSpeedPxPerSec(200f, 5_000L, 20), 0.01f)
         assertEquals(0f, CompactMediaIslandPolicy.cycleScrollSpeedPxPerSec(0f, 3_000L, 100), 0.01f)
         assertEquals(0f, CompactMediaIslandPolicy.cycleScrollSpeedPxPerSec(80f, 0L, 100), 0.01f)
+    }
+
+    @Test fun firstVisibleCycleLineIsRecheckedAndSettledQuickly() {
+        assertEquals(50L, CompactMediaIslandPolicy.APPEARANCE_RECHECK_MS)
+        assertEquals(100L, CompactMediaIslandPolicy.APPEARANCE_SETTLE_MS)
+        assertEquals(
+            250L,
+            CompactMediaIslandPolicy.APPEARANCE_RECHECK_MS +
+                CompactMediaIslandPolicy.APPEARANCE_SETTLE_MS +
+                CompactMediaIslandPolicy.CYCLE_SCROLL_DELAY_MS,
+        )
     }
 
     @Test fun scrolledLinesWaitOneSecondAndFittingLinesMoveOnQuickly() {

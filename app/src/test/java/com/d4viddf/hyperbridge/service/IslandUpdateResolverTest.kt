@@ -163,6 +163,27 @@ class IslandUpdateResolverTest {
     }
 
     @Test
+    fun continuousProgressLifecyclesNeverUseConfiguredUpdateExpansion() {
+        listOf(
+            NotificationType.DOWNLOAD,
+            NotificationType.PROGRESS,
+            NotificationType.VOICE_MESSAGE,
+        ).forEach { type ->
+            assertFalse(NotificationLifecyclePolicy.allowsConfiguredUpdateExpansion(type))
+        }
+
+        assertTrue(NotificationLifecyclePolicy.allowsConfiguredUpdateExpansion(NotificationType.MESSAGE))
+        assertTrue(NotificationLifecyclePolicy.allowsConfiguredUpdateExpansion(NotificationType.STANDARD))
+    }
+
+    @Test
+    fun identicalSourceFocusReplayRemainsAnInPlaceUpdate() {
+        assertFalse(SourceFocusUpdatePolicy.isInPlace(IslandPresentationKind.NEW))
+        assertTrue(SourceFocusUpdatePolicy.isInPlace(IslandPresentationKind.UPDATE))
+        assertTrue(SourceFocusUpdatePolicy.isInPlace(IslandPresentationKind.UNCHANGED))
+    }
+
+    @Test
     fun identicalMessageRepostRemainsUnchanged() {
         val event = messageEvent(timestamp = 200L, messageCount = 2)
         val decision = IslandUpdateResolver.decide(

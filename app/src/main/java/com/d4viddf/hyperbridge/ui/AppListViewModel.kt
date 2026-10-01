@@ -295,10 +295,13 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                     preferences.toggleApp(ScreenRecordingClassifier.PACKAGE_NAME, enabled)
                     if (enabled) {
                         preferences.setScreenRecordingReplaceFloating(true)
+                        preferences.setScreenRecordingImmediateStart(true)
+                        preferences.setScreenRecordingCountdownEnabled(true)
                         HookConfigSync.setScreenRecorderReplacement(
                             getApplication(),
                             true,
-                            false,
+                            true,
+                            true,
                             "screen_recorder",
                         )
                         (getApplication() as? HyperBridgeApplication)?.requestScopes(

@@ -87,6 +87,22 @@ object ScreenRecorderContract {
     }
 }
 
+/** Pure lifecycle decisions shared by the recorder service, hook, and regression tests. */
+object ScreenRecorderLifecyclePolicy {
+    fun ownsIsland(integrationEnabled: Boolean): Boolean = integrationEnabled
+
+    fun nextCountdown(current: Int): Int = (current - 1).coerceAtLeast(0)
+
+    fun startDelayMillis(countdownEnabled: Boolean): Long = if (countdownEnabled) {
+        (ScreenRecorderContract.COUNTDOWN_SECONDS + 1L) * ScreenRecorderContract.COUNTDOWN_TICK_MS
+    } else {
+        0L
+    }
+
+    fun stopDismissesImmediately(state: Int): Boolean =
+        state == ScreenRecorderContract.STATE_STARTING
+}
+
 data class RecorderSnapshot(
     val state: Int = ScreenRecorderContract.STATE_IDLE,
     val durationMillis: Long = 0L,

@@ -44,12 +44,12 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         stopIntent: PendingIntent? = null,
     ): HyperIslandData {
         val compact = compactText ?: when {
-            session.countdownRemaining > 0 -> context.getString(R.string.screen_recording_starting)
+            session.starting -> context.getString(R.string.screen_recording_starting)
             session.paused -> context.getString(R.string.screen_recording_paused)
             else -> context.getString(R.string.screen_recording_compact)
         }
         val expanded = expandedText ?: when {
-            session.countdownRemaining > 0 -> context.getString(R.string.screen_recording_starting)
+            session.starting -> context.getString(R.string.screen_recording_starting)
             session.paused -> context.getString(R.string.screen_recording_paused)
             else -> context.getString(R.string.screen_recording_active)
         }
@@ -133,15 +133,15 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
             title = expanded,
             // The first countdown post opens expanded. An empty body makes that card disappear.
             // Recording keeps an empty subtitle so the expanded island only says "Recording..".
-            content = if (session.countdownRemaining > 0) compact else "",
+            content = if (session.starting) compact else "",
             pictureKey = PIC_TICKER,
             appPkg = PIC_APP_BADGE,
             actionKeys = actionKeys,
-            timer = timer.takeIf { session.countdownRemaining <= 0 },
+            timer = timer.takeIf { !session.starting },
         )
 
         when {
-            session.countdownRemaining > 0 -> builder.setBigIslandInfo(
+            session.starting -> builder.setBigIslandInfo(
                 left = countdownLeft(design, compact),
                 right = ImageTextInfoRight(
                     type = 2,
@@ -156,7 +156,7 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         val json = builder.buildJsonParam(
             HyperIslandProtocolOptions(
                 islandProperty = 2,
-                timerSystemCurrentMillis = now.takeIf { session.countdownRemaining <= 0 },
+                timerSystemCurrentMillis = now.takeIf { !session.starting },
             )
         )
         return HyperIslandData(
@@ -175,17 +175,17 @@ class ScreenRecordingTranslator(context: Context) : BaseTranslator(context) {
         picturePackage: String = context.packageName,
         notifyId: String = "${context.packageName}:${session.logicalId.hashCode()}",
         business: String = BUSINESS,
-        enableFloat: Boolean = session.countdownRemaining > 0,
+        enableFloat: Boolean = session.starting,
         tickerIcon: Int = tickerIcon(),
         pauseIntent: PendingIntent? = null,
         stopIntent: PendingIntent? = null,
     ): Bundle {
-        val compact = compactText ?: if (session.countdownRemaining > 0) {
+        val compact = compactText ?: if (session.starting) {
             context.getString(R.string.screen_recording_starting)
         } else {
             context.getString(R.string.screen_recording_compact)
         }
-        val expanded = expandedText ?: if (session.countdownRemaining > 0) {
+        val expanded = expandedText ?: if (session.starting) {
             context.getString(R.string.screen_recording_starting)
         } else {
             context.getString(R.string.screen_recording_active)
@@ -400,7 +400,7 @@ internal object ScreenRecordingPayloadFactory {
                 textInfo = RecorderTextInfo(title = compactText, content = "")
             )
         }
-        val imageTextInfoRight = if (session.countdownRemaining > 0) {
+        val imageTextInfoRight = if (session.starting) {
             RecorderImageTextInfo(
                 type = 2,
                 picInfo = null,
@@ -410,7 +410,7 @@ internal object ScreenRecordingPayloadFactory {
             null
         }
         val sameWidthDigitInfo = when {
-            session.countdownRemaining > 0 -> null
+            session.starting -> null
             design.right == ScreenRecordingRightDesign.TIMER -> RecorderSameWidthDigitInfo(timerInfo = timerInfo)
             else -> null
         }
@@ -450,7 +450,7 @@ internal object ScreenRecordingPayloadFactory {
                     picProfileDark = ScreenRecordingTranslator.PIC_TICKER,
                     appIconPkg = ScreenRecordingTranslator.PIC_APP_BADGE
                 ),
-                animTextInfo = if (session.countdownRemaining > 0) {
+                animTextInfo = if (session.starting) {
                     null
                 } else {
                     RecorderAnimTextInfo(

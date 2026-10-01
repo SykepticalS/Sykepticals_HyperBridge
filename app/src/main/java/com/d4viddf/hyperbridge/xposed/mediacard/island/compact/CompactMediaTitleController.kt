@@ -104,7 +104,7 @@ internal class CompactMediaTitleController(
         if (!isOnScreen(view)) {
             pause(view)
             spotKey = Long.MIN_VALUE
-            choreographer.postFrameCallbackDelayed(this, HIDDEN_POLL_MS)
+            choreographer.postFrameCallbackDelayed(this, CompactMediaIslandPolicy.APPEARANCE_RECHECK_MS)
             return
         }
         if (!islandAtRest(view)) {
@@ -341,7 +341,7 @@ internal class CompactMediaTitleController(
             spotSinceNanos = now
             return false
         }
-        return now - spotSinceNanos >= SETTLE_NANOS
+        return now - spotSinceNanos >= CompactMediaIslandPolicy.APPEARANCE_SETTLE_MS * NANOS_PER_MS
     }
 
     private fun cumulativeScale(view: View): Float {
@@ -388,14 +388,13 @@ internal class CompactMediaTitleController(
 
     companion object {
         private const val LOOP_START_DELAY_MS = 800L
-        private const val HIDDEN_POLL_MS = 250L
         private const val MIN_VISIBLE_ALPHA = 0.05f
         private const val TURN_SCALE_DROP = 0.2f
         private const val TURN_ROTATION_DEG = 20f
         private const val TURN_BLUR_PX = 30f
 
         private const val BUSY_POLL_MS = 100L
-        private const val SETTLE_NANOS = 200_000_000L
+        private const val NANOS_PER_MS = 1_000_000L
         private const val MOVE_STEP_DP = 1.5f
         private const val MOVE_SCALE_STEP = 0.004f
 

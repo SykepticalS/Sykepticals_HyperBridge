@@ -44,6 +44,8 @@ import com.d4viddf.hyperbridge.service.translators.TimerTranslator
 import com.d4viddf.hyperbridge.service.translators.VoiceMessageTranslator
 import com.d4viddf.hyperbridge.service.voice.VoicePlaybackDetector
 import com.d4viddf.hyperbridge.service.voice.VoicePlaybackSignals
+import com.d4viddf.hyperbridge.service.voice.VoicePlaybackUpdateGate
+import com.d4viddf.hyperbridge.service.voice.VoicePlaybackUpdateSample
 import com.d4viddf.hyperbridge.service.translators.WidgetTranslator
 import com.d4viddf.hyperbridge.service.translators.ScreenRecordingTranslator
 import com.d4viddf.hyperbridge.debug.AgentDebugLog
@@ -189,6 +191,7 @@ class NotificationProcessingEngine private constructor(
     private val messageEventTracker = MessageEventFallbackTracker()
     private val messageResolver = MessageNotificationResolver()
     private val messageFamilyTracker = MessagePresentationFamilyTracker()
+    private val voicePlaybackUpdateGate = VoicePlaybackUpdateGate()
     private val expiredIslands = ExpiredIslandRegistry()
     private val timeoutJobs = ConcurrentHashMap<String, Job>()
     private val removalJobs = ConcurrentHashMap<String, Job>()
@@ -541,6 +544,7 @@ class NotificationProcessingEngine private constructor(
             val isOwnedBridge = isOwnedBridgeNotification(it)
             val notifId = it.id
             val notifKey = it.key
+            if (!isOwnedBridge) voicePlaybackUpdateGate.remove(sourceSlotIdentity(it))
 
             if (isOwnedBridge) {
                 if (NotificationLifecyclePolicy.preservesActiveIsland(reason)) {
@@ -1153,6 +1157,10 @@ class NotificationProcessingEngine private constructor(
             DiagnosticsStore.record("CALLBACK", "received", sbn.packageName)
         }
         val sourceSlot = sourceSlotIdentity(sbn)
+        if (!recovery && shouldThrottleVoicePlaybackUpdate(sbn, sourceSlot)) {
+            markSourceHeadsUpSuppressed(sbn)
+            return
+        }
         val callbackObservedAt = System.currentTimeMillis()
         val rawQuality = sourceCandidateQuality(sbn)
         val processingGeneration = sourceProcessingGeneration.next(sourceSlot, rawQuality)
@@ -2095,6 +2103,8 @@ class NotificationProcessingEngine private constructor(
                     keepPosted = keepPosted,
                     marqueeCapable = marqueeCapabilitiesReady(),
                 ).islandTimeoutSeconds,
+                floatOnUpdate = finalConfig.floatOnUpdate == true &&
+                    NotificationLifecyclePolicy.allowsConfiguredUpdateExpansion(type),
             )
             var data: HyperIslandData = if (isSavedScreenRecording) {
                 screenRecordingSavedTranslator.translate(sbn, picKey, translationConfig, activeTheme)
@@ -2201,7 +2211,12 @@ class NotificationProcessingEngine private constructor(
             if (decision.kind == IslandPresentationKind.UNCHANGED && !switchingFocusMode) {
                 val focusRefreshed = !replaceWithSourceFocus || !supportsSourceFocus ||
                     attachSourceFocus(
-                        sbn, data, effectiveTitle, effectiveText, finalConfig, inPlaceUpdate = false,
+                        sbn,
+                        data,
+                        effectiveTitle,
+                        effectiveText,
+                        translationConfig,
+                        inPlaceUpdate = SourceFocusUpdatePolicy.isInPlace(decision.kind),
                         semanticType = focusSemanticType,
                         focusIdentity = effectiveKey,
                         connected = callSession?.state == CallState.ACTIVE,
@@ -2218,8 +2233,8 @@ class NotificationProcessingEngine private constructor(
                     data,
                     effectiveTitle,
                     effectiveText,
-                    finalConfig,
-                    inPlaceUpdate = decision.kind == IslandPresentationKind.UPDATE,
+                    translationConfig,
+                    inPlaceUpdate = SourceFocusUpdatePolicy.isInPlace(decision.kind),
                     semanticType = focusSemanticType,
                     focusIdentity = effectiveKey,
                     connected = callSession?.state == CallState.ACTIVE,
@@ -2312,7 +2327,7 @@ class NotificationProcessingEngine private constructor(
                 // The saved-recording notification owns a direct activity PendingIntent for the
                 // captured video. Preserve it so tapping the confirmation island opens that file.
                 suppressContentIntent = false,
-                config = finalConfig,
+                config = translationConfig,
                 updatableOverride = NotificationLifecyclePolicy.isProgressLifecycle(type),
                 inPlaceUpdate = isUpdate && !decision.cancelBeforeNotify,
                 floatAsUpdate = decision.kind == IslandPresentationKind.UPDATE,
@@ -3334,6 +3349,40 @@ class NotificationProcessingEngine private constructor(
         val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
         return template.contains("MediaStyle") || template.contains("CallStyle") ||
             extras.containsKey(Notification.EXTRA_PROGRESS)
+    }
+
+    private fun shouldThrottleVoicePlaybackUpdate(
+        sbn: StatusBarNotification,
+        sourceSlot: String,
+    ): Boolean {
+        val logicalKey = sourceToLogicalKeys[sbn.key] ?: return false
+        if (activeIslands[logicalKey]?.type != NotificationType.VOICE_MESSAGE) {
+            voicePlaybackUpdateGate.remove(sourceSlot)
+            return false
+        }
+        val extras = sbn.notification.extras
+        val extrasMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val extrasProgress = extras.getInt(Notification.EXTRA_PROGRESS, 0)
+        val remote = if (extrasMax > 0) null else {
+            NotificationRemoteViewsParser.playbackSnapshot(sbn.notification)
+        }
+        val structureFingerprint = listOf(
+            sbn.notification.channelId,
+            extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+            sbn.notification.tickerText?.toString(),
+            sbn.notification.actions.orEmpty().map { action ->
+                listOf(action.title?.toString(), action.semanticAction, action.actionIntent != null)
+            },
+            remote?.structureFingerprint,
+        ).hashCode()
+        val sample = VoicePlaybackUpdateSample(
+            progress = if (extrasMax > 0) extrasProgress else remote?.progress ?: 0,
+            progressMax = if (extrasMax > 0) extrasMax else remote?.progressMax ?: 0,
+            structureFingerprint = structureFingerprint,
+            observedAtMs = android.os.SystemClock.elapsedRealtime(),
+        )
+        return !voicePlaybackUpdateGate.shouldRender(sourceSlot, sample)
     }
 
     private fun isCallSource(sbn: StatusBarNotification): Boolean {

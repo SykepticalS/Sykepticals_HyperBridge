@@ -2,6 +2,7 @@ package com.d4viddf.hyperbridge.xposed
 
 import com.d4viddf.hyperbridge.island.backend.IslandProtocol
 import com.d4viddf.hyperbridge.xposed.hooks.FocusWhitelistHook
+import com.d4viddf.hyperbridge.xposed.hooks.FocusShadeBackgroundHook
 import com.d4viddf.hyperbridge.xposed.hooks.CallIslandPresenceHook
 import com.d4viddf.hyperbridge.xposed.hooks.HeadsUpSuppressionHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandClickCleanupHook
@@ -9,6 +10,7 @@ import com.d4viddf.hyperbridge.xposed.hooks.IslandInlineReplyHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandWindowImeHook
 import com.d4viddf.hyperbridge.xposed.hooks.OuterGlowHook
 import com.d4viddf.hyperbridge.xposed.hooks.BetterAnimationsHook
+import com.d4viddf.hyperbridge.xposed.hooks.ExpandedProgressAnimationHook
 import com.d4viddf.hyperbridge.xposed.hooks.MarqueeHook
 import com.d4viddf.hyperbridge.xposed.hooks.ActiveIslandDismissHook
 import com.d4viddf.hyperbridge.xposed.hooks.IslandTextUpdateAnimationHook
@@ -32,10 +34,12 @@ class HyperBridgeModule : XposedModule() {
                 IslandInlineReplyHook.install(this, param)
                 IslandWindowImeHook.install(this, param)
                 FocusWhitelistHook.install(this, param)
+                FocusShadeBackgroundHook.install(this, param)
                 HeadsUpSuppressionHook.install(this, param)
                 CallIslandPresenceHook.install(this, param)
                 OuterGlowHook.install(this, param)
                 ActiveIslandDismissHook.install(this, param)
+                ExpandedProgressAnimationHook.install(this, param)
                 MarqueeHook.install(this, param)
                 IslandTextUpdateAnimationHook.install(this, param)
                 BetterAnimationsHook.install(this, param)
@@ -47,7 +51,7 @@ class HyperBridgeModule : XposedModule() {
                 }
             }
             IslandProtocol.SCREEN_RECORDER_PACKAGE -> {
-                if (HookConfig.replaceScreenRecorder()) {
+                if (HookConfig.screenRecorderEnabled() && HookConfig.replaceScreenRecorder()) {
                     ScreenRecorderHook.install(this, param)
                 }
             }

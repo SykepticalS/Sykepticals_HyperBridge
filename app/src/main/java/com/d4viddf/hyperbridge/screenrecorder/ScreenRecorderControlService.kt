@@ -12,6 +12,7 @@ import android.os.Messenger
 import android.os.RemoteException
 import android.os.SystemClock
 import com.d4viddf.hyperbridge.service.recording.ScreenRecordingIslandController
+import com.d4viddf.hyperbridge.island.backend.HookConfigSync
 
 /**
  * Owns the recorder session state independently from Xiaomi's notification lifecycle.
@@ -42,15 +43,12 @@ class ScreenRecorderControlService : Service() {
     private val countdownTick = object : Runnable {
         override fun run() {
             if (state != ScreenRecorderContract.STATE_STARTING) return
-            if (countdownRemaining > 1) {
-                countdownRemaining -= 1
+            if (countdownRemaining > 0) {
+                countdownRemaining = ScreenRecorderLifecyclePolicy.nextCountdown(countdownRemaining)
                 broadcastSnapshot()
-                handler.postDelayed(this, ScreenRecorderContract.COUNTDOWN_TICK_MS)
-            } else {
-                // Keep "1" visible until the recorder confirms MediaMuxer.start(). Emitting a
-                // synthetic starting/0 frame races that confirmation and makes Xiaomi remove the
-                // countdown island just before replacing it with the recording state.
-                countdownRemaining = 1
+                if (countdownRemaining > 0) {
+                    handler.postDelayed(this, ScreenRecorderContract.COUNTDOWN_TICK_MS)
+                }
             }
         }
     }
@@ -246,15 +244,18 @@ class ScreenRecorderControlService : Service() {
 
     private fun reportStarting() {
         if (state != ScreenRecorderContract.STATE_IDLE) return
+        val countdownEnabled = HookConfigSync.screenRecorderCountdownEnabled(this)
         state = ScreenRecorderContract.STATE_STARTING
         accumulatedMillis = 0L
         runningSinceElapsed = 0L
         startedAtWallClock = System.currentTimeMillis()
-        countdownRemaining = ScreenRecorderContract.COUNTDOWN_SECONDS
+        countdownRemaining = if (countdownEnabled) ScreenRecorderContract.COUNTDOWN_SECONDS else 0
         handler.removeCallbacks(startTimeout)
         handler.removeCallbacks(countdownTick)
         handler.postDelayed(startTimeout, START_TIMEOUT_MILLIS)
-        handler.postDelayed(countdownTick, ScreenRecorderContract.COUNTDOWN_TICK_MS)
+        if (countdownEnabled) {
+            handler.postDelayed(countdownTick, ScreenRecorderContract.COUNTDOWN_TICK_MS)
+        }
         broadcastSnapshot()
     }
 
@@ -269,7 +270,7 @@ class ScreenRecorderControlService : Service() {
             } else {
                 broadcastCommand(ScreenRecorderContract.MSG_COMMAND_START, extras)
             }
-        }, ScreenRecorderContract.COUNTDOWN_SECONDS * ScreenRecorderContract.COUNTDOWN_TICK_MS)
+        }, ScreenRecorderLifecyclePolicy.startDelayMillis(HookConfigSync.screenRecorderCountdownEnabled(this)))
         return true
     }
 
@@ -409,6 +410,8 @@ class ScreenRecorderControlService : Service() {
     }
 
     private fun requestRecorderStop() {
+        val dismissStarting = ScreenRecorderLifecyclePolicy.stopDismissesImmediately(state)
+        if (dismissStarting) reportIdle()
         if (clients.isEmpty()) {
             val intent = Intent(ScreenRecorderContract.RECORDER_SERVICE_ACTION).apply {
                 setPackage(ScreenRecorderContract.TARGET_PACKAGE)

@@ -16,6 +16,7 @@ import com.d4viddf.hyperbridge.models.IslandVisualMetadata
 import com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig
 import com.d4viddf.hyperbridge.screenrecorder.RecorderSnapshot
 import com.d4viddf.hyperbridge.screenrecorder.ScreenRecorderContract
+import com.d4viddf.hyperbridge.screenrecorder.ScreenRecorderLifecyclePolicy
 import com.d4viddf.hyperbridge.service.BridgeNotificationChannels
 import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentation
 import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentationPolicy
@@ -36,18 +37,25 @@ class ScreenRecordingIslandController(private val context: Context) {
 
     fun onSnapshot(snapshot: RecorderSnapshot) {
         val replace = HookConfigSync.replaceScreenRecorder(context)
+        val integrationEnabled = HookConfigSync.isPackageAllowed(
+            context,
+            ScreenRecordingClassifier.PACKAGE_NAME,
+        )
         // #region agent log
         AgentDebugLog.log(
             "C",
             "ScreenRecordingIslandController.onSnapshot",
             "snapshot received",
-            "{\"replace\":$replace,\"state\":${snapshot.state},\"countdown\":${snapshot.countdownRemaining},\"posted\":$posted}",
+            "{\"replace\":$replace,\"integrationEnabled\":$integrationEnabled,\"state\":${snapshot.state},\"countdown\":${snapshot.countdownRemaining},\"posted\":$posted}",
         )
         // #endregion
-        if (!replace) {
+        if (!ScreenRecorderLifecyclePolicy.ownsIsland(integrationEnabled)) {
             cancel()
             return
         }
+        if (snapshot.state == ScreenRecorderContract.STATE_STARTING &&
+            !HookConfigSync.screenRecorderCountdownEnabled(context)
+        ) return
         if (snapshot.state == ScreenRecorderContract.STATE_IDLE) {
             val completed = hadRecording
             hadRecording = false
@@ -186,11 +194,11 @@ class ScreenRecordingIslandController(private val context: Context) {
         isUpdate: Boolean,
     ) {
         val title = when {
-            session.countdownRemaining > 0 -> context.getString(R.string.screen_recording_starting)
+            session.starting -> context.getString(R.string.screen_recording_starting)
             session.paused -> context.getString(R.string.screen_recording_paused)
             else -> context.getString(R.string.screen_recording_compact)
         }
-        val floatPresentation = if (session.countdownRemaining > 0) {
+        val floatPresentation = if (session.starting) {
             IslandFloatingPresentation(
                 enableFloat = !isUpdate,
                 islandFirstFloat = false,
@@ -297,6 +305,7 @@ class ScreenRecordingIslandController(private val context: Context) {
                 canResume = paused,
             ),
             paused = paused,
+            starting = snapshot.state == ScreenRecorderContract.STATE_STARTING,
             countdownRemaining = snapshot.countdownRemaining.takeIf {
                 snapshot.state == ScreenRecorderContract.STATE_STARTING
             } ?: 0,

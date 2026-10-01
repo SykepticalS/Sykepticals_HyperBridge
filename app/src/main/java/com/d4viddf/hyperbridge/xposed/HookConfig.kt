@@ -43,10 +43,16 @@ object HookConfig {
     fun glowBaseColor(): String? = prefs?.getString(HookConfigSync.KEY_GLOW_BASE_COLOR, "")
         ?.trim()
         ?.takeIf { it.isNotBlank() && !it.equals("#FFFFFF", ignoreCase = true) && !it.equals("#FFFFFFFF", ignoreCase = true) }
-    fun replaceScreenRecorder(): Boolean =
-        prefs?.getBoolean(HookConfigSync.KEY_SCREEN_RECORDER_REPLACE, true) ?: true
+    fun replaceScreenRecorder(): Boolean = screenRecorderEnabled()
     fun screenRecorderImmediateStart(): Boolean =
-        prefs?.getBoolean(HookConfigSync.KEY_SCREEN_RECORDER_IMMEDIATE_START, false) ?: false
+        prefs?.getBoolean(HookConfigSync.KEY_SCREEN_RECORDER_IMMEDIATE_START, true) ?: true
+    fun screenRecorderCountdownEnabled(): Boolean =
+        prefs?.getBoolean(HookConfigSync.KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED, true) ?: true
+    fun screenRecorderEnabled(): Boolean =
+        prefs?.getString(HookConfigSync.KEY_ALLOWED_PACKAGES, "")
+            .orEmpty()
+            .split(',')
+            .any { it == IslandProtocol.SCREEN_RECORDER_PACKAGE }
     fun screenRecorderIconStyle(): String =
         prefs?.getString(HookConfigSync.KEY_SCREEN_RECORDER_ICON_STYLE, "screen_recorder")
             ?.takeIf { it.isNotBlank() }

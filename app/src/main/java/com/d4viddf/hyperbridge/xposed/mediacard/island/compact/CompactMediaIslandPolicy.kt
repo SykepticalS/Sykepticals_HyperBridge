@@ -15,7 +15,9 @@ import kotlin.math.sqrt
 object CompactMediaIslandPolicy {
     const val TITLE_BUDGET_MS = 3_000L
     const val ARTIST_BUDGET_MS = 5_000L
-    const val CYCLE_SCROLL_DELAY_MS = 600L
+    const val CYCLE_SCROLL_DELAY_MS = 100L
+    const val APPEARANCE_RECHECK_MS = 50L
+    const val APPEARANCE_SETTLE_MS = 100L
     const val CYCLE_HOLD_AFTER_SCROLL_MS = 1_000L
     const val FITTING_LINE_HOLD_MS = 1_200L
     const val TITLE_LOOP_HOLD_MS = 1_000L

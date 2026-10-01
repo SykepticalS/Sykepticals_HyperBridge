@@ -130,6 +130,11 @@ object MessageBridgeIdPolicy {
     }
 }
 
+object SourceFocusUpdatePolicy {
+    /** Replayed identical sources are still updates to an already-present Focus entry. */
+    fun isInPlace(kind: IslandPresentationKind): Boolean = kind != IslandPresentationKind.NEW
+}
+
 data class InternalBridgeReplacement(
     val logicalId: String,
     val generation: Long,
@@ -188,6 +193,15 @@ object NotificationLifecyclePolicy {
         type == NotificationType.DOWNLOAD ||
             type == NotificationType.PROGRESS ||
             type == NotificationType.VOICE_MESSAGE
+
+    /**
+     * Transfer and voice-playback notifications update for every progress tick. Treating the
+     * generic "float on update" preference literally for those ticks repeatedly reopens the
+     * island and can overwhelm SystemUI. Their first post may float, but the live session must
+     * remain a silent in-place update until it ends.
+     */
+    fun allowsConfiguredUpdateExpansion(type: NotificationType?): Boolean =
+        !isProgressLifecycle(type)
 
     /**
      * These sessions stay on the source notification and show HyperBridge's expanded Focus

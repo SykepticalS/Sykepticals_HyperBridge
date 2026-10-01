@@ -24,6 +24,7 @@ data class ScreenRecordingSession(
     val capabilities: ScreenRecordingCapabilities,
     val paused: Boolean = false,
     val countdownRemaining: Int = 0,
+    val starting: Boolean = false,
     /** Wall-clock origin adjusted to exclude time spent paused. */
     val timerStartedAt: Long = startedAt,
 )
@@ -88,6 +89,7 @@ object ScreenRecordingSemanticFingerprint {
         session.capabilities.canPause,
         session.capabilities.canResume,
         session.paused,
+        session.starting,
         session.countdownRemaining,
         session.timerStartedAt,
         design.left.name,

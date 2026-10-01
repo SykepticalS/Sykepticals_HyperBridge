@@ -74,7 +74,6 @@ class SystemUiIslandBackend private constructor(private val context: Context) : 
             putBoolean(IslandProtocol.EXTRA_TEXT_UPDATE_ANIMATION, true)
             getString("miui.focus.param")?.let { json ->
                 val skipSides = if (
-                    metadata.semanticType == "SCREEN_RECORDING" ||
                     metadata.semanticType == "VOICE_MESSAGE"
                 ) {
                     setOf("imageTextInfoLeft")

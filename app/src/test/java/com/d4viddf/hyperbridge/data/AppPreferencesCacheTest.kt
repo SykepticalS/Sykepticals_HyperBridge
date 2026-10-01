@@ -8,6 +8,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,6 +76,17 @@ class AppPreferencesCacheTest {
         preferences.putInCacheForTesting(SettingsKeys.ALLOWED_PACKAGES, "com.telegram")
         assertFalse(preferences.isAppAllowedSync("com.whatsapp"))
         assertTrue(preferences.isAppAllowedSync("com.telegram"))
+    }
+
+    @Test
+    fun screenRecorderDefaultsAreEnabledOnFreshSettings() = runBlocking {
+        assertEquals(
+            setOf("com.miui.screenrecorder"),
+            preferences.allowedPackagesFlow.first(),
+        )
+        assertTrue(preferences.screenRecordingReplaceFloatingFlow.first())
+        assertTrue(preferences.screenRecordingImmediateStartFlow.first())
+        assertTrue(preferences.screenRecordingCountdownEnabledFlow.first())
     }
 
     @Test

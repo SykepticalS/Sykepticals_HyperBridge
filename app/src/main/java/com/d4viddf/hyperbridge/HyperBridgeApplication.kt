@@ -24,6 +24,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
+private data class ScreenRecorderHookConfig(
+    val replace: Boolean,
+    val immediate: Boolean,
+    val countdown: Boolean,
+    val icon: String,
+)
+
 class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var xposedService: XposedService? = null
@@ -83,11 +90,18 @@ class HyperBridgeApplication : Application(), XposedServiceHelper.OnServiceListe
             combine(
                 preferences.screenRecordingReplaceFloatingFlow,
                 preferences.screenRecordingImmediateStartFlow,
+                preferences.screenRecordingCountdownEnabledFlow,
                 preferences.screenRecordingIconStyleFlow,
-            ) { replace, immediate, icon ->
-                Triple(replace, immediate, icon)
-            }.collect { (replace, immediate, icon) ->
-                HookConfigSync.setScreenRecorderReplacement(this@HyperBridgeApplication, replace, immediate, icon)
+            ) { replace, immediate, countdown, icon ->
+                ScreenRecorderHookConfig(replace, immediate, countdown, icon)
+            }.collect { recorderConfig ->
+                HookConfigSync.setScreenRecorderReplacement(
+                    this@HyperBridgeApplication,
+                    recorderConfig.replace,
+                    recorderConfig.immediate,
+                    recorderConfig.countdown,
+                    recorderConfig.icon,
+                )
             }
         }
     }

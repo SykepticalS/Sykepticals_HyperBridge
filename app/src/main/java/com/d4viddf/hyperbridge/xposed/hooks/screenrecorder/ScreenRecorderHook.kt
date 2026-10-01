@@ -174,6 +174,9 @@ object ScreenRecorderHook {
         }
         onClick.isAccessible = true
         module.hook(onClick).intercept { chain ->
+            if (!HookConfig.screenRecorderEnabled() || !HookConfig.replaceScreenRecorder()) {
+                return@intercept chain.proceed()
+            }
             val service = chain.thisObject as? TileService ?: return@intercept chain.proceed()
             module.log("screen recorder intercepted ${service.javaClass.name}.onClick")
             runCatching {
@@ -548,6 +551,9 @@ object ScreenRecorderHook {
             ?.let { onStartCommand ->
                 onStartCommand.isAccessible = true
                 module.hook(onStartCommand).intercept { chain ->
+                    if (!HookConfig.screenRecorderEnabled() || !HookConfig.replaceScreenRecorder()) {
+                        return@intercept chain.proceed()
+                    }
                     val service = chain.thisObject as? Service ?: return@intercept chain.proceed()
                     initializeControlClient(service, module)
                     val intent = chain.args.getOrNull(0) as? Intent ?: return@intercept chain.proceed()
@@ -833,6 +839,7 @@ object ScreenRecorderHook {
                 canResume = snapshot.state == ScreenRecorderContract.STATE_PAUSED,
             ),
             paused = snapshot.state == ScreenRecorderContract.STATE_PAUSED,
+            starting = snapshot.state == ScreenRecorderContract.STATE_STARTING,
             countdownRemaining = snapshot.countdownRemaining.takeIf {
                 snapshot.state == ScreenRecorderContract.STATE_STARTING
             } ?: 0,
@@ -931,6 +938,10 @@ object ScreenRecorderHook {
     private fun scheduleConfirmedStart(context: Context) {
         cancelPendingConfirmedStart()
         xposedModule?.let { initializeControlClient(context, it) }
+        if (!HookConfig.screenRecorderCountdownEnabled()) {
+            requestRecorderStart(context)
+            return
+        }
         val armed = AtomicBoolean(false)
         val start = Runnable {
             pendingConfirmedStart = null
@@ -952,7 +963,8 @@ object ScreenRecorderHook {
             pendingConfirmedStart = start
             mainHandler.postDelayed(
                 start,
-                ScreenRecorderContract.COUNTDOWN_SECONDS * ScreenRecorderContract.COUNTDOWN_TICK_MS,
+                com.d4viddf.hyperbridge.screenrecorder.ScreenRecorderLifecyclePolicy
+                    .startDelayMillis(countdownEnabled = true),
             )
         }
         ScreenRecorderControlClient.reportStarting()

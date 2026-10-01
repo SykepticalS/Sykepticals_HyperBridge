@@ -133,7 +133,6 @@ object MarqueeHook {
                 module.hook(method).intercept { chain ->
                     val island = chain.thisObject as? ViewGroup
                     val token = Any()
-                    val visualBefore = island?.let(IslandLiveVisual::capture)
                     val incoming = IslandOwnedNotification.fromIslandData(chain.args.firstOrNull())
                     val nativeTextUpdate = incoming?.owned == true &&
                         incoming.extras.getBoolean("miui.island.updateNoFloat", false) &&
@@ -201,7 +200,6 @@ object MarqueeHook {
                         generation = generation,
                         ongoing = ongoing || callLifetime,
                         notification = sbn ?: islandNotifications[island],
-                        visualBefore = visualBefore,
                         settleUntilMs = if (nativeTextUpdate && !preserveScroll) {
                             SystemClock.uptimeMillis() + NATIVE_TEXT_EFFECT_SETTLE_MS
                         } else {
@@ -236,7 +234,6 @@ object MarqueeHook {
         generation: Long,
         ongoing: Boolean,
         notification: StatusBarNotification?,
-        visualBefore: IslandLiveVisual.Snapshot?,
         settleUntilMs: Long,
         attempt: Int = 0,
         previousGeometrySignature: Int? = null,
@@ -256,7 +253,6 @@ object MarqueeHook {
                         generation,
                         ongoing,
                         notification,
-                        visualBefore,
                         settleUntilMs,
                         attempt,
                         previousGeometrySignature,
@@ -309,7 +305,6 @@ object MarqueeHook {
                     generation,
                     ongoing,
                     notification,
-                    visualBefore,
                     settleUntilMs,
                     attempt + 1,
                     geometrySignature,
@@ -341,9 +336,7 @@ object MarqueeHook {
                 )
             }
         }
-        // Progress interpolation stays on existing widgets. Never rewrite subtitle TextViews.
-        runCatching { IslandLiveVisual.play(island, visualBefore, apply) }
-            .onFailure { apply() }
+        apply()
     }
 
     private fun applyMarquee(
@@ -759,7 +752,6 @@ object MarqueeHook {
                     generation = generation,
                     ongoing = ongoing,
                     notification = notification,
-                    visualBefore = null,
                     settleUntilMs = 0L,
                 )
             }

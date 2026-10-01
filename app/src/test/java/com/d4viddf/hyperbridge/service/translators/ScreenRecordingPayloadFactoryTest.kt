@@ -186,6 +186,28 @@ class ScreenRecordingPayloadFactoryTest {
     }
 
     @Test
+    fun countdownZeroRemainsAStartingFrameUntilRecorderConfirmation() {
+        val root = JsonParser.parseString(
+            payload(
+                canStop = true,
+                countdownRemaining = 0,
+                starting = true,
+                compactText = "Startingâ€¦",
+                expandedText = "Startingâ€¦",
+            )
+        ).asJsonObject
+        val param = root.getAsJsonObject("param_v2")
+        val bigIsland = param.getAsJsonObject("param_island").getAsJsonObject("bigIslandArea")
+
+        assertEquals(
+            "0",
+            bigIsland.getAsJsonObject("imageTextInfoRight").getAsJsonObject("textInfo")["title"].asString,
+        )
+        assertFalse(bigIsland.has("sameWidthDigitInfo"))
+        assertFalse(param.has("animTextInfo"))
+    }
+
+    @Test
     fun pausedTimerUsesAccumulatedActiveDurationOrigin() {
         val root = JsonParser.parseString(
             payload(
@@ -210,6 +232,7 @@ class ScreenRecordingPayloadFactoryTest {
         canStop: Boolean,
         design: com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig = com.d4viddf.hyperbridge.models.ScreenRecordingDesignConfig(),
         countdownRemaining: Int = 0,
+        starting: Boolean = countdownRemaining > 0,
         paused: Boolean = false,
         timerStartedAt: Long = 1_000L,
         compactText: String = "Recording..",
@@ -222,6 +245,7 @@ class ScreenRecordingPayloadFactoryTest {
             startedAt = 1_000L,
             capabilities = ScreenRecordingCapabilities(canStop = canStop),
             paused = paused,
+            starting = starting,
             countdownRemaining = countdownRemaining,
             timerStartedAt = timerStartedAt,
         ),

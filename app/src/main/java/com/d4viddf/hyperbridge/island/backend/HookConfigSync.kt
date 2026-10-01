@@ -20,6 +20,7 @@ object HookConfigSync {
     const val KEY_GLOW_BASE_COLOR = "glow_base_color"
     const val KEY_SCREEN_RECORDER_REPLACE = "screen_recorder_replace"
     const val KEY_SCREEN_RECORDER_IMMEDIATE_START = "screen_recorder_immediate_start"
+    const val KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED = "screen_recorder_countdown_enabled"
     const val KEY_SCREEN_RECORDER_ICON_STYLE = "screen_recorder_icon_style"
     const val KEY_BETTER_ANIMATIONS_ENABLED = "better_animations_enabled"
     private const val LEGACY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
@@ -51,7 +52,11 @@ object HookConfigSync {
             .remove(LEGACY_PERMANENT_ISLAND_ENABLED)
             .putBoolean(
                 KEY_SCREEN_RECORDER_IMMEDIATE_START,
-                local(context).getBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, false),
+                local(context).getBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, true),
+            )
+            .putBoolean(
+                KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED,
+                local(context).getBoolean(KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED, true),
             )
             .putString(
                 KEY_SCREEN_RECORDER_ICON_STYLE,
@@ -110,9 +115,16 @@ object HookConfigSync {
     fun singleColorGlow(context: Context): Boolean = local(context).getBoolean(KEY_SINGLE_COLOR_GLOW, false)
     fun glowBaseColor(context: Context): String = migratedGlowBaseColor(local(context).getString(KEY_GLOW_BASE_COLOR, ""))
     fun replaceScreenRecorder(context: Context): Boolean =
-        local(context).getBoolean(KEY_SCREEN_RECORDER_REPLACE, true)
+        isPackageAllowed(context, IslandProtocol.SCREEN_RECORDER_PACKAGE)
     fun screenRecorderImmediateStart(context: Context): Boolean =
-        local(context).getBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, false)
+        local(context).getBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, true)
+    fun screenRecorderCountdownEnabled(context: Context): Boolean =
+        local(context).getBoolean(KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED, true)
+    fun isPackageAllowed(context: Context, packageName: String): Boolean =
+        local(context).getString(KEY_ALLOWED_PACKAGES, "")
+            .orEmpty()
+            .split(',')
+            .any { it == packageName }
     fun screenRecorderIconStyle(context: Context): String =
         local(context).getString(KEY_SCREEN_RECORDER_ICON_STYLE, "screen_recorder") ?: "screen_recorder"
     fun betterAnimationsEnabled(context: Context): Boolean =
@@ -127,11 +139,13 @@ object HookConfigSync {
         context: Context,
         replaceFloatingWindow: Boolean,
         immediateStart: Boolean,
+        countdownEnabled: Boolean,
         iconStyle: String,
     ) {
         local(context).edit()
             .putBoolean(KEY_SCREEN_RECORDER_REPLACE, replaceFloatingWindow)
             .putBoolean(KEY_SCREEN_RECORDER_IMMEDIATE_START, immediateStart)
+            .putBoolean(KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED, countdownEnabled)
             .putString(KEY_SCREEN_RECORDER_ICON_STYLE, iconStyle)
             .apply()
         sync(context)
