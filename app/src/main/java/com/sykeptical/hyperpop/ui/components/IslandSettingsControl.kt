@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.models.GlowMode
 import com.sykeptical.hyperpop.models.IslandConfig
+import com.sykeptical.hyperpop.ui.system.HpSwitch
 import com.sykeptical.hyperpop.models.IslandSceneBehavior
 import com.sykeptical.hyperpop.models.IslandTextContent
 import com.sykeptical.hyperpop.models.MarqueeDismissMode
@@ -75,11 +76,15 @@ private val timePopUpSteps = listOf(
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30
 )
 
+enum class IslandControlGroup { Timing, Text, Glow, Scenes }
+
 @Composable
 fun IslandSettingsControl(
     config: IslandConfig,
     defaultConfig: IslandConfig? = null,
-    onUpdate: (IslandConfig) -> Unit
+    onUpdate: (IslandConfig) -> Unit,
+    groups: Set<IslandControlGroup> = IslandControlGroup.entries.toSet(),
+    showForceGlow: Boolean = true,
 ) {
     val displayConfig = if (defaultConfig != null) config.mergeWith(defaultConfig) else config
 
@@ -92,6 +97,7 @@ fun IslandSettingsControl(
     val contentGroupSize = 2 + (if (showLeftCustom) 1 else 0) + (if (showRightCustom) 1 else 0)
 
     Column {
+        if (IslandControlGroup.Timing in groups) {
         SectionLabel(stringResource(R.string.global_behavior), first = true)
         SettingsCard(shape = groupedShape(1, 0)) {
             SettingsRow(
@@ -103,7 +109,7 @@ fun IslandSettingsControl(
                     stringResource(R.string.behavior_hide_desc)
                 },
                 trailing = {
-                    Switch(
+                    HpSwitch(
                         checked = isTimeoutEnabled,
                         onCheckedChange = { enabled ->
                             val newTimeout = if (enabled) 5 else 0
@@ -137,7 +143,7 @@ fun IslandSettingsControl(
                     title = stringResource(R.string.setting_float),
                     subtitle = stringResource(R.string.setting_float_desc),
                     trailing = {
-                        Switch(
+                        HpSwitch(
                             checked = isFloatEnabled,
                             onCheckedChange = { onUpdate(config.copy(firstFloat = it)) }
                         )
@@ -166,7 +172,9 @@ fun IslandSettingsControl(
                 shape = groupedShape(2, 1)
             )
         }
+        }
 
+        if (IslandControlGroup.Text in groups) {
         SectionLabel("Scrolling")
         SettingsStack {
             InheritedBooleanSettingCard(
@@ -237,7 +245,10 @@ fun IslandSettingsControl(
                 )
             }
         }
+        }
 
+        if (IslandControlGroup.Glow in groups) {
+        val glowCount = if (showForceGlow) 6 else 4
         SectionLabel("Outer Glow")
         SettingsStack {
             InheritedEnumSettingCard(
@@ -248,7 +259,7 @@ fun IslandSettingsControl(
                 displayValue = displayConfig.islandGlowMode ?: GlowMode.OFF,
                 values = GlowMode.entries,
                 allowInherit = defaultConfig != null,
-                shape = groupedShape(6, 0),
+                shape = groupedShape(glowCount, 0),
                 onChange = { onUpdate(config.copy(islandGlowMode = it)) },
                 label = ::prettyGlowLabel,
             )
@@ -256,17 +267,19 @@ fun IslandSettingsControl(
                 title = "Island glow color",
                 value = displayConfig.islandGlowColor.orEmpty(),
                 icon = Icons.Default.Palette,
-                shape = groupedShape(6, 1),
+                shape = groupedShape(glowCount, 1),
                 onChange = { onUpdate(config.copy(islandGlowColor = it.ifBlank { null })) }
             )
-            SettingsToggleCard(
-                title = "Force island glow",
-                subtitle = "Keep the collapsed glow visible when Xiaomi would fade it.",
-                icon = Icons.Default.LightMode,
-                checked = displayConfig.forceIslandGlow == true,
-                onCheckedChange = { onUpdate(config.copy(forceIslandGlow = it)) },
-                shape = groupedShape(6, 2)
-            )
+            if (showForceGlow) {
+                SettingsToggleCard(
+                    title = "Force island glow",
+                    subtitle = "Keep the collapsed glow visible when Xiaomi would fade it.",
+                    icon = Icons.Default.LightMode,
+                    checked = displayConfig.forceIslandGlow == true,
+                    onCheckedChange = { onUpdate(config.copy(forceIslandGlow = it)) },
+                    shape = groupedShape(glowCount, 2)
+                )
+            }
             InheritedEnumSettingCard(
                 title = "Focus / expanded outer glow",
                 subtitle = "Glow around the expanded island.",
@@ -275,7 +288,7 @@ fun IslandSettingsControl(
                 displayValue = displayConfig.focusGlowMode ?: GlowMode.OFF,
                 values = GlowMode.entries,
                 allowInherit = defaultConfig != null,
-                shape = groupedShape(6, 3),
+                shape = groupedShape(glowCount, if (showForceGlow) 3 else 2),
                 onChange = { onUpdate(config.copy(focusGlowMode = it)) },
                 label = ::prettyGlowLabel,
             )
@@ -283,19 +296,23 @@ fun IslandSettingsControl(
                 title = "Focus glow color",
                 value = displayConfig.focusGlowColor.orEmpty(),
                 icon = Icons.Default.Palette,
-                shape = groupedShape(6, 4),
+                shape = groupedShape(glowCount, if (showForceGlow) 4 else 3),
                 onChange = { onUpdate(config.copy(focusGlowColor = it.ifBlank { null })) }
             )
-            SettingsToggleCard(
-                title = "Force focus glow",
-                subtitle = "Keep the expanded glow visible when Xiaomi would fade it.",
-                icon = Icons.Default.LightMode,
-                checked = displayConfig.forceFocusGlow == true,
-                onCheckedChange = { onUpdate(config.copy(forceFocusGlow = it)) },
-                shape = groupedShape(6, 5)
-            )
+            if (showForceGlow) {
+                SettingsToggleCard(
+                    title = "Force focus glow",
+                    subtitle = "Keep the expanded glow visible when Xiaomi would fade it.",
+                    icon = Icons.Default.LightMode,
+                    checked = displayConfig.forceFocusGlow == true,
+                    onCheckedChange = { onUpdate(config.copy(forceFocusGlow = it)) },
+                    shape = groupedShape(glowCount, 5)
+                )
+            }
+        }
         }
 
+        if (IslandControlGroup.Scenes in groups) {
         SectionLabel("System Behavior")
         SettingsStack {
             EnumSettingCard(
@@ -316,6 +333,7 @@ fun IslandSettingsControl(
                 shape = groupedShape(2, 1),
                 onChange = { onUpdate(config.copy(landscapeBehavior = it)) }
             )
+        }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -379,8 +397,8 @@ fun SectionLabel(title: String, first: Boolean = false) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.Normal,
         modifier = Modifier.padding(
             start = 16.dp,
             end = 16.dp,
@@ -392,7 +410,7 @@ fun SectionLabel(title: String, first: Boolean = false) {
 
 @Composable
 fun SettingsStack(content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp), content = content)
 }
 
 private fun groupedShape(groupSize: Int, index: Int): Shape =
@@ -461,19 +479,12 @@ fun SettingsRow(
 
 @Composable
 private fun SettingsIcon(icon: ImageVector) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp)
-        )
-    }
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(22.dp),
+    )
 }
 
 @Composable
@@ -715,7 +726,7 @@ fun SettingsToggleCard(
             subtitle = subtitle,
             enabled = enabled,
             trailing = {
-                Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
+                HpSwitch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange, interactive = false)
             }
         )
     }

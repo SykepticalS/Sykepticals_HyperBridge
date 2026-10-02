@@ -5,14 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.ToggleOn
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.ToggleOff
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ShortNavigationBar
-import androidx.compose.material3.ShortNavigationBarItem
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,72 +19,62 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.ui.AppListViewModel
+import com.sykeptical.hyperpop.ui.SystemIntegrationId
+import com.sykeptical.hyperpop.ui.screens.settings.SettingsRootScreen
+import com.sykeptical.hyperpop.ui.system.HpBottomBar
+import com.sykeptical.hyperpop.ui.system.SettingsPlace
 
 @Composable
 fun HomeScreen(
     viewModel: AppListViewModel = viewModel(),
-    onSettingsClick: () -> Unit,
+    onPlace: (SettingsPlace) -> Unit,
+    onSearch: () -> Unit,
     onNavConfigClick: (String) -> Unit,
     onScreenRecordingConfigClick: () -> Unit = {},
-    onAppConfigClick: (String) -> Unit = {}
+    onAppConfigClick: (String) -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val activeApps by viewModel.activeAppsState.collectAsState()
     val libraryApps by viewModel.libraryAppsState.collectAsState()
     val systemIntegrations by viewModel.systemIntegrationsState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val enabledCount = libraryApps.count { it.isBridged }
 
     Scaffold(
         bottomBar = {
-            ShortNavigationBar {
-                ShortNavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Icon(if (selectedTab == 0) Icons.Filled.ToggleOn else Icons.Outlined.ToggleOff, null) },
-                    label = { Text(stringResource(R.string.tab_active)) }
-                )
-                ShortNavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Icon(if (selectedTab == 1) Icons.Filled.Apps else Icons.Outlined.Apps, null) },
-                    label = { Text(stringResource(R.string.tab_library)) }
-                )
-            }
-        }
+            HpBottomBar(
+                items = listOf(
+                    stringResource(R.string.tab_home) to Icons.Default.Home,
+                    stringResource(R.string.tab_apps) to Icons.Default.Apps,
+                    stringResource(R.string.tab_settings) to Icons.Default.Settings,
+                ),
+                selected = selectedTab,
+                onSelect = { selectedTab = it },
+            )
+        },
     ) { padding ->
         Box(
-            modifier = Modifier
+            Modifier
                 .padding(bottom = padding.calculateBottomPadding())
-                .fillMaxSize()
+                .fillMaxSize(),
         ) {
             when (selectedTab) {
-                0 -> ActiveAppsPage(
-                    apps = activeApps,
-                    isLoading = isLoading,
-                    systemIntegrations = systemIntegrations,
-                    viewModel = viewModel,
-                    onConfig = { onAppConfigClick(it.packageName) },
-                    onSystemConfig = { integration ->
-                        if (integration.id == com.sykeptical.hyperpop.ui.SystemIntegrationId.SCREEN_RECORDER) {
-                            onScreenRecordingConfigClick()
-                        }
-                    },
-                    onSettingsClick = onSettingsClick
+                0 -> OverviewPage(
+                    enabledApps = enabledCount,
+                    onPlace = onPlace,
+                    onOpenApps = { selectedTab = 1 },
                 )
-
-                else -> LibraryPage(
+                1 -> LibraryPage(
                     apps = libraryApps,
                     isLoading = isLoading,
                     systemIntegrations = systemIntegrations,
                     viewModel = viewModel,
                     onConfig = { onAppConfigClick(it.packageName) },
                     onSystemConfig = { integration ->
-                        if (integration.id == com.sykeptical.hyperpop.ui.SystemIntegrationId.SCREEN_RECORDER) {
-                            onScreenRecordingConfigClick()
-                        }
+                        if (integration.id == SystemIntegrationId.SCREEN_RECORDER) onScreenRecordingConfigClick()
                     },
-                    onSettingsClick = onSettingsClick
+                    showSettingsAction = false,
                 )
+                else -> SettingsRootScreen(onPlace = onPlace, onSearch = onSearch)
             }
         }
     }

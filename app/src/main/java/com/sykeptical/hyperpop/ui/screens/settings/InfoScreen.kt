@@ -175,53 +175,14 @@ fun InfoScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
 
-            // --- CONFIGURATION GROUP ---
-            SettingsSection(
-                title = stringResource(R.string.group_configuration),
-                items = listOf(
-                    SettingsItemData(Icons.Default.SettingsSuggest, stringResource(R.string.system_setup), stringResource(R.string.system_setup_subtitle), onSetupClick),
-                    SettingsItemData(Icons.Default.Tune, stringResource(R.string.island_behavior), stringResource(R.string.limit_strategy), onBehaviorClick),
-                    SettingsItemData(Icons.Default.Palette, stringResource(R.string.global_settings), stringResource(R.string.island_appearance), onGlobalSettingsClick),
-                    SettingsItemData(Icons.Default.Block, stringResource(R.string.blocked_terms), stringResource(R.string.spoiler_subtitle), onBlocklistClick),
-                    SettingsItemData(Icons.Default.Save, stringResource(R.string.backup_restore_title), stringResource(R.string.backup_section_title), onBackupClick)
-                )
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // --- GUIDES GROUP ---
-            SettingsSection(
-                title = stringResource(R.string.group_guides),
-                items = listOf(
-                    SettingsItemData(
-                        Icons.AutoMirrored.Filled.MenuBook,
-                        stringResource(R.string.documentation_title),
-                        stringResource(R.string.documentation_subtitle)
-                    ) {
-                        uriHandler.openUri(DocumentationUrls.DOCS)
-                    },
-                    SettingsItemData(
-                        Icons.Default.Code,
-                        stringResource(R.string.diagnostics_title),
-                        stringResource(R.string.diagnostics_subtitle),
-                        onDiagnosticsClick
-                    ),
-                    SettingsItemData(
-                        Icons.Default.BugReport,
-                        stringResource(R.string.bug_report_entry_title),
-                        stringResource(R.string.bug_report_entry_subtitle),
-                        onBugReportClick
-                    )
-                )
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
             // --- ABOUT GROUP ---
             SettingsSection(
                 title = stringResource(R.string.group_about),
                 items = listOf(
                     SettingsItemData(Icons.Default.Language, stringResource(R.string.language), stringResource(R.string.language_desc)) { showLanguageDialog = true },
+                    SettingsItemData(Icons.AutoMirrored.Filled.MenuBook, stringResource(R.string.documentation_title), stringResource(R.string.documentation_subtitle)) {
+                        uriHandler.openUri(DocumentationUrls.DOCS)
+                    },
                     SettingsItemData(Icons.Default.Person, stringResource(R.string.developer), stringResource(R.string.developer_subtitle)) { },
                     SettingsItemData(Icons.Default.History, stringResource(R.string.version_history), "0.1.0 - $appVersion", onHistoryClick),
                     SettingsItemData(Icons.Default.Description, stringResource(R.string.licenses), stringResource(R.string.licenses_subtitle), onLicensesClick),
@@ -276,7 +237,7 @@ fun SettingsSection(title: String, items: List<SettingsItemData>) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
         )

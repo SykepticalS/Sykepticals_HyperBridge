@@ -43,7 +43,7 @@ fun ExpressiveGroupCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         // Expressive Design uses larger corner radii (24dp - 28dp)
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(16.dp),
         // Use 'surfaceContainer' for a distinct but subtle background separation
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design

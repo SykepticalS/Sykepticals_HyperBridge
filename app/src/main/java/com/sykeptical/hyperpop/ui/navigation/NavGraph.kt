@@ -9,6 +9,7 @@ import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.data.AppPreferences
 import com.sykeptical.hyperpop.ui.screens.home.HomeScreen
 import com.sykeptical.hyperpop.ui.screens.onboarding.OnboardingScreen
+import com.sykeptical.hyperpop.ui.screens.settings.AdvancedHubScreen
 import com.sykeptical.hyperpop.ui.screens.settings.AppConfigScreen
 import com.sykeptical.hyperpop.ui.screens.settings.AppPriorityScreen
 import com.sykeptical.hyperpop.ui.screens.settings.BackupSettingsScreen
@@ -17,13 +18,19 @@ import com.sykeptical.hyperpop.ui.screens.settings.BugReportScreen
 import com.sykeptical.hyperpop.ui.screens.settings.ChangelogHistoryScreen
 import com.sykeptical.hyperpop.ui.screens.settings.DiagnosticsScreen
 import com.sykeptical.hyperpop.ui.screens.settings.GlobalBlocklistScreen
-import com.sykeptical.hyperpop.ui.screens.settings.GlobalSettingsScreen
 import com.sykeptical.hyperpop.ui.screens.settings.ImportPreviewScreen
 import com.sykeptical.hyperpop.ui.screens.settings.InfoScreen
 import com.sykeptical.hyperpop.ui.screens.settings.IslandSettingsScreen
+import com.sykeptical.hyperpop.ui.screens.settings.IslandsHubScreen
 import com.sykeptical.hyperpop.ui.screens.settings.LicensesScreen
 import com.sykeptical.hyperpop.ui.screens.settings.MediaCardSettingsScreen
 import com.sykeptical.hyperpop.ui.screens.settings.NavCustomizationScreen
+import com.sykeptical.hyperpop.ui.screens.settings.NotificationsHubScreen
+import com.sykeptical.hyperpop.ui.screens.settings.PrioritySettingsScreen
+import com.sykeptical.hyperpop.ui.screens.settings.SettingsSearchScreen
+import com.sykeptical.hyperpop.ui.screens.settings.SetupHealthScreen
+import com.sykeptical.hyperpop.ui.system.SettingsFocus
+import com.sykeptical.hyperpop.ui.system.SettingsPlace
 import com.sykeptical.hyperpop.ui.screens.settings.PrioritySettingsScreen
 import com.sykeptical.hyperpop.ui.screens.settings.SetupHealthScreen
 import com.sykeptical.hyperpop.util.BackupManager
@@ -50,7 +57,8 @@ fun mainNavGraph(
     }
     entry<Screen.Home> {
         HomeScreen(
-            onSettingsClick = { navigator.navigate(Screen.Info) },
+            onPlace = { navigator.open(it) },
+            onSearch = { navigator.navigate(Screen.SettingsSearch) },
             onNavConfigClick = { pkg -> navigator.navigate(Screen.NavCustomization(pkg)) },
             onScreenRecordingConfigClick = { navigator.navigate(Screen.ScreenRecordingCustomization) },
             onAppConfigClick = { pkg -> navigator.navigate(Screen.AppConfig(pkg)) }
@@ -72,14 +80,7 @@ fun mainNavGraph(
         )
     }
     entry<Screen.GlobalSettings> {
-        GlobalSettingsScreen(
-            onBack = { navigator.goBack() },
-            onNavSettingsClick = { navigator.navigate(Screen.NavCustomization(null)) },
-            onIslandSettingsClick = { navigator.navigate(Screen.IslandSettings) },
-            onMediaCardSettingsClick = { navigator.navigate(Screen.MediaCardSettings) },
-            onDndSettingsClick = { navigator.navigate(Screen.DndSettings) },
-            onLoginCodeSettingsClick = { navigator.navigate(Screen.LoginCodeSettings) }
-        )
+        IslandsHubScreen(onBack = { navigator.goBack() }, onPlace = { navigator.open(it) })
     }
     entry<Screen.DndSettings> {
         com.sykeptical.hyperpop.ui.screens.settings.DndSettingsScreen(onBack = { navigator.goBack() })
@@ -159,7 +160,29 @@ fun mainNavGraph(
         )
     }
     entry<Screen.IslandSettings> {
-        IslandSettingsScreen(onBack = { navigator.goBack() })
+        IslandsHubScreen(onBack = { navigator.goBack() }, onPlace = { navigator.open(it) })
+    }
+    entry<Screen.IslandSection> { key ->
+        IslandSettingsScreen(
+            section = key.id,
+            onBack = { navigator.goBack() },
+            onOpenDnd = { navigator.navigate(Screen.DndSettings) },
+        )
+    }
+    entry<Screen.NotificationsHub> {
+        NotificationsHubScreen(onBack = { navigator.goBack() }, onPlace = { navigator.open(it) })
+    }
+    entry<Screen.AdvancedHub> {
+        AdvancedHubScreen(onBack = { navigator.goBack() }, onPlace = { navigator.open(it) })
+    }
+    entry<Screen.SettingsSearch> {
+        SettingsSearchScreen(
+            onBack = { navigator.goBack() },
+            onPlace = { place, highlight ->
+                SettingsFocus.key = highlight
+                navigator.open(place)
+            },
+        )
     }
     entry<Screen.MediaCardSettings> {
         MediaCardSettingsScreen(onBack = { navigator.goBack() })
@@ -180,5 +203,33 @@ fun mainNavGraph(
             onNavConfigClick = { pkg -> navigator.navigate(Screen.NavCustomization(pkg)) }
         )
     }
+}
+
+private fun Navigator<Screen>.open(place: SettingsPlace) {
+    val route: Screen = when (place) {
+        SettingsPlace.ISLANDS -> Screen.IslandSettings
+        SettingsPlace.NOTIFICATIONS -> Screen.NotificationsHub
+        SettingsPlace.SYSTEM -> Screen.Setup
+        SettingsPlace.ADVANCED -> Screen.AdvancedHub
+        SettingsPlace.ABOUT -> Screen.Info
+        SettingsPlace.PRIORITY -> Screen.Behavior
+        SettingsPlace.TIMING -> Screen.IslandSection("timing")
+        SettingsPlace.TEXT -> Screen.IslandSection("text")
+        SettingsPlace.GLOW -> Screen.IslandSection("glow")
+        SettingsPlace.SCENES -> Screen.IslandSection("scenes")
+        SettingsPlace.MOTION -> Screen.IslandSection("motion")
+        SettingsPlace.EXPERIMENTS -> Screen.IslandSection("experiments")
+        SettingsPlace.LOGIN_CODES -> Screen.LoginCodeSettings
+        SettingsPlace.DND -> Screen.DndSettings
+        SettingsPlace.NAVIGATION -> Screen.NavCustomization(null)
+        SettingsPlace.MEDIA -> Screen.MediaCardSettings
+        SettingsPlace.BLOCKLIST -> Screen.GlobalBlocklist
+        SettingsPlace.DIAGNOSTICS -> Screen.Diagnostics
+        SettingsPlace.BUG_REPORT -> Screen.BugReport
+        SettingsPlace.BACKUP -> Screen.Backup
+        SettingsPlace.SCREEN_RECORDING -> Screen.ScreenRecordingCustomization
+        SettingsPlace.APPS -> Screen.Home
+    }
+    navigate(route)
 }
 

@@ -33,6 +33,10 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +53,7 @@ import com.sykeptical.hyperpop.ui.components.AppListFilterSection
 import com.sykeptical.hyperpop.ui.components.AppListItem
 import com.sykeptical.hyperpop.ui.components.EmptyState
 import com.sykeptical.hyperpop.ui.components.SystemIntegrationListItem
+import com.sykeptical.hyperpop.ui.system.HpSegmented
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -59,14 +64,18 @@ fun LibraryPage(
     viewModel: AppListViewModel,
     onConfig: (AppInfo) -> Unit,
     onSystemConfig: (SystemIntegrationInfo) -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit = {},
+    showSettingsAction: Boolean = true,
 ) {
+    var enabledOnly by remember { mutableStateOf(false) }
     val searchQuery = viewModel.librarySearch.collectAsState().value
     val selectedCategory = viewModel.libraryCategory.collectAsState().value
     val sortOption = viewModel.librarySort.collectAsState().value
     val systemSelected = viewModel.librarySystemSelected.collectAsState().value
+    val visibleApps = if (enabledOnly) apps.filter { it.isBridged } else apps
+    val visibleSystems = if (enabledOnly) systemIntegrations.filter { it.enabled } else systemIntegrations
     val showSystem = systemSelected || (selectedCategory == AppCategory.ALL && searchQuery.isBlank())
-    val hasSystemContent = showSystem && systemIntegrations.isNotEmpty()
+    val hasSystemContent = showSystem && visibleSystems.isNotEmpty()
 
     val isRefreshing = isLoading && apps.isNotEmpty()
     val pullState = rememberPullToRefreshState()
@@ -76,9 +85,9 @@ fun LibraryPage(
         contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name),style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.tab_apps), style = MaterialTheme.typography.headlineMedium) },
                 actions = {
-                    Surface(
+                    if (showSettingsAction) Surface(
                     modifier = Modifier
                         .size(40.dp)
                         .padding(end = 8.dp)
@@ -107,6 +116,12 @@ fun LibraryPage(
                 systemSelected = systemSelected,
                 onSystemSelected = viewModel::selectLibrarySystem
             )
+            HpSegmented(
+                options = listOf(stringResource(R.string.apps_filter_all), stringResource(R.string.apps_filter_enabled)),
+                selected = if (enabledOnly) 1 else 0,
+                onSelect = { enabledOnly = it == 1 },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
 
             Box(
                 modifier = Modifier
@@ -127,12 +142,12 @@ fun LibraryPage(
                         )
                     }
                 ) {
-                    if (apps.isEmpty() && !hasSystemContent && isLoading) {
+                    if (visibleApps.isEmpty() && !hasSystemContent && isLoading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             LoadingIndicator()
                         }
                     }
-                    else if (apps.isEmpty() && !hasSystemContent) {
+                    else if (visibleApps.isEmpty() && !hasSystemContent) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             EmptyState(
                                 title = stringResource(R.string.no_apps_found),
@@ -156,7 +171,7 @@ fun LibraryPage(
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                                     )
                                 }
-                                items(systemIntegrations, key = { "system_${it.id.name}" }) { integration ->
+                                items(visibleSystems, key = { "system_${it.id.name}" }) { integration ->
                                     Column(modifier = Modifier.animateItem()) {
                                         SystemIntegrationListItem(
                                             integration = integration,
@@ -172,7 +187,7 @@ fun LibraryPage(
                                     }
                                 }
                             }
-                            items(apps, key = { it.packageName }) { app ->
+                            items(visibleApps, key = { it.packageName }) { app ->
                                 Column(modifier = Modifier.animateItem()) {
                                     AppListItem(
                                         app = app,

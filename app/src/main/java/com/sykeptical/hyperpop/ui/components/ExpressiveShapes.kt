@@ -10,7 +10,7 @@ sealed class ShapeStyle(val topRadius: Dp, val bottomRadius: Dp) {
     data object ExtraSmall : ShapeStyle(2.dp, 1.dp)
     data object Small : ShapeStyle(4.dp, 2.dp)
     data object Medium : ShapeStyle(15.dp, 5.dp)
-    data object Large : ShapeStyle(24.dp, 4.dp)
+    data object Large : ShapeStyle(16.dp, 0.dp)
     data object ExtraLarge : ShapeStyle(48.dp, 16.dp)
 }
 

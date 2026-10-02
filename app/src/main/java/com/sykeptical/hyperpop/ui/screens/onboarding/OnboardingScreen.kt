@@ -1,51 +1,69 @@
 package com.sykeptical.hyperpop.ui.screens.onboarding
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.outlined.Password
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperpop.HyperPopApplication
 import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.data.AppPreferences
-import com.sykeptical.hyperpop.ui.screens.settings.LoginCodePrivacyCard
+import com.sykeptical.hyperpop.island.backend.HookConfigSync
 import com.sykeptical.hyperpop.island.backend.IslandProtocol
+import com.sykeptical.hyperpop.island.backend.SystemUiEngineCommands
 import com.sykeptical.hyperpop.island.backend.SystemUiIslandBackend
+import com.sykeptical.hyperpop.models.GlowMode
 import com.sykeptical.hyperpop.root.RootShellService
+import com.sykeptical.hyperpop.ui.system.CyclingIslandDemo
+import com.sykeptical.hyperpop.ui.system.HpButton
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpSegmented
+import com.sykeptical.hyperpop.ui.system.HpStatusRow
+import com.sykeptical.hyperpop.ui.system.HpSwitchRow
+import com.sykeptical.hyperpop.ui.system.HyperPopColor
+import com.sykeptical.hyperpop.ui.system.HyperPopMotion
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
+import com.sykeptical.hyperpop.ui.system.IslandDemo
+import com.sykeptical.hyperpop.ui.system.IslandDemoKind
+import com.sykeptical.hyperpop.ui.system.LocalReducedMotion
+import com.sykeptical.hyperpop.ui.system.motionMillis
 import com.sykeptical.hyperpop.util.DeviceUtils
 import com.sykeptical.hyperpop.xposed.runtime.ModuleServiceState
 import kotlinx.coroutines.delay
@@ -53,177 +71,284 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun OnboardingScreen(onFinish: () -> Unit) {
-    var setupDone by rememberSaveable { mutableStateOf(false) }
-    if (setupDone) {
-        LoginCodeIntroPage(onFinish)
-    } else {
-        PrivilegedSetupPage(onContinue = { setupDone = true })
-    }
-}
-
-@Composable
-private fun LoginCodeIntroPage(onFinish: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { AppPreferences(context) }
-    val settings by prefs.loginCodeSettingsFlow.collectAsState(initial = prefs.getLoginCodeSettingsSync())
+    var page by remember { mutableIntStateOf(0) }
+    val reduced = LocalReducedMotion.current
+    val duration = motionMillis(HyperPopMotion.page, reduced)
+    val shift by animateDpAsState(
+        targetValue = (page * 28).dp,
+        animationSpec = tween(duration),
+        label = "onboardingField",
+    )
+    val dim by animateFloatAsState(
+        targetValue = 0.18f + page * 0.08f,
+        animationSpec = tween(duration),
+        label = "onboardingDim",
+    )
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(Icons.Outlined.Password, null, tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(16.dp))
-        Text(
-            stringResource(R.string.login_code_onboarding_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationY = -shift.toPx() }
+                .background(HyperPopColor.accent.copy(alpha = dim))
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            stringResource(R.string.login_code_onboarding_desc),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 72.dp)
+                .graphicsLayer { translationX = shift.toPx() / 2 }
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.05f))
+                .height(180.dp)
+                .fillMaxWidth(0.7f)
         )
-        Spacer(Modifier.height(24.dp))
-        LoginCodePrivacyCard()
-        Spacer(Modifier.height(12.dp))
-        Card(
-            onClick = { scope.launch { prefs.setLoginCodeEnabled(!settings.enabled) } },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        ) {
-            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.login_code_enabled), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(R.string.login_code_enabled_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                slideInHorizontally(tween(duration)) { it / 4 } + fadeIn(tween(duration)) togetherWith
+                    slideOutHorizontally(tween(duration)) { -it / 4 } + fadeOut(tween(duration))
+            },
+            label = "onboardingPage",
+        ) { step ->
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = HyperPopSpace.screen)
+                    .padding(top = 28.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                when (step) {
+                    0 -> WelcomePage()
+                    1 -> ActionPage()
+                    2 -> SystemPage()
+                    3 -> ExperiencePage(prefs)
+                    4 -> LookPage(prefs)
+                    else -> ReadyPage()
                 }
-                Switch(
-                    checked = settings.enabled,
-                    onCheckedChange = { scope.launch { prefs.setLoginCodeEnabled(it) } },
+                Spacer(Modifier.height(24.dp))
+                val last = step == 5
+                HpButton(
+                    text = stringResource(if (last) R.string.onboarding_enter else R.string.onboarding_next),
+                    onClick = {
+                        if (!last) {
+                            page += 1
+                        } else {
+                            scope.launch {
+                                SystemUiEngineCommands.reload(context)
+                                onFinish()
+                            }
+                        }
+                    },
+                    enabled = step != 2 || systemReady(),
                 )
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            stringResource(R.string.login_code_onboarding_later),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.login_code_onboarding_finish))
         }
     }
 }
 
 @Composable
-private fun PrivilegedSetupPage(onContinue: () -> Unit) {
+private fun WelcomePage() {
+    Column {
+        CyclingIslandDemo(glow = false, animated = true)
+        Spacer(Modifier.height(36.dp))
+        Text(stringResource(R.string.onboarding_welcome_title), style = HyperPopType.display)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(R.string.onboarding_welcome_body),
+            style = HyperPopType.body,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ActionPage() {
+    Column {
+        IslandDemo(IslandDemoKind.Message)
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.onboarding_action_title), style = HyperPopType.largeTitle)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.onboarding_action_body),
+            style = HyperPopType.body,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(20.dp))
+        CyclingIslandDemo()
+    }
+}
+
+@Composable
+private fun systemReady(): Boolean {
+    val context = LocalContext.current
+    val module by ModuleServiceState.state.collectAsState()
+    val backend = remember { SystemUiIslandBackend.get(context) }
+    var rootReady by remember { mutableStateOf<Boolean?>(null) }
+    var health by remember { mutableStateOf(backend.health()) }
+    LaunchedEffect(Unit) {
+        rootReady = RootShellService.isAvailable()
+        backend.ping()
+        health = backend.health()
+    }
+    val scopes = IslandProtocol.SYSTEM_UI_PACKAGE in module.scopes && IslandProtocol.XMSF_PACKAGE in module.scopes
+    return DeviceUtils.isXiaomi && DeviceUtils.isCompatibleOS() && rootReady == true &&
+        module.available && module.apiVersion >= 101 && scopes && health.available
+}
+
+@Composable
+private fun SystemPage() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val module by ModuleServiceState.state.collectAsState()
     val backend = remember { SystemUiIslandBackend.get(context) }
     var rootReady by remember { mutableStateOf<Boolean?>(null) }
-    var backendHealth by remember { mutableStateOf(backend.health()) }
-    var detail by remember { mutableStateOf<String?>(null) }
-
+    var health by remember { mutableStateOf(backend.health()) }
+    var details by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         rootReady = RootShellService.isAvailable()
         while (true) {
             backend.ping()
-            delay(1_000)
-            backendHealth = backend.health()
-            delay(2_000)
+            health = backend.health()
+            delay(2000)
         }
     }
+    val deviceOk = DeviceUtils.isXiaomi && DeviceUtils.isCompatibleOS()
+    val moduleOk = module.available && module.apiVersion >= 101
+    val systemUi = IslandProtocol.SYSTEM_UI_PACKAGE in module.scopes
+    val xmsf = IslandProtocol.XMSF_PACKAGE in module.scopes
+    val islands = health.available
+    val ready = deviceOk && rootReady == true && moduleOk && systemUi && xmsf && islands
 
-    val scopesReady = IslandProtocol.SYSTEM_UI_PACKAGE in module.scopes && IslandProtocol.XMSF_PACKAGE in module.scopes
-    val environmentReady = DeviceUtils.isXiaomi && DeviceUtils.isCompatibleOS()
-    val allReady = environmentReady && rootReady == true && module.available && module.apiVersion >= 101 &&
-        scopesReady && backendHealth.available
-
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(16.dp))
-        Text("HyperPop privileged setup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.onboarding_system_title), style = HyperPopType.largeTitle)
         Text(
-            "Root and modern LSPosed are required. Enable the SystemUI and XMSF scopes; no Android notification or overlay permission is used.",
-            style = MaterialTheme.typography.bodyMedium,
+            if (ready) stringResource(R.string.onboarding_system_ok) else stringResource(R.string.onboarding_system_problem),
+            style = HyperPopType.body,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(24.dp))
-
-        StatusRow("Supported Xiaomi / HyperOS", environmentReady)
-        StatusRow("Root access", rootReady == true, rootReady == null)
-        StatusRow("LSPosed service (API ${module.apiVersion.takeIf { it > 0 } ?: "—"})", module.available && module.apiVersion >= 101)
-        StatusRow("SystemUI scope", IslandProtocol.SYSTEM_UI_PACKAGE in module.scopes)
-        StatusRow("XMSF scope", IslandProtocol.XMSF_PACKAGE in module.scopes)
-        StatusRow("SystemUI notification hook", backendHealth.capabilities and IslandProtocol.CAP_NOTIFICATION_INGRESS != 0)
-        StatusRow("Island backend", backendHealth.systemUiHookAlive)
-        StatusRow("XMSF Focus authorization hook", backendHealth.xmsfHookAlive)
-        StatusRow("Xiaomi Focus whitelist hook", backendHealth.capabilities and IslandProtocol.CAP_FOCUS_BYPASS != 0)
-        StatusRow("Backend protocol", IslandProtocol.compatible(backendHealth.protocolVersion ?: -1))
-
-        detail?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(R.string.onboarding_system_body),
+            style = HyperPopType.secondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HpGroup {
+            HpStatusRow(stringResource(R.string.onboarding_system_title), if (ready) stringResource(R.string.onboarding_system_ok) else stringResource(R.string.onboarding_system_problem), ok = ready)
         }
-        Spacer(Modifier.height(24.dp))
-        if (module.available && !scopesReady) {
-            OutlinedButton(
-                onClick = {
-                    (context.applicationContext as? HyperPopApplication)?.requestRequiredScopes { result ->
-                        detail = result.exceptionOrNull()?.message
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Request required scopes") }
-            Spacer(Modifier.height(12.dp))
+        if (!systemUi || !xmsf) {
+            HpButton(stringResource(R.string.onboarding_request_scopes), onClick = {
+                (context.applicationContext as? HyperPopApplication)?.requestRequiredScopes { result ->
+                    message = result.exceptionOrNull()?.message
+                }
+            })
         }
-        OutlinedButton(
+        HpButton(
+            stringResource(R.string.onboarding_restart_scopes),
             onClick = {
                 scope.launch {
-                    val result = RootShellService.restartPackages(setOf(IslandProtocol.SYSTEM_UI_PACKAGE, IslandProtocol.XMSF_PACKAGE))
-                    detail = if (result.success) "Scopes restarted; waiting for hook handshake." else result.stderr
+                    val result = RootShellService.restartPackages(
+                        setOf(IslandProtocol.SYSTEM_UI_PACKAGE, IslandProtocol.XMSF_PACKAGE),
+                    )
+                    message = if (result.success) null else result.stderr
                     backend.ping()
                 }
             },
             enabled = rootReady == true,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Restart scopes") }
-        Spacer(Modifier.height(12.dp))
-        Button(onClick = onContinue, enabled = allReady, modifier = Modifier.fillMaxWidth()) {
-            Text(if (allReady) "Continue" else "Complete setup above")
+        )
+        Text(
+            if (details) stringResource(R.string.onboarding_hide_details) else stringResource(R.string.onboarding_details),
+            style = HyperPopType.button,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { details = !details }.padding(8.dp),
+        )
+        if (details) {
+            HpGroup {
+                HpStatusRow("HyperOS", if (deviceOk) "OK" else "No", ok = deviceOk)
+                HpStatusRow("Root", if (rootReady == true) "OK" else "No", ok = rootReady == true)
+                HpStatusRow("Module", if (moduleOk) "OK" else "No", ok = moduleOk)
+                HpStatusRow("SystemUI", if (systemUi) "OK" else "No", ok = systemUi)
+                HpStatusRow("XMSF", if (xmsf) "OK" else "No", ok = xmsf)
+                HpStatusRow("Islands", if (islands) "OK" else "No", ok = islands)
+            }
+        }
+        message?.let { Text(it, style = HyperPopType.caption, color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+@Composable
+private fun ExperiencePage(prefs: AppPreferences) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val login by prefs.loginCodeSettingsFlow.collectAsState(initial = prefs.getLoginCodeSettingsSync())
+    var animations by remember { mutableStateOf(HookConfigSync.betterAnimationsEnabled(context)) }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        IslandDemo(IslandDemoKind.Music, animated = animations)
+        Text(stringResource(R.string.onboarding_experience_title), style = HyperPopType.largeTitle)
+        Text(stringResource(R.string.onboarding_experience_body), style = HyperPopType.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        HpGroup {
+            HpSwitchRow(
+                title = stringResource(R.string.better_animations),
+                subtitle = stringResource(R.string.better_animations_desc),
+                checked = animations,
+                onCheckedChange = {
+                    animations = it
+                    HookConfigSync.setBetterAnimationsEnabled(context, it)
+                },
+            )
+            HpSwitchRow(
+                title = stringResource(R.string.login_code_enabled),
+                subtitle = stringResource(R.string.login_code_enabled_desc),
+                checked = login.enabled,
+                onCheckedChange = { enabled -> scope.launch { prefs.setLoginCodeEnabled(enabled) } },
+            )
         }
     }
 }
 
 @Composable
-private fun StatusRow(label: String, ready: Boolean, pending: Boolean = false) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(label)
-            Icon(
-                if (ready) Icons.Default.CheckCircle else Icons.Default.Error,
-                if (pending) "Checking" else if (ready) "Ready" else "Unavailable",
-                tint = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-            )
-        }
+private fun LookPage(prefs: AppPreferences) {
+    val scope = rememberCoroutineScope()
+    val config by prefs.globalConfigFlow.collectAsState(initial = null)
+    val mode = config?.islandGlowMode ?: GlowMode.OFF
+    val labels = listOf(
+        stringResource(R.string.glow_off),
+        stringResource(R.string.glow_on),
+        stringResource(R.string.glow_follow),
+    )
+    val selected = when (mode) {
+        GlowMode.OFF -> 0
+        GlowMode.ON -> 1
+        GlowMode.FOLLOW_DYNAMIC -> 2
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        IslandDemo(IslandDemoKind.Message, glow = mode != GlowMode.OFF)
+        Text(stringResource(R.string.onboarding_look_title), style = HyperPopType.largeTitle)
+        Text(stringResource(R.string.onboarding_look_body), style = HyperPopType.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        HpSegmented(
+            options = labels,
+            selected = selected,
+            onSelect = { index ->
+            val next = when (index) {
+                0 -> GlowMode.OFF
+                1 -> GlowMode.ON
+                else -> GlowMode.FOLLOW_DYNAMIC
+            }
+            val current = config ?: com.sykeptical.hyperpop.models.IslandConfig()
+            scope.launch { prefs.updateGlobalConfig(current.copy(islandGlowMode = next)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ReadyPage() {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        CyclingIslandDemo(glow = true, animated = true)
+        Text(stringResource(R.string.onboarding_ready_title), style = HyperPopType.display)
+        Text(stringResource(R.string.onboarding_ready_body), style = HyperPopType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

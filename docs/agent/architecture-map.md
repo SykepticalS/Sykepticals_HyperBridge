@@ -221,7 +221,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 
 **Apply semantics:** `ApplyRequirement.forSetting` — hot reload vs `RestartTarget.SYSTEM_UI` / XMSF.
 
-**UI entry points:** `GlobalSettingsScreen`, `AppConfigScreen`, `IslandSettingsScreen`, `MediaCardSettingsScreen` (under `ui/screens/settings/`).
+**UI entry points:** Home (`OverviewPage`, `LibraryPage`, `SettingsRootScreen`), onboarding (`OnboardingScreen`), hubs in `SettingsHubs.kt`, and section screens under `ui/screens/settings/`. Design tokens live in `ui/system/`.
 
 ---
 

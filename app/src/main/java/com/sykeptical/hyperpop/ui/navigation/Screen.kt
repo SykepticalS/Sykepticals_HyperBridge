@@ -28,5 +28,9 @@ sealed interface Screen : NavKey {
     @Serializable data object ScreenRecordingCustomization : Screen
     @Serializable data object Diagnostics : Screen
     @Serializable data class AppConfig(val packageName: String) : Screen
+    @Serializable data class IslandSection(val id: String, val highlight: String? = null) : Screen
+    @Serializable data object NotificationsHub : Screen
+    @Serializable data object AdvancedHub : Screen
+    @Serializable data object SettingsSearch : Screen
 }
 
