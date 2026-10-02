@@ -42,6 +42,7 @@ import com.d4viddf.hyperbridge.service.translators.IslandFloatingPresentationPol
 import com.d4viddf.hyperbridge.service.translators.StandardTranslator
 import com.d4viddf.hyperbridge.service.translators.TimerTranslator
 import com.d4viddf.hyperbridge.service.translators.VoiceMessageTranslator
+import com.d4viddf.hyperbridge.service.voice.VoicePlaybackDecorationPolicy
 import com.d4viddf.hyperbridge.service.voice.VoicePlaybackDetector
 import com.d4viddf.hyperbridge.service.voice.VoicePlaybackSignals
 import com.d4viddf.hyperbridge.service.voice.VoicePlaybackUpdateGate
@@ -192,6 +193,8 @@ class NotificationProcessingEngine private constructor(
     private val messageResolver = MessageNotificationResolver()
     private val messageFamilyTracker = MessagePresentationFamilyTracker()
     private val voicePlaybackUpdateGate = VoicePlaybackUpdateGate()
+    /** Last source-focus decoration for a voice island, keyed by its logical id. */
+    private val voiceFocusDecorations = ConcurrentHashMap<String, Bundle>()
     private val expiredIslands = ExpiredIslandRegistry()
     private val timeoutJobs = ConcurrentHashMap<String, Job>()
     private val removalJobs = ConcurrentHashMap<String, Job>()
@@ -885,6 +888,9 @@ class NotificationProcessingEngine private constructor(
         if (island != null && NotificationLifecyclePolicy.isProgressLifecycle(island.type)) {
             downloadSessionTracker.end(island.logicalId)
         }
+        if (island?.type == NotificationType.VOICE_MESSAGE) {
+            voiceFocusDecorations.remove(originalKey)
+        }
         messageFamilyTracker.end(originalKey)
         islandsRetainedWithoutSource.remove(originalKey)
 
@@ -1176,6 +1182,7 @@ class NotificationProcessingEngine private constructor(
         }
         val sourceSlot = sourceSlotIdentity(sbn)
         if (!recovery && shouldThrottleVoicePlaybackUpdate(sbn, sourceSlot)) {
+            restampCachedVoiceFocus(sbn)
             markSourceHeadsUpSuppressed(sbn)
             return
         }
@@ -2937,6 +2944,9 @@ class NotificationProcessingEngine private constructor(
             Log.w(TAG, "Source focus decoration is $size bytes; keeping the SystemUI proxy")
             return false
         }
+        if (semanticType == NotificationType.VOICE_MESSAGE) {
+            voiceFocusDecorations[focusIdentity] = Bundle(decoration)
+        }
         sbn.notification.extras.putBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION, decoration)
         return true
     }
@@ -3386,8 +3396,12 @@ class NotificationProcessingEngine private constructor(
         sourceSlot: String,
     ): Boolean {
         val logicalKey = sourceToLogicalKeys[sbn.key] ?: return false
-        if (activeIslands[logicalKey]?.type != NotificationType.VOICE_MESSAGE) {
+        val activeType = activeIslands[logicalKey]?.type
+        if (activeType != NotificationType.VOICE_MESSAGE) {
             voicePlaybackUpdateGate.remove(sourceSlot)
+            if (VoicePlaybackDecorationPolicy.evictCachedDecoration(activeType)) {
+                voiceFocusDecorations.remove(logicalKey)
+            }
             return false
         }
         val extras = sbn.notification.extras
@@ -3410,9 +3424,22 @@ class NotificationProcessingEngine private constructor(
             progress = if (extrasMax > 0) extrasProgress else remote?.progress ?: 0,
             progressMax = if (extrasMax > 0) extrasMax else remote?.progressMax ?: 0,
             structureFingerprint = structureFingerprint,
-            observedAtMs = android.os.SystemClock.elapsedRealtime(),
         )
         return !voicePlaybackUpdateGate.shouldRender(sourceSlot, sample)
+    }
+
+    /**
+     * Copies the decoration from the last real voice post onto this playback tick.
+     * The tick itself does not translate, walk RemoteViews, or post a new island.
+     */
+    private fun restampCachedVoiceFocus(sbn: StatusBarNotification) {
+        val logicalKey = sourceToLogicalKeys[sbn.key] ?: return
+        val cached = voiceFocusDecorations[logicalKey] ?: return
+        if (!VoicePlaybackDecorationPolicy.restampCachedDecoration(hasCachedDecoration = true)) return
+        sbn.notification.extras.putBundle(
+            IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION,
+            Bundle(cached),
+        )
     }
 
     private fun isCallSource(sbn: StatusBarNotification): Boolean {
