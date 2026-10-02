@@ -309,4 +309,37 @@ object NotificationLifecyclePolicy {
     ): Boolean {
         return activeSourceKey == removedSourceKey && activeSourcePostTime <= removedSourcePostTime
     }
+
+    /**
+     * A group summary is not a conversation replacement. Once the visible
+     * message notification is gone, a summary update must not refresh the
+     * island or cancel the dismissal already scheduled for that conversation.
+     * An initial summary with no island yet may still present, so a summary-first
+     * post can show before its child arrives.
+     */
+    fun groupSummaryCanReplaceVisibleConversation(
+        incomingIsGroupSummary: Boolean,
+        visibleConversationSourceRemains: Boolean,
+        islandAlreadyPresented: Boolean,
+        sourceRemovalPending: Boolean,
+    ): Boolean {
+        if (!incomingIsGroupSummary || visibleConversationSourceRemains) return true
+        return !islandAlreadyPresented && !sourceRemovalPending
+    }
+
+    /**
+     * Message and standard conversation islands follow the last visible source.
+     * A same-key repost or a still-posted sibling keeps the island. A leftover
+     * group summary does not. Shade dismissal still retires the island when the
+     * user clears one of the aliases.
+     */
+    fun shouldKeepMessageIslandAfterSourceRemoval(
+        sourceStillActive: Boolean,
+        sameSourceNewerGeneration: Boolean,
+        visibleConversationStillPosted: Boolean,
+        userInitiated: Boolean,
+    ): Boolean {
+        if (sourceStillActive || sameSourceNewerGeneration) return true
+        return !userInitiated && visibleConversationStillPosted
+    }
 }

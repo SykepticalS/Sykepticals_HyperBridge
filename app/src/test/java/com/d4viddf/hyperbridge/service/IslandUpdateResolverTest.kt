@@ -669,6 +669,102 @@ class IslandUpdateResolverTest {
         )
     }
 
+    @Test
+    fun appCancelOfTheLastVisibleMessageDismissesEvenIfTheIslandPointsAtTheSummary() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldKeepMessageIslandAfterSourceRemoval(
+                sourceStillActive = false,
+                sameSourceNewerGeneration = false,
+                visibleConversationStillPosted = false,
+                userInitiated = false,
+            )
+        )
+    }
+
+    @Test
+    fun messageReplacementAndAStillPostedSiblingKeepTheIsland() {
+        assertTrue(
+            NotificationLifecyclePolicy.shouldKeepMessageIslandAfterSourceRemoval(
+                sourceStillActive = true,
+                sameSourceNewerGeneration = false,
+                visibleConversationStillPosted = false,
+                userInitiated = false,
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.shouldKeepMessageIslandAfterSourceRemoval(
+                sourceStillActive = false,
+                sameSourceNewerGeneration = true,
+                visibleConversationStillPosted = false,
+                userInitiated = false,
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.shouldKeepMessageIslandAfterSourceRemoval(
+                sourceStillActive = false,
+                sameSourceNewerGeneration = false,
+                visibleConversationStillPosted = true,
+                userInitiated = false,
+            )
+        )
+    }
+
+    @Test
+    fun shadeDismissalRetiresTheIslandEvenWhenAnotherAliasRemains() {
+        assertFalse(
+            NotificationLifecyclePolicy.shouldKeepMessageIslandAfterSourceRemoval(
+                sourceStillActive = false,
+                sameSourceNewerGeneration = false,
+                visibleConversationStillPosted = true,
+                userInitiated = true,
+            )
+        )
+    }
+
+    @Test
+    fun leftoverGroupSummaryDoesNotRefreshOrAbortDismissalOfTheConversation() {
+        assertFalse(
+            NotificationLifecyclePolicy.groupSummaryCanReplaceVisibleConversation(
+                incomingIsGroupSummary = true,
+                visibleConversationSourceRemains = false,
+                islandAlreadyPresented = true,
+                sourceRemovalPending = true,
+            )
+        )
+        assertFalse(
+            NotificationLifecyclePolicy.groupSummaryCanReplaceVisibleConversation(
+                incomingIsGroupSummary = true,
+                visibleConversationSourceRemains = false,
+                islandAlreadyPresented = true,
+                sourceRemovalPending = false,
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.groupSummaryCanReplaceVisibleConversation(
+                incomingIsGroupSummary = true,
+                visibleConversationSourceRemains = true,
+                islandAlreadyPresented = true,
+                sourceRemovalPending = true,
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.groupSummaryCanReplaceVisibleConversation(
+                incomingIsGroupSummary = true,
+                visibleConversationSourceRemains = false,
+                islandAlreadyPresented = false,
+                sourceRemovalPending = false,
+            )
+        )
+        assertTrue(
+            NotificationLifecyclePolicy.groupSummaryCanReplaceVisibleConversation(
+                incomingIsGroupSummary = false,
+                visibleConversationSourceRemains = false,
+                islandAlreadyPresented = true,
+                sourceRemovalPending = true,
+            )
+        )
+    }
+
     private fun messageEvent(timestamp: Long, messageCount: Int): MessageEventFingerprint {
         return MessageEventFingerprint(
             source = MessageEventFingerprintSource.MESSAGING_STYLE,

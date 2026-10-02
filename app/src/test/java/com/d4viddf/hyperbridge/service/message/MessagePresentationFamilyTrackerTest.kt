@@ -150,6 +150,8 @@ class MessagePresentationFamilyTrackerTest {
         assertFalse(removal.visibleSourceRemains)
         assertEquals("summary", removal.fallbackSourceKey)
         assertEquals(logicalId, tracker.logicalIdForSource("summary"))
+        assertFalse(tracker.hasVisibleSource(logicalId))
+        assertTrue(tracker.visibleSourceKeys(logicalId).isEmpty())
     }
 
     @Test

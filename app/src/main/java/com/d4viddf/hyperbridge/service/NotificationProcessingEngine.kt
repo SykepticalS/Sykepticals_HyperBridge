@@ -595,7 +595,9 @@ class NotificationProcessingEngine private constructor(
             var messagingSource = false
             messageFamilyTracker.removeSource(notifKey)?.let { removal ->
                 messagingSource = true
-                val visibleConversationRemains = !removal.familyEnded && removal.visibleSourceRemains
+                val visibleConversationRemains = !removal.familyEnded &&
+                    removal.visibleSourceRemains &&
+                    messageFamilyTracker.visibleSourceKeys(removal.logicalId).any(::isSourceNotificationActive)
                 if (visibleConversationRemains &&
                     !NotificationLifecyclePolicy.isUserInitiatedRemoval(reason)
                 ) {
@@ -748,7 +750,23 @@ class NotificationProcessingEngine private constructor(
                                     removedSourceKey = notifKey,
                                     removedSourcePostTime = sbn.postTime
                                 )
-                            if (progressStillLive || sourceStillActive || current == null || staleGeneration) {
+                            val sameSourceNewerGeneration = current != null &&
+                                current.sourceKey == notifKey &&
+                                current.sourcePostTime > sbn.postTime
+                            val visibleConversationStillPosted = messageFamilyTracker
+                                .visibleSourceKeys(logicalKey)
+                                .any(::isSourceNotificationActive)
+                            val keepIsland = if (messagingSource) {
+                                NotificationLifecyclePolicy.shouldKeepMessageIslandAfterSourceRemoval(
+                                    sourceStillActive = sourceStillActive,
+                                    sameSourceNewerGeneration = sameSourceNewerGeneration,
+                                    visibleConversationStillPosted = visibleConversationStillPosted,
+                                    userInitiated = NotificationLifecyclePolicy.isUserInitiatedRemoval(reason),
+                                )
+                            } else {
+                                progressStillLive || sourceStillActive || staleGeneration
+                            }
+                            if (keepIsland || current == null) {
                                 Log.d(
                                     TAG,
                                     "${islandType?.name ?: "UNKNOWN"} REMOVE reason=stale " +
@@ -1853,7 +1871,19 @@ class NotificationProcessingEngine private constructor(
 
                 val existingIsland = activeIslands[effectiveKey]
                 Log.d("HBLoginTest", "family key=${sbn.key} logical=$effectiveKey present=${family.shouldPresent} existing=${existingIsland != null} code=${loginCode != null}") // TEMP-TEST
+                val incomingSummary = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
                 if (existingIsland != null && !family.shouldPresent) {
+                    sourceToLogicalKeys[sbn.key] = effectiveKey
+                    markSourceHeadsUpSuppressed(sbn)
+                    return
+                }
+                if (!NotificationLifecyclePolicy.groupSummaryCanReplaceVisibleConversation(
+                        incomingIsGroupSummary = incomingSummary,
+                        visibleConversationSourceRemains = messageFamilyTracker.hasVisibleSource(effectiveKey),
+                        islandAlreadyPresented = existingIsland != null,
+                        sourceRemovalPending = removalJobs.containsKey(effectiveKey),
+                    )
+                ) {
                     sourceToLogicalKeys[sbn.key] = effectiveKey
                     markSourceHeadsUpSuppressed(sbn)
                     return

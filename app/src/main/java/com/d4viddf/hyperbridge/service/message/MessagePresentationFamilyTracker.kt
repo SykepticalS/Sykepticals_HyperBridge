@@ -160,6 +160,18 @@ class MessagePresentationFamilyTracker {
     fun logicalIdForSource(sourceKey: String): String? = sourceIndex[sourceKey]
 
     @Synchronized
+    fun hasVisibleSource(logicalId: String): Boolean =
+        families[logicalId]?.sources?.values?.any { !it.isGroupSummary } == true
+
+    @Synchronized
+    fun visibleSourceKeys(logicalId: String): Set<String> =
+        families[logicalId]?.sources?.values
+            ?.filterNot { it.isGroupSummary }
+            ?.map { it.sourceKey }
+            ?.toSet()
+            .orEmpty()
+
+    @Synchronized
     fun isPrimarySource(logicalId: String, sourceKey: String): Boolean =
         families[logicalId]?.primarySourceKey == sourceKey
 
