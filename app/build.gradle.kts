@@ -6,13 +6,13 @@ plugins {
 }
 
 android {
-    namespace = "com.d4viddf.hyperbridge"
+    namespace = "com.sykeptical.hyperpop"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.sykeptical.hyperbridge"
+        applicationId = "com.sykeptical.hyperpop"
         minSdk = 35
         targetSdk = 37
         versionCode = 36

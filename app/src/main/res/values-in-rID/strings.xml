@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
     <string name="back">Kembali</string>
     <string name="next">Lanjut</string>
     <string name="finish">Selesai</string>
@@ -10,11 +10,11 @@
     <string name="configure">Atur</string>
     <string name="clear">Bersihkan</string>
     <string name="sort_order">Urutan Penyortiran</string>
-    <string name="welcome_title">Selamat Datang di\nHyper Bridge</string>
+    <string name="welcome_title">Selamat Datang di\nHyperPop</string>
     <string name="welcome_subtitle">Integrasikan HyperIslands secara mulus ke dalam pengalaman HyperOS Anda.</string>
     <string name="get_started">Mulai</string>
     <string name="how_it_works">Cara Kerjanya</string>
-    <string name="how_it_works_desc">Pilih aplikasi favorit Anda (Spotify, Peta, Pewaktu). Hyper Bridge mengubah pemberitahuan aplikasi tersebut menjadi HyperIsland yang elegan.</string>
+    <string name="how_it_works_desc">Pilih aplikasi favorit Anda (Spotify, Peta, Pewaktu). HyperPop mengubah pemberitahuan aplikasi tersebut menjadi HyperIsland yang elegan.</string>
     <string name="beta_warning">Catatan: Aplikasi ini masih dalam tahap Beta. Anda mungkin menemui kesalahan atau informasi visual yang tidak akurat.</string>
     <string name="device_compatible">Perangkat Kompatibel</string>
     <string name="unsupported_device">Perangkat Tidak Didukung</string>
@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Buka Pustaka untuk mengaktifkan aplikasi.</string>
     <string name="no_apps_found">Aplikasi tidak ditemukan</string>
     <string name="version_template">Versi %s</string>
-    <string name="developer_credit">oleh D4vidDf</string>
+    <string name="developer_credit">oleh sykeptical</string>
     <string name="group_configuration">Konfigurasi</string>
     <string name="system_setup">Pengaturan Sistem</string>
     <string name="system_setup_subtitle">Perbaiki perizinan &amp; baterai</string>
@@ -45,12 +45,12 @@
     <string name="xmsf_workaround_credit_title">Solusi Sementara untuk XMSF</string>
     <string name="xmsf_workaround_credit_subtitle">Penelitian oleh Stardawn (星间晞)</string>
     <string name="developer">Pengembang</string>
-    <string name="developer_subtitle">Kunjungi d4viddf.com</string>
+    <string name="developer_subtitle">Kunjungi sykeptical</string>
     <string name="source_code">Kode Sumber</string>
     <string name="source_code_subtitle">Repository GitHub</string>
     <string name="licenses">Lisensi Open Source</string>
     <string name="licenses_subtitle">Perangkat lunak pihak ketiga</string>
-    <string name="footer_made_with_love">Dibuat dengan ❤️ di Spanyol</string>
+    <string name="footer_made_with_love">Dibuat dengan ❤️ di Türkiye</string>
     <string name="app_health_desc">Pastikan semua tanda centang berwarna hijau agar aplikasi dapat berjalan dengan baik di latar belakang.</string>
     <string name="req_permissions">Diperlukan Perizinan</string>
     <string name="notif_access">Akses Pemberitahuan</string>
@@ -208,7 +208,7 @@
     </string-array>
     <string name="title_0_3_0">Pembaruan Global</string>
     <string name="privacy_title">100% Offline &amp; Aman</string>
-    <string name="privacy_desc">Hyper Bridge memproses semuanya langsung di prosesor ponsel Anda.\n\nIni TIDAK memerlukan akses internet, artinya notifikasi dan data pribadi Anda tidak pernah meninggalkan perangkat Anda.</string>
+    <string name="privacy_desc">HyperPop memproses semuanya langsung di prosesor ponsel Anda.\n\nIni TIDAK memerlukan akses internet, artinya notifikasi dan data pribadi Anda tidak pernah meninggalkan perangkat Anda.</string>
     <string name="language">Bahasa</string>
     <string name="language_desc">Ubah bahasa aplikasi</string>
     <string name="system_default">Default Sistem</string>
@@ -217,7 +217,7 @@
     <string name="backup_section_title">Kelola Data</string>
     <string name="backup_options_subtitle">Pilih data untuk disertakan dalam operasi</string>
     <string name="option_app_settings">Pengaturan Aplikasi</string>
-    <string name="option_app_settings_desc">Status setup, tema, mode perilaku</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
     <string name="option_blocklist">Database Daftar Blokir</string>
     <string name="option_blocklist_desc">Kata kunci dan aplikasi yang diblokir kustom Anda</string>
     <string name="option_priorities">Aturan Prioritas</string>
@@ -242,15 +242,7 @@
     <string name="title_0_3_1">Pembaruan Cadangan &amp; Polyglot</string>
     <string name="close">Tutup</string>
     <string name="search">Cari</string>
-    <string name="widget_updated_toast">Widget diperbarui</string>
-    <string name="widget_settings_error">Tidak dapat mengedit pengaturan widget ini</string>
-    <string name="widget_picker_title">Tambahkan Widget</string>
     <string name="search_apps_placeholder">Cari aplikasi...</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">%d widget</item>
-    </plurals>
-    <string name="widget_config_title">Konfigurasikan Widget</string>
-    <string name="widget_settings_button">Pengaturan Widget</string>
     <string name="config_tab_appearance">Penampilan</string>
     <string name="config_tab_behavior">Perilaku</string>
     <string name="config_render_mode_label">Mode Render</string>
@@ -279,33 +271,7 @@
     <string name="size_xlarge">Sangat Besar (380dp)</string>
     <string name="app_uninstalled_badge">Dihapus</string>
     <string name="settings_action">Pengaturan</string>
-    <string name="saved_widgets_title">Widget Tersimpan</string>
-    <string name="no_saved_widgets">Tidak ada widget tersimpan.</string>
-    <string name="widget_id_fmt">Widget #%d</string>
     <string name="show_on_island">Tampilkan di Island</string>
-    <string name="theme_installer_analyzing">Menganalisis paket tema...</string>
-    <string name="theme_installer_success_title">Tema Siap</string>
-    <string name="theme_installer_author">Dibuat oleh %s</string>
-    <string name="theme_installer_version">Versi %d</string>
-    <string name="theme_installer_apply_question">Apakah Anda ingin menerapkan tema ini ke Hyper Bridge sekarang?</string>
-    <string name="theme_installer_action_apply">Terapkan Tema</string>
-    <string name="theme_installer_action_later">Simpan untuk Nanti</string>
-    <string name="theme_installer_error_title">Impor Gagal</string>
-    <string name="theme_installer_error_generic">Tidak dapat memverifikasi file tema.</string>
-    <string name="theme_installer_btn_close">Tutup</string>
-    <string name="theme_manager_title">Tema Saya</string>
-    <string name="theme_manager_cd_add">Tambahkan Tema Baru</string>
-    <string name="theme_card_author_format">oleh %s</string>
-    <string name="theme_card_cd_active">Tema Aktif</string>
-    <string name="theme_card_cd_delete">Hapus Tema</string>
-    <string name="theme_system_default_title">Default Sistem</string>
-    <string name="theme_system_default_desc">Tampilan Standar</string>
-    <string name="theme_sheet_title">Tambahkan Tema Baru</string>
-    <string name="theme_sheet_action_create">Buat Tema Baru</string>
-    <string name="theme_sheet_action_find">Cari</string>
-    <string name="theme_action_import_short">Impor</string>
-    <string name="theme_card_action_edit">Sunting</string>
-    <string name="theme_card_action_export">Ekspor</string>
     <string name="creator_title_new">Buat Tema</string>
     <string name="creator_title_edit">Edit Tema</string>
     <string name="creator_nav_colors">Warna</string>
@@ -357,15 +323,10 @@
     <string name="design_hero_pro_subtitle">Buka lebih banyak fitur</string>
     <string name="design_hero_community_title">Komunitas</string>
     <string name="design_hero_community_subtitle">Bergabung dengan GitHub kami</string>
-    <string name="design_section_themes">Tema</string>
-    <string name="design_section_widgets">Widget</string>
     <string name="design_browse_more">Jelajahi Lainnya</string>
     <string name="design_add_new">Tambah Baru</string>
     <string name="design_add_design">Tambah Desain</string>
     <string name="design_add_to_island">Kustomisasi</string>
-    <string name="design_system_widget_beta">Widget Sistem (Beta)</string>
-    <string name="design_get_themes">Dapatkan Tema</string>
-    <string name="design_empty_widget_title">Tambahkan Widget Pertama Anda</string>
     <string name="design">Desain</string>
     <string name="creator_nav_actions">Aksi Global</string>
     <string name="creator_sub_actions">Gaya tombol berdasarkan kata kunci</string>
@@ -400,8 +361,6 @@
     <string name="discard">Buang</string>
     <string name="unsaved_changes">Perubahan Belum Disimpan</string>
     <string name="unsaved_changes_desc">Anda memiliki perubahan yang belum disimpan untuk aplikasi ini. Apakah Anda ingin menyimpannya sebelum keluar?</string>
-    <string name="share_theme">Bagikan Tema</string>
-    <string name="my_theme">Tema Saya</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="other">%1$d aksi kustom</item>
     </plurals>
@@ -413,9 +372,7 @@
     <string name="colors_label_dynamic_modes">Warna Dinamis</string>
     <string name="colors_label_material_you">Material You (Sistem)</string>
     <string name="colors_desc_material_you">Mengekstrak warna dari wallpaper Anda saat ini.</string>
-    <string name="kill_all_widgets">Matikan Widget yang Aktif</string>
     <string name="permission_reminder_title">Informasi Pembaruan</string>
-    <string name="permission_reminder_desc">Hyper Bridge telah diperbarui! Pastikan izin Mulai Otomatis dan Penggunaan Baterai di Latar Belakang Anda tidak dicabut secara diam-diam oleh sistem agar widget Anda tetap berjalan dengan lancar.</string>
     <string name="got_it">Mengerti</string>
     <string name="recommended">Direkomendasikan</string>
     <string name="all">Semua</string>
@@ -423,7 +380,7 @@
     <string name="channel_live_updates">Pembaruan Langsung Asli</string>
     <string name="engine_config_title">Konfigurasi mesin</string>
     <string name="good_to_know">Bagus untuk diketahui</string>
-    <string name="nav_layout_info">• Tata letak navigasi akan sepenuhnya terintegrasi ke dalam Mesin Tema pada pembaruan mendatang.\n• Saat menggunakan Mesin Desain Pembaruan Langsung hanya konten Sisi Kanan yang terlihat.</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">Fitur Notifikasi Xiaomi</string>
     <string name="island_behavior_title">Perilaku Island</string>
     <string name="island_behavior_desc"><![CDATA[Batas waktu, duplikat, dan visibilitas]]></string>
@@ -480,11 +437,8 @@
     <string name="reply_textfield_radius">Jarak Sudut Kolom Teks</string>
     <string name="reply_send_radius">Jarak Sudut Tombol Kirim</string>
     <string name="onboarding_can_be_changed">Anda dapat mengubah pilihan ini nanti di Pengaturan dan Pengatur Tema.</string>
-    <string name="onboarding_widget_desc">Tambahkan widget Android standar ke layar beranda Anda untuk akses cepat.</string>
-    <string name="onboard_theme_desc">Sesuaikan sepenuhnya warna, bentuk, dan ikon island Anda.</string>
     <string name="onboard_design_desc">Perluas kemungkinan dengan berbagai pilihan penyesuaian</string>
     <string name="behavior_desc_glob_config">Menentukan bagaimana island tersebut berperilaku.</string>
-    <string name="widget_layout_snapshot">Tampilan pratinjau widget</string>
     <string name="title_0_5_7">Pembaruan Kinerja &amp; Sinkronisasi</string>
     <string name="title_0_5_6">Landscape Hide &amp; Stability Fixes</string>
     <string name="title_0_5_5">Perbaikan Perpesanan &amp; Pembaruan</string>
@@ -492,16 +446,15 @@
     <string name="title_0_5_1">Perbaikan &amp; Penyempurnaan</string>
     <string name="title_0_5_0">Pembaruan Langsung</string>
     <string name="notification_went_wrong">If you are seeing this, something went wrong!</string>
-    <string name="widget_went_wrong">Jika Anda melihat pesan ini, berarti terjadi kesalahan! Sistem tidak dapat menampilkan widget</string>
     <string name="troubleshoot_featured_notification">Pemecahan Masalah</string>
     <string name="featured_notifications_check">Pemeriksaan Pemberitahuan Unggulan</string>
-    <string name="featured_notifications_check_desc">Mari kita periksa apakah sistem Anda sudah dikonfigurasi dengan benar untuk menampilkan Hyper Bridge islands.</string>
+    <string name="featured_notifications_check_desc">Mari kita periksa apakah sistem Anda sudah dikonfigurasi dengan benar untuk menampilkan HyperPop islands.</string>
     <string name="featured_notifications_not_supported">Tidak Didukung</string>
     <string name="featured_notifications_enabled">Diaktifkan</string>
     <string name="featured_notifications_open_settings">Buka Pengatran Sistem</string>
     <string name="featured_notifications_troubleshoot_title">Mengapa ini bukan island?</string>
-    <string name="featured_notifications_troubleshoot_desc">Perangkat Xiaomi Anda telah mencegat pemberitahuan tersebut, tetapi gagal menampilkannya sebagai island unggulan karena izinnya dinonaktifkan di pengaturan sistem Anda.\n\nUntuk memperbaikinya:\n1. Ketuk \"Buka Pengaturan Sistem\"\n2. Gulir ke bawah ke \"Pemberitahuan Unggulan\" (atau yang serupa)\n3. Aktifkan untuk Hyper Bridge.</string>
-    <string name="migration_title">Hyper Bridge Update</string>
+    <string name="featured_notifications_troubleshoot_desc">Perangkat Xiaomi Anda telah mencegat pemberitahuan tersebut, tetapi gagal menampilkannya sebagai island unggulan karena izinnya dinonaktifkan di pengaturan sistem Anda.\n\nUntuk memperbaikinya:\n1. Ketuk \"Buka Pengaturan Sistem\"\n2. Gulir ke bawah ke \"Pemberitahuan Unggulan\" (atau yang serupa)\n3. Aktifkan untuk HyperPop.</string>
+    <string name="migration_title">HyperPop Update</string>
     <string name="migration_message">Memindahkan basis data ke penyimpanan yang Dilindungi Perangkat…</string>
     <string name="migration_complete">Pembaruan Sukses</string>
     <string name="inline_reply_title">Balasan Langsung</string>
@@ -512,7 +465,7 @@
     <!-- Guides & Documentation -->
     <string name="group_guides">Guides &amp; Help</string>
     <string name="documentation_title">Guides &amp; Documentation</string>
-    <string name="documentation_subtitle">Learn how to configure and customize Hyper Bridge</string>
+    <string name="documentation_subtitle">Learn how to configure and customize HyperPop</string>
     <!-- Changelog & Website -->
     <string name="view_changelog">View Changelog</string>
     <string name="view_full_changelog">View on Website</string>
@@ -534,11 +487,6 @@
     <string name="bug_report_include_device_desc">Model, HyperOS/MIUI version, Android version, ROM region</string>
     <string name="bug_report_include_permissions">System Permissions &amp; Restricted Settings</string>
     <string name="bug_report_include_permissions_desc">Root, LSPosed scopes, SystemUI ingress, island backend, and Focus hooks</string>
-    <string name="bug_report_include_theme">Theme Configuration</string>
-    <string name="bug_report_include_theme_desc">Active theme, engine mode, custom theme metadata</string>
-    <string name="bug_report_include_widgets">Widget Configuration</string>
-    <string name="bug_report_include_widgets_desc">Saved widgets, update intervals, sizes, and shade visibility</string>
-    <string name="bug_report_widget_scope_all">All Widgets</string>
     <string name="bug_report_include_app_config">App Settings &amp; Configuration</string>
     <string name="bug_report_app_scope_none">None</string>
     <string name="bug_report_app_scope_none_desc">Do not include any app configurations in the report</string>
@@ -548,7 +496,7 @@
     <string name="bug_report_app_scope_all_desc">Include configurations and overrides for all apps</string>
     <string name="bug_report_select_app">Select App</string>
     <string name="bug_report_include_logs">Recent App Logs (Logcat)</string>
-    <string name="bug_report_include_logs_desc">Last 500 lines of system and Hyper Bridge logs</string>
+    <string name="bug_report_include_logs_desc">Last 500 lines of system and HyperPop logs</string>
     <string name="bug_report_preview_title">Report Preview</string>
     <string name="bug_report_preview_desc">Review the exact data that will be shared</string>
     <string name="bug_report_submit_github">Submit on GitHub</string>
@@ -557,7 +505,7 @@
     <string name="bug_report_share">Share</string>
     <string name="bug_report_copied_github_toast">Diagnostics copied to clipboard! Paste it into the Logs section on GitHub.</string>
     <string name="bug_report_copied_toast">Report copied to clipboard.</string>
-    <string name="bug_report_email_subject">Hyper Bridge Bug Report</string>
+    <string name="bug_report_email_subject">HyperPop Bug Report</string>
     <string name="bug_report_entry_title">Bug Report</string>
     <string name="bug_report_entry_subtitle">Troubleshoot and report issues with system logs</string>
     <string name="bug_report_need_help">Having issues with permissions or islands?</string>
@@ -566,7 +514,7 @@
     <string name="bug_report_change_app">Change App</string>
     <string name="privacy_policy_title">Privacy Policy</string>
     <string name="privacy_policy_subtitle">Learn how your data is protected and handled</string>
-    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with Hyper Bridge.</string>
+    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with HyperPop.</string>
     <string name="cancel">Cancel</string>
     <string name="continue_action">Continue</string>
     <string name="type_screen_recording">Screen recording</string>

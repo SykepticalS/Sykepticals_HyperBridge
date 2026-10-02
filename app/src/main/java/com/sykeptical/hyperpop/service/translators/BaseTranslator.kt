@@ -1,0 +1,1011 @@
+package com.sykeptical.hyperpop.service.translators
+
+import android.app.Notification
+import android.app.PendingIntent
+import android.app.Person
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
+import android.os.Bundle
+import android.os.Parcelable
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
+import androidx.core.graphics.toColorInt
+import com.sykeptical.hyperpop.R
+import com.sykeptical.hyperpop.models.BridgeAction
+import com.sykeptical.hyperpop.models.IslandConfig
+import com.sykeptical.hyperpop.models.IslandTextPresentation
+import com.sykeptical.hyperpop.models.IslandTextPresentationResolver
+import com.sykeptical.hyperpop.models.IslandTextSource
+import com.sykeptical.hyperpop.receiver.LoginCodeCopyReceiver
+import com.sykeptical.hyperpop.service.download.DownloadTransportControls
+import com.sykeptical.hyperpop.service.logincode.LoginCodePresentation
+import com.sykeptical.hyperpop.service.visual.IconGeometry
+import com.sykeptical.hyperpop.service.visual.LargeIconRole
+import com.sykeptical.hyperpop.service.visual.NotificationVisualPlanner
+import com.sykeptical.hyperpop.service.visual.NotificationVisualSource
+import com.sykeptical.hyperpop.service.visual.PixelBounds
+import com.sykeptical.hyperpop.service.visual.ResolvedNotificationVisual
+import io.github.d4viddf.hyperisland_kit.HyperAction
+import io.github.d4viddf.hyperisland_kit.HyperPicture
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import android.graphics.Typeface
+import androidx.core.graphics.withClip
+import androidx.core.graphics.get
+
+abstract class BaseTranslator(protected val context: Context) {
+
+    protected fun resolveIslandText(
+        sbn: StatusBarNotification,
+        title: String,
+        content: String,
+        config: IslandConfig,
+        sender: String = "",
+        state: String = "",
+        progress: String = "",
+    ): IslandTextPresentation {
+        val extras = sbn.notification.extras
+        val appLabel = runCatching {
+            context.packageManager.getApplicationLabel(
+                context.packageManager.getApplicationInfo(sbn.packageName, 0)
+            ).toString()
+        }.getOrDefault(sbn.packageName)
+        val subtitle = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+        return IslandTextPresentationResolver.resolve(
+            source = IslandTextSource(title, content, subtitle, appLabel, sender, state, progress),
+            left = config.leftContent,
+            right = config.rightContent,
+            leftExpression = config.leftCustomExpression,
+            rightExpression = config.rightCustomExpression,
+        )
+    }
+
+    enum class ActionDisplayMode { TEXT, ICON, BOTH }
+
+    /** Stable across source-notification replacements because picKey is derived from bridgeId. */
+    protected fun stableBusinessId(picKey: String): String = "bridge_${picKey.removePrefix("pic_")}"
+
+    private val appIconBitmapCache = ConcurrentHashMap<String, Bitmap>()
+
+    protected inline fun <reified T : Parcelable> Bundle.getParcelableCompat(key: String): T? {
+        return getParcelable(key, T::class.java)
+    }
+
+    protected inline fun <reified T : Parcelable> Bundle.getParcelableArrayListCompat(key: String): ArrayList<T>? {
+        return getParcelableArrayList(key, T::class.java)
+    }
+
+    /**
+     * Person photo first. The badge row on that photo is the source app icon, then a
+     * microphone icon in the same slot regular islands use for the app badge.
+     */
+    protected fun resolveVoicePicture(
+        sbn: StatusBarNotification,
+        picKey: String,
+        micRes: Int,
+    ): HyperPicture {
+        val visual = resolveAvatarVisual(sbn)
+        var bitmap = compositeVoiceBadges(
+            source = visual.bitmap,
+            packageName = sbn.packageName,
+            includeAppIcon = visual.shouldShowAppBadge,
+            micRes = micRes,
+        )
+        if ((visual.source == NotificationVisualSource.SMALL_ICON ||
+                visual.source == NotificationVisualSource.FALLBACK) &&
+            isBitmapDarkAndMonochrome(bitmap)
+        ) {
+            bitmap = tintBitmap(bitmap, Color.WHITE)
+        }
+        return HyperPicture(picKey, bitmap)
+    }
+
+    protected fun resolveIcon(
+        sbn: StatusBarNotification,
+        picKey: String,
+        preferNativeAppBadge: Boolean = false
+    ): HyperPicture = pictureFromVisual(
+        picKey,
+        resolveAvatarVisual(sbn),
+        sbn.packageName,
+        preferNativeAppBadge = preferNativeAppBadge,
+    )
+
+    protected data class CompactIslandAssets(
+        val avatar: HyperPicture,
+        val attachment: HyperPicture?,
+        val left: io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft,
+        val right: io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight,
+        val smallKey: String,
+    )
+
+    protected fun compactIslandAssets(
+        sbn: StatusBarNotification,
+        picKey: String,
+        presentation: IslandTextPresentation,
+    ): CompactIslandAssets {
+        val started = android.os.SystemClock.elapsedRealtime()
+        val avatar = resolveAvatarVisual(sbn)
+        val avatarReady = android.os.SystemClock.elapsedRealtime()
+        val attachmentKey = "${picKey}_media"
+        val attachment = resolveAttachmentVisual(sbn, avatar.bitmap)
+        Log.d("HyperPopTiming", "visual package=${sbn.packageName} avatarMs=${avatarReady - started} attachmentMs=${android.os.SystemClock.elapsedRealtime() - avatarReady}")
+        val (left, right) = IslandCompactLayout.sides(
+            picKey = picKey,
+            presentation = presentation,
+            rightPicKey = attachmentKey.takeIf { attachment != null },
+        )
+        return CompactIslandAssets(
+            avatar = pictureFromVisual(picKey, avatar, sbn.packageName),
+            attachment = attachment?.let { pictureFromVisual(attachmentKey, it, sbn.packageName, skipAppBadge = true) },
+            left = left,
+            right = right,
+            smallKey = picKey,
+        )
+    }
+
+    private fun pictureFromVisual(
+        picKey: String,
+        visual: ResolvedNotificationVisual,
+        packageName: String,
+        preferNativeAppBadge: Boolean = false,
+        skipAppBadge: Boolean = false,
+    ): HyperPicture {
+        var originalBitmap = visual.bitmap
+        if (visual.shouldShowAppBadge && !preferNativeAppBadge && !skipAppBadge) {
+            originalBitmap = compositeAppBadge(originalBitmap, packageName)
+        }
+        if ((visual.source == NotificationVisualSource.SMALL_ICON ||
+                    visual.source == NotificationVisualSource.FALLBACK) &&
+            isBitmapDarkAndMonochrome(originalBitmap)
+        ) {
+            originalBitmap = tintBitmap(originalBitmap, Color.WHITE)
+        }
+        return HyperPicture(picKey, originalBitmap)
+    }
+
+    protected fun isBitmapDarkAndMonochrome(bitmap: Bitmap): Boolean {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width == 0 || height == 0) return false
+
+        var darkPixels = 0
+        var totalPixels = 0
+        var isMonochrome = true
+
+        val stepX = maxOf(1, width / 20)
+        val stepY = maxOf(1, height / 20)
+
+        for (x in 0 until width step stepX) {
+            for (y in 0 until height step stepY) {
+                val pixel = bitmap[x, y]
+                val alpha = Color.alpha(pixel)
+                if (alpha > 50) {
+                    totalPixels++
+                    val r = Color.red(pixel)
+                    val g = Color.green(pixel)
+                    val b = Color.blue(pixel)
+
+                    val diff = abs(r - g) + abs(g - b) + abs(b - r)
+                    if (diff > 45) {
+                        isMonochrome = false
+                    }
+
+                    val luminance = (0.299 * r + 0.587 * g + 0.114 * b)
+                    if (luminance < 80) {
+                        darkPixels++
+                    }
+                }
+            }
+        }
+
+        if (totalPixels == 0 || !isMonochrome) return false
+        return (darkPixels.toFloat() / totalPixels) > 0.7f
+    }
+
+    protected fun styleActionIcon(source: Bitmap, paddingPercent: Int, bgColor: Int): Bitmap {
+        val size = 96
+        val output = createBitmap(size, size)
+        val canvas = Canvas(output)
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = bgColor
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint)
+
+        val paddingPx = (size * (paddingPercent / 100f))
+        val iconDestRect = RectF(paddingPx, paddingPx, size - paddingPx, size - paddingPx)
+
+        if (iconDestRect.width() > 0 && iconDestRect.height() > 0) {
+            val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
+                colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            }
+            drawNormalizedBitmap(canvas, source, iconDestRect, iconPaint)
+        }
+
+        return output
+    }
+
+    // --- CORE LOGIC ---
+
+    protected fun extractBridgeActions(
+        sbn: StatusBarNotification,
+        config: com.sykeptical.hyperpop.models.IslandConfig,
+        mode: ActionDisplayMode = ActionDisplayMode.BOTH,
+        actionKeyPrefix: String? = null,
+        fallbackActionGlyphs: Boolean = false,
+        transportControls: Boolean = false,
+    ): List<BridgeAction> {
+        val bridgeActions = mutableListOf<BridgeAction>()
+        val actions = sbn.notification.actions ?: return emptyList()
+
+        val defaultActionBg = "#007AFF".toColorInt()
+
+        actions.forEachIndexed { index, androidAction ->
+            val hasRemoteInput = androidAction.remoteInputs != null && androidAction.remoteInputs!!.isNotEmpty()
+            val rawTitle = androidAction.title?.toString() ?: ""
+            val isMarkAsRead = androidAction.semanticAction == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ || rawTitle.equals("mark as read", ignoreCase = true)
+
+            val uniqueKey = "${actionKeyPrefix ?: "act_${sbn.key.hashCode()}"}_$index"
+
+            val finalBgColorInt = defaultActionBg
+
+            val finalBgColorHex = String.format("#%08X", (0xFFFFFFFF and finalBgColorInt.toLong()))
+            val finalTintColorHex = "#FFFFFF"
+            val effectiveMode = mode
+
+            var actionIcon: Icon? = null
+            var hyperPic: HyperPicture? = null
+
+            val transportGlyph = if (transportControls) {
+                DownloadTransportControls.glyph(
+                    rawTitle,
+                    isDelete = androidAction.semanticAction == Notification.Action.SEMANTIC_ACTION_DELETE,
+                )
+            } else {
+                null
+            }
+            // Finished focus buttons already include their plate and a small glyph. Keep the
+            // label off the button so HyperOS does not stretch them into a text action.
+            val finalTitle = if (
+                effectiveMode == ActionDisplayMode.ICON ||
+                (transportGlyph != null && effectiveMode != ActionDisplayMode.TEXT)
+            ) {
+                ""
+            } else {
+                rawTitle
+            }
+            val shouldLoadIcon = (effectiveMode != ActionDisplayMode.TEXT)
+
+            var bitmapToUse: Bitmap? = null
+            var finishedTransportButton = false
+            if (transportGlyph != null && shouldLoadIcon) {
+                bitmapToUse = renderFocusControl(transportGlyphDrawable(transportGlyph))
+                finishedTransportButton = bitmapToUse != null
+            }
+
+            if (bitmapToUse == null && shouldLoadIcon) {
+                val originalIcon = androidAction.getIcon()
+                if (originalIcon != null) {
+                    bitmapToUse = loadIconBitmap(originalIcon, sbn.packageName, width = 96, height = 96)
+                }
+            }
+            if ((bitmapToUse == null || !isUsableBitmap(bitmapToUse)) && fallbackActionGlyphs && shouldLoadIcon) {
+                fallbackActionGlyphRes(rawTitle)?.let { resId ->
+                    bitmapToUse = ContextCompat.getDrawable(context, resId)?.mutate()?.toBitmap(width = 96, height = 96)
+                }
+            }
+
+            val sourceBitmap = bitmapToUse
+            if (sourceBitmap != null) {
+                val processedBitmap = if (finishedTransportButton) {
+                    sourceBitmap
+                } else if (transportControls) {
+                    styleActionIcon(sourceBitmap, 34, finalBgColorInt)
+                } else {
+                    createRoundedIconWithBackground(sourceBitmap, finalBgColorInt, 12)
+                }
+                processedBitmap.density = context.resources.displayMetrics.densityDpi
+
+                actionIcon = Icon.createWithBitmap(processedBitmap)
+                hyperPic = HyperPicture("${uniqueKey}_icon", processedBitmap)
+            }
+
+            val finalIntent = if (hasRemoteInput) {
+                com.sykeptical.hyperpop.ui.InlineReplyIntents.pendingIntent(
+                    context,
+                    uniqueKey.hashCode(),
+                    androidAction.actionIntent,
+                    androidAction.remoteInputs!![0].resultKey,
+                    sbn.packageName,
+                    sbn.key,
+                )
+            } else {
+                androidAction.actionIntent
+            }
+
+            val appliedBgColor = if (effectiveMode == ActionDisplayMode.TEXT || finishedTransportButton) {
+                null
+            } else {
+                finalBgColorHex
+            }
+
+            val hyperAction = HyperAction(
+                key = uniqueKey,
+                title = finalTitle,
+                icon = actionIcon,
+                pendingIntent = finalIntent,
+                actionIntentType = FocusActionIntentTypes.of(finalIntent),
+                actionBgColor = appliedBgColor,
+                titleColor = finalTintColorHex
+            )
+
+            bridgeActions.add(BridgeAction(hyperAction, hyperPic))
+        }
+        return bridgeActions
+    }
+
+    protected fun IslandTextPresentation.withLoginCode(loginCode: LoginCodePresentation?): IslandTextPresentation =
+        if (loginCode?.compactCode == true) copy(right = loginCode.code) else this
+
+    /** The source actions, or only a Copy code button when the login code extractor asks for one. */
+    protected fun actionsWithLoginCode(
+        sbn: StatusBarNotification,
+        loginCode: LoginCodePresentation?,
+        sourceActions: () -> List<BridgeAction>,
+    ): List<BridgeAction> {
+        if (loginCode?.copyAction != true) return sourceActions()
+        val pendingIntent = LoginCodeCopyReceiver.pendingIntent(context, sbn.key, loginCode.code)
+        return listOf(
+            BridgeAction(
+                HyperAction(
+                    key = "login_code_copy_${sbn.key.hashCode()}",
+                    title = context.getString(R.string.login_code_copy_action),
+                    icon = null,
+                    pendingIntent = pendingIntent,
+                    actionIntentType = FocusActionIntentTypes.of(pendingIntent),
+                    actionBgColor = null,
+                    titleColor = "#FFFFFF",
+                ),
+                null,
+            )
+        )
+    }
+
+    // --- UTILS ---
+
+    protected fun getTransparentPicture(key: String): HyperPicture {
+        val conf = Bitmap.Config.ARGB_8888
+        val transparentBitmap = createBitmap(96, 96, conf)
+        return HyperPicture(key, transparentBitmap)
+    }
+
+    protected fun getDrawablePicture(key: String, resId: Int): HyperPicture {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
+        val bitmap = drawable?.toBitmap() ?: createFallbackBitmap()
+        return HyperPicture(key, bitmap)
+    }
+
+    protected fun getColoredPicture(key: String, resId: Int, colorHex: String): HyperPicture {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
+        val color = try { colorHex.toColorInt() } catch (e: Exception) { Color.WHITE }
+        drawable?.setTint(color)
+        val bitmap = drawable?.toBitmap() ?: createFallbackBitmap()
+        return HyperPicture(key, bitmap)
+    }
+
+    /**
+     * Places a country flag behind Xiaomi's native app-icon badge position. The provider icon
+     * remains a separate native ChatInfo layer, so both identities stay visible as a stack.
+     */
+    protected fun getCountryFlagBadgedPicture(
+        key: String,
+        resId: Int,
+        colorHex: String,
+        countryFlagBitmap: Bitmap?,
+        flagEmoji: String?
+    ): HyperPicture {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate()
+        val color = try { colorHex.toColorInt() } catch (_: Exception) { Color.WHITE }
+        drawable?.setTint(color)
+        val glyph = drawable?.toBitmap()?.let { source ->
+            createBitmap(96, 96).also { target ->
+                drawNormalizedBitmap(
+                    Canvas(target),
+                    source,
+                    RectF(0f, 0f, 96f, 96f),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                )
+            }
+        } ?: createFallbackBitmap()
+        if (!isUsableBitmap(countryFlagBitmap) && flagEmoji.isNullOrBlank()) return HyperPicture(key, glyph)
+
+        val output = runCatching {
+            val width = glyph.width.coerceAtLeast(1)
+            val height = glyph.height.coerceAtLeast(1)
+            val bitmap = createBitmap(width, height)
+            val canvas = Canvas(bitmap)
+            canvas.drawBitmap(glyph, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+
+            val minSide = minOf(width, height).toFloat()
+            val radius = minSide * 0.235f
+            // Offset up and left so Xiaomi's native provider badge overlaps instead of hiding it.
+            val centerX = width - minSide * 0.31f
+            val centerY = height - minSide * 0.31f
+            canvas.drawCircle(centerX, centerY, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+            })
+            canvas.withClip(centerX - radius, centerY - radius, centerX + radius, centerY + radius) {
+                if (isUsableBitmap(countryFlagBitmap)) {
+                    drawNormalizedBitmap(
+                        canvas,
+                        checkNotNull(countryFlagBitmap),
+                        RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius),
+                        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                    )
+                } else {
+                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                        textAlign = Paint.Align.CENTER
+                        textSize = radius * 1.65f
+                        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                    }
+                    val metrics = textPaint.fontMetrics
+                    val baseline = centerY - (metrics.ascent + metrics.descent) / 2f
+                    canvas.drawText(checkNotNull(flagEmoji), centerX, baseline, textPaint)
+                }
+            }
+            bitmap
+        }.getOrDefault(glyph)
+        return HyperPicture(key, output)
+    }
+
+    protected fun getActionPicture(
+        key: String,
+        resId: Int,
+        backgroundColor: Int
+    ): HyperPicture {
+        val source = ContextCompat.getDrawable(context, resId)?.mutate()?.toBitmap(width = 96, height = 96)
+            ?: createFallbackBitmap()
+        val bitmap = styleActionIcon(source, 24, backgroundColor)
+        return HyperPicture(key, bitmap)
+    }
+
+
+    protected fun getNotificationBitmap(sbn: StatusBarNotification): Bitmap? {
+        return resolveAvatarVisual(sbn).bitmap
+    }
+
+    protected fun resolveNotificationVisual(sbn: StatusBarNotification): ResolvedNotificationVisual =
+        resolveAvatarVisual(sbn)
+
+    private fun resolveAvatarVisual(sbn: StatusBarNotification): ResolvedNotificationVisual {
+        val pkg = sbn.packageName
+        try {
+            if (isGroupConversation(sbn)) {
+                loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+                val groupLargeBig = loadLargeIconBigBitmap(sbn)
+                if (groupLargeBig != null &&
+                    NotificationVisualPlanner.isLikelyAvatar(groupLargeBig.width, groupLargeBig.height)
+                ) {
+                    return ResolvedNotificationVisual(groupLargeBig, NotificationVisualSource.LARGE_ICON)
+                }
+                val groupLarge = loadLargeIconBitmap(sbn)
+                if (groupLarge != null &&
+                    NotificationVisualPlanner.isLikelyAvatar(groupLarge.width, groupLarge.height)
+                ) {
+                    return ResolvedNotificationVisual(groupLarge, NotificationVisualSource.LARGE_ICON)
+                }
+            }
+            loadPersonBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+            loadShortcutBitmap(sbn)?.let { return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON) }
+
+            val picture = loadPictureBitmap(sbn)
+            val largeBig = loadLargeIconBigBitmap(sbn)
+            if (largeBig != null &&
+                NotificationVisualPlanner.isLikelyAvatar(largeBig.width, largeBig.height) &&
+                !sameBitmap(largeBig, picture)
+            ) {
+                return ResolvedNotificationVisual(largeBig, NotificationVisualSource.LARGE_ICON)
+            }
+
+            val large = loadLargeIconBitmap(sbn)
+            if (large != null) {
+                val role = NotificationVisualPlanner.largeIconRole(
+                    hasPicture = picture != null,
+                    hasPersonIcon = false,
+                    width = large.width,
+                    height = large.height,
+                    sameAsPicture = sameBitmap(large, picture),
+                    mediaShareWithoutPersonIcon = isMediaShareNotification(sbn),
+                )
+                if (role == LargeIconRole.AVATAR) {
+                    return ResolvedNotificationVisual(large, NotificationVisualSource.LARGE_ICON)
+                }
+            }
+
+            remoteAvatarBitmap(sbn, picture)?.let {
+                return ResolvedNotificationVisual(it, NotificationVisualSource.PERSON)
+            }
+
+            if (sbn.notification.smallIcon != null) {
+                val bitmap = loadIconBitmap(sbn.notification.smallIcon, pkg)
+                if (bitmap != null && isUsableBitmap(bitmap)) {
+                    return ResolvedNotificationVisual(bitmap, NotificationVisualSource.SMALL_ICON)
+                }
+            }
+
+            val appIcon = getAppIconBitmap(pkg)
+            if (appIcon != null && isUsableBitmap(appIcon)) {
+                return ResolvedNotificationVisual(appIcon, NotificationVisualSource.APP_ICON)
+            }
+        } catch (e: Exception) {
+            Log.e("BaseTranslator", "Error extracting avatar", e)
+            val appIcon = getAppIconBitmap(pkg)
+            if (appIcon != null && isUsableBitmap(appIcon)) {
+                return ResolvedNotificationVisual(appIcon, NotificationVisualSource.APP_ICON)
+            }
+        }
+        return ResolvedNotificationVisual(createFallbackBitmap(), NotificationVisualSource.FALLBACK)
+    }
+
+    private fun resolveAttachmentVisual(sbn: StatusBarNotification, avatar: Bitmap): ResolvedNotificationVisual? {
+        val picture = loadPictureBitmap(sbn)
+        if (picture != null && isUsableBitmap(picture) && !sameBitmap(picture, avatar)) {
+            return ResolvedNotificationVisual(picture, NotificationVisualSource.PICTURE)
+        }
+        val large = loadLargeIconBitmap(sbn)
+        if (large != null && isUsableBitmap(large)) {
+            val personIcon = loadPersonBitmap(sbn) != null || loadShortcutBitmap(sbn) != null
+            val role = NotificationVisualPlanner.largeIconRole(
+                hasPicture = picture != null,
+                hasPersonIcon = personIcon,
+                width = large.width,
+                height = large.height,
+                sameAsPicture = sameBitmap(large, picture),
+                mediaShareWithoutPersonIcon = isMediaShareNotification(sbn) && !personIcon,
+            )
+            if (role == LargeIconRole.ATTACHMENT &&
+                NotificationVisualPlanner.isDistinctMedia(
+                    large.width,
+                    large.height,
+                    avatar.width,
+                    avatar.height,
+                    sameBitmap(large, avatar),
+                )
+            ) {
+                return ResolvedNotificationVisual(large, NotificationVisualSource.LARGE_ICON)
+            }
+        }
+        return remoteAttachmentBitmap(sbn, avatar)?.let {
+            ResolvedNotificationVisual(it, NotificationVisualSource.PICTURE)
+        }
+    }
+
+    private fun isGroupConversation(sbn: StatusBarNotification): Boolean {
+        val extras = sbn.notification.extras
+        if (extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)) return true
+        return try {
+            NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(sbn.notification)
+                ?.isGroupConversation == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun loadPictureBitmap(sbn: StatusBarNotification): Bitmap? {
+        val extras = sbn.notification.extras
+        extras.getParcelableCompat<Bitmap>(Notification.EXTRA_PICTURE)
+            ?.takeIf(::isUsableBitmap)
+            ?.let { return it }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            extras.getParcelableCompat<Icon>(Notification.EXTRA_PICTURE_ICON)
+                ?.let { loadIconBitmap(it, sbn.packageName) }
+                ?.takeIf(::isUsableBitmap)
+                ?.let { return it }
+        }
+        return null
+    }
+
+    private fun loadLargeIconBitmap(sbn: StatusBarNotification): Bitmap? {
+        sbn.notification.getLargeIcon()?.let { loadIconBitmap(it, sbn.packageName) }
+            ?.takeIf(::isUsableBitmap)
+            ?.let { return it }
+        @Suppress("DEPRECATION")
+        return sbn.notification.extras.getParcelableCompat<Bitmap>(Notification.EXTRA_LARGE_ICON)
+            ?.takeIf(::isUsableBitmap)
+    }
+
+    private fun loadLargeIconBigBitmap(sbn: StatusBarNotification): Bitmap? {
+        val extras = sbn.notification.extras
+        extras.getParcelableCompat<Icon>(Notification.EXTRA_LARGE_ICON_BIG)
+            ?.let { loadIconBitmap(it, sbn.packageName) }
+            ?.takeIf(::isUsableBitmap)
+            ?.let { return it }
+        return extras.getParcelableCompat<Bitmap>(Notification.EXTRA_LARGE_ICON_BIG)
+            ?.takeIf(::isUsableBitmap)
+    }
+
+    private fun loadShortcutBitmap(sbn: StatusBarNotification): Bitmap? =
+        com.sykeptical.hyperpop.service.NotificationConversationShortcut.iconBitmap(context, sbn)
+            ?.takeIf(::isUsableBitmap)
+
+    private fun isMediaShareNotification(sbn: StatusBarNotification): Boolean {
+        val extras = sbn.notification.extras
+        return listOf(
+            extras.getCharSequence(Notification.EXTRA_TITLE),
+            extras.getCharSequence(Notification.EXTRA_TEXT),
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT),
+            extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT),
+            sbn.notification.tickerText,
+        ).any { com.sykeptical.hyperpop.service.NotificationIdentityResolver.isMediaShareCaption(it) }
+    }
+
+    private fun sameBitmap(left: Bitmap?, right: Bitmap?): Boolean {
+        if (left == null || right == null) return false
+        return left === right || runCatching { left.sameAs(right) }.getOrDefault(false)
+    }
+
+    private fun remoteViewsExtract(sbn: StatusBarNotification) =
+        com.sykeptical.hyperpop.service.NotificationRemoteViewsParser.collect(
+            sbn.notification,
+            context,
+            // A reconstructed MessagingStyle/InboxStyle layout only repeats extras already
+            // inspected above. Building and reflecting three layouts costs ~2s per WhatsApp
+            // post on HyperOS. Only inspect custom RemoteViews actually supplied by the app.
+            recoverIfMissing = false,
+        )
+
+    private fun remoteAvatarBitmap(sbn: StatusBarNotification, picture: Bitmap?): Bitmap? =
+        remoteViewsExtract(sbn).bitmaps
+            .filter { isUsableBitmap(it) && NotificationVisualPlanner.isLikelyAvatar(it.width, it.height) }
+            .filter { !sameBitmap(it, picture) }
+            .minByOrNull { it.width.toLong() * it.height.toLong() }
+
+    private fun remoteAttachmentBitmap(sbn: StatusBarNotification, avatar: Bitmap): Bitmap? =
+        remoteViewsExtract(sbn).bitmaps
+            .filter {
+                isUsableBitmap(it) &&
+                    NotificationVisualPlanner.isDistinctMedia(
+                        it.width,
+                        it.height,
+                        avatar.width,
+                        avatar.height,
+                        sameBitmap(it, avatar),
+                    )
+            }
+            .maxByOrNull { it.width.toLong() * it.height.toLong() }
+
+    private fun loadPersonBitmap(sbn: StatusBarNotification): Bitmap? {
+        val pkg = sbn.packageName
+        val extras = sbn.notification.extras
+        val self = selfPersonNames(sbn)
+        val fromMessages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            ?.toList()
+            .orEmpty()
+            .asReversed()
+            .firstNotNullOfOrNull { parcelable ->
+                val bundle = parcelable as? Bundle ?: return@firstNotNullOfOrNull null
+                val person = bundle.getParcelableCompat<Person>("sender_person") ?: return@firstNotNullOfOrNull null
+                if (self.any { it.equals(person.name?.toString()?.trim().orEmpty(), ignoreCase = true) }) {
+                    return@firstNotNullOfOrNull null
+                }
+                person.icon?.let { loadIconBitmap(it, pkg) }?.takeIf(::isUsableBitmap)
+            }
+        if (fromMessages != null) return fromMessages
+        val people = buildList {
+            extras.getParcelableCompat<Person>(Notification.EXTRA_CALL_PERSON)?.let(::add)
+            extras.getParcelableArrayListCompat<Person>(Notification.EXTRA_PEOPLE_LIST)
+                ?.filterNot { person ->
+                    self.any { it.equals(person.name?.toString()?.trim().orEmpty(), ignoreCase = true) }
+                }
+                ?.let(::addAll)
+        }
+        return people.firstNotNullOfOrNull { person ->
+            person.icon?.let { loadIconBitmap(it, pkg) }?.takeIf(::isUsableBitmap)
+        }
+    }
+
+    private fun selfPersonNames(sbn: StatusBarNotification): Set<String> {
+        val extras = sbn.notification.extras
+        val names = linkedSetOf<String>()
+        extras.getCharSequence(Notification.EXTRA_SELF_DISPLAY_NAME)?.toString()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(names::add)
+        extras.getParcelableCompat<Person>(Notification.EXTRA_MESSAGING_PERSON)
+            ?.name?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(names::add)
+        return names
+    }
+
+    protected fun createRoundedIconWithBackground(source: Bitmap, backgroundColor: Int, paddingDp: Int = 8): Bitmap {
+        val size = 96
+        val output = createBitmap(size, size)
+        val canvas = Canvas(output)
+        val paint = Paint().apply {
+            isAntiAlias = true
+            color = backgroundColor
+        }
+
+        val center = size / 2f
+        canvas.drawCircle(center, center, center, paint)
+
+        val density = context.resources.displayMetrics.density
+        val paddingPx = (paddingDp * density).toInt()
+
+        val targetSize = size - (paddingPx * 2)
+        if (targetSize > 0) {
+            val whiteSource = tintBitmap(source, Color.WHITE)
+            val destRect = Rect(paddingPx, paddingPx, size - paddingPx, size - paddingPx)
+            drawNormalizedBitmap(canvas, whiteSource, RectF(destRect), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        }
+
+        return output
+    }
+
+    private fun drawNormalizedBitmap(canvas: Canvas, source: Bitmap, destRect: RectF, paint: Paint?) {
+        if (!isUsableBitmap(source) || destRect.width() <= 0f || destRect.height() <= 0f) return
+
+        val visible = getVisibleBitmapBounds(source)
+        val srcRect = if (visible != null) {
+            Rect(visible.left, visible.top, visible.right + 1, visible.bottom + 1)
+        } else {
+            Rect(0, 0, source.width, source.height)
+        }
+
+        if (srcRect.width() <= 0 || srcRect.height() <= 0) return
+
+        val fitted = IconGeometry.fitCenterInside(
+            srcRect.width(),
+            srcRect.height(),
+            destRect.left,
+            destRect.top,
+            destRect.right,
+            destRect.bottom
+        )
+        val finalRect = RectF(fitted.left, fitted.top, fitted.right, fitted.bottom)
+        if (finalRect.width() <= 0f || finalRect.height() <= 0f) return
+        canvas.drawBitmap(source, srcRect, finalRect, paint)
+    }
+
+    private fun getVisibleBitmapBounds(bitmap: Bitmap): PixelBounds? {
+        if (!isUsableBitmap(bitmap)) return null
+        return try {
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            IconGeometry.findVisibleBounds(pixels, bitmap.width, bitmap.height)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    protected fun isUsableBitmap(bitmap: Bitmap?): Boolean {
+        if (bitmap == null || bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return false
+        return bitmap.width <= 2_048 &&
+                bitmap.height <= 2_048 &&
+                bitmap.width.toLong() * bitmap.height.toLong() <= 4_194_304L
+    }
+
+    private fun tintBitmap(source: Bitmap, color: Int): Bitmap {
+        val result = createBitmap(source.width, source.height)
+        val canvas = Canvas(result)
+        val paint = Paint().apply {
+            colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+            isFilterBitmap = true
+        }
+        canvas.drawBitmap(source, 0f, 0f, paint)
+        return result
+    }
+
+    protected fun loadIconBitmap(
+        icon: Icon,
+        packageName: String,
+        width: Int? = null,
+        height: Int? = null
+    ): Bitmap? {
+        return try {
+            val resPackage = runCatching { icon.resPackage }.getOrNull()?.takeIf { it.isNotBlank() }
+            val drawable = when {
+                icon.type != Icon.TYPE_RESOURCE -> icon.loadDrawable(context)
+                else -> {
+                    val contexts = listOfNotNull(
+                        context,
+                        runCatching { context.createPackageContext(packageName, 0) }.getOrNull(),
+                        resPackage?.takeIf { it != packageName }?.let {
+                            runCatching { context.createPackageContext(it, 0) }.getOrNull()
+                        },
+                        runCatching { context.createPackageContext("android", 0) }.getOrNull(),
+                    ).distinct()
+                    contexts.firstNotNullOfOrNull { candidate ->
+                        runCatching { icon.loadDrawable(candidate) }.getOrNull()
+                    }
+                }
+            }
+            drawable?.toBitmap(width = width, height = height)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun transportGlyphDrawable(glyph: DownloadTransportControls.Glyph): Int {
+        return when (glyph) {
+            DownloadTransportControls.Glyph.PAUSE -> R.drawable.ic_focus_pause
+            DownloadTransportControls.Glyph.RESUME -> R.drawable.ic_focus_resume
+            DownloadTransportControls.Glyph.CANCEL -> R.drawable.ic_island_download_cancel
+        }
+    }
+
+    /**
+     * Draws a 48dp focus button at the device density. HyperOS sizes these bitmaps from their
+     * density, so a 96px plate left at the default mdpi density renders about three times too big.
+     */
+    private fun renderFocusControl(resId: Int): Bitmap? {
+        val drawable = ContextCompat.getDrawable(context, resId)?.mutate() ?: return null
+        val metrics = context.resources.displayMetrics
+        val size = (48f * metrics.density).roundToInt().coerceAtLeast(48)
+        val bitmap = createBitmap(size, size)
+        bitmap.density = metrics.densityDpi
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        return bitmap
+    }
+
+    private fun fallbackActionGlyphRes(title: String): Int? {
+        val value = title.lowercase()
+        return when {
+            value.isBlank() -> android.R.drawable.ic_menu_more
+            listOf("pause", "pausar", "pausa").any { it in value } -> android.R.drawable.ic_media_pause
+            listOf("resume", "play", "contin", "reanud", "reprendre").any { it in value } -> android.R.drawable.ic_media_play
+            listOf("cancel", "stop", "remove", "delete", "cancelar", "detener", "eliminar").any { it in value } ->
+                android.R.drawable.ic_menu_close_clear_cancel
+            listOf("open", "view", "abrir", "ver").any { it in value } -> android.R.drawable.ic_menu_view
+            else -> android.R.drawable.ic_menu_more
+        }
+    }
+
+    private fun getAppIconBitmap(packageName: String): Bitmap? {
+        appIconBitmapCache[packageName]?.let { return it }
+        return try {
+            val drawable = context.packageManager.getApplicationIcon(packageName)
+            val bitmap = drawable.toBitmap()
+            if (isUsableBitmap(bitmap)) {
+                appIconBitmapCache[packageName] = bitmap
+                bitmap
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun compositeAppBadge(source: Bitmap, packageName: String): Bitmap {
+        val appIcon = getAppIconBitmap(packageName) ?: return source
+        if (!isUsableBitmap(source) || !isUsableBitmap(appIcon)) return source
+
+        return try {
+            val width = source.width.coerceAtLeast(1)
+            val height = source.height.coerceAtLeast(1)
+            val output = createBitmap(width, height)
+            val canvas = Canvas(output)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(source, null, Rect(0, 0, width, height), paint)
+
+            val minSide = minOf(width, height)
+            val badgeSize = (minSide * 0.36f).roundToInt().coerceIn(18, minSide)
+            val iconDest = RectF(
+                (width - badgeSize).toFloat(),
+                (height - badgeSize).toFloat(),
+                width.toFloat(),
+                height.toFloat()
+            )
+            // Preserve the application's full-colour adaptive-icon artwork without adding
+            // another background plate or tint around it.
+            drawNormalizedBitmap(canvas, appIcon, iconDest, paint)
+            output
+        } catch (_: Exception) {
+            source
+        }
+    }
+
+    private fun compositeVoiceBadges(
+        source: Bitmap,
+        packageName: String,
+        includeAppIcon: Boolean,
+        micRes: Int,
+    ): Bitmap {
+        if (!isUsableBitmap(source)) return source
+        val appIcon = if (includeAppIcon) getAppIconBitmap(packageName) else null
+        return try {
+            val width = source.width.coerceAtLeast(1)
+            val height = source.height.coerceAtLeast(1)
+            val output = createBitmap(width, height)
+            val canvas = Canvas(output)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(source, null, Rect(0, 0, width, height), paint)
+
+            val minSide = minOf(width, height)
+            val badge = (minSide * 0.36f).roundToInt().coerceIn(18, minSide)
+            val appDest = RectF(
+                (width - badge).toFloat(),
+                (height - badge).toFloat(),
+                width.toFloat(),
+                height.toFloat(),
+            )
+            if (appIcon != null && isUsableBitmap(appIcon)) {
+                drawNormalizedBitmap(canvas, appIcon, appDest, paint)
+            }
+            val mic = (badge * 0.62f).roundToInt().coerceAtLeast(12)
+            val micLeft = (width - mic).toFloat()
+            val micTop = (height - mic).toFloat()
+            drawMicBadge(canvas, micRes, RectF(micLeft, micTop, width.toFloat(), height.toFloat()))
+            output
+        } catch (_: Exception) {
+            source
+        }
+    }
+
+    private fun drawMicBadge(canvas: Canvas, micRes: Int, dest: RectF) {
+        val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = "#2C2C2E".toColorInt() }
+        canvas.drawOval(dest, plate)
+        val mic = ContextCompat.getDrawable(context, micRes)?.mutate() ?: return
+        mic.setTint(Color.WHITE)
+        val inset = dest.width() * 0.22f
+        mic.setBounds(
+            (dest.left + inset).roundToInt(),
+            (dest.top + inset).roundToInt(),
+            (dest.right - inset).roundToInt(),
+            (dest.bottom - inset).roundToInt(),
+        )
+        mic.draw(canvas)
+    }
+
+    protected fun extractTextPercentage(title: String?, text: String?): Int? {
+        val pattern = Regex("""\b(\d{1,3})\s*%""")
+        val textMatch = text?.let { pattern.find(it) }
+        val titleMatch = title?.let { pattern.find(it) }
+        val match = textMatch ?: titleMatch
+        if (match != null) {
+            val value = match.groupValues[1].toIntOrNull()
+            if (value != null && value in 0..100) {
+                return value
+            }
+        }
+        return null
+    }
+
+    protected fun createFallbackBitmap(): Bitmap = createBitmap(1, 1)
+
+    protected fun Drawable.toBitmap(width: Int? = null, height: Int? = null): Bitmap {
+        if (this is BitmapDrawable && this.bitmap != null) {
+            if (width != null && height != null) {
+                return this.bitmap.scale(width, height)
+            }
+            return this.bitmap
+        }
+
+        val w = width ?: if (intrinsicWidth > 0) intrinsicWidth else 96
+        val h = height ?: if (intrinsicHeight > 0) intrinsicHeight else 96
+
+        val bitmap = createBitmap(w, h)
+        val canvas = Canvas(bitmap)
+        setBounds(0, 0, canvas.width, canvas.height)
+        draw(canvas)
+        return bitmap
+    }
+}

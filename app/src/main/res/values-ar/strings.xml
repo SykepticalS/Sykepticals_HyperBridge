@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
 
     <string name="back">رجوع</string>
     <string name="next">التالي</string>
@@ -12,12 +12,12 @@
     <string name="sort_order">ترتيب الفرز</string>
 
     <string name="welcome_title">مرحباً بك في
-Hyper Bridge</string>
+HyperPop</string>
     <string name="welcome_subtitle">دمج سلس للجزيرة التفاعلية (HyperIslands) مع واجهة HyperOS.</string>
     <string name="get_started">ابدأ الآن</string>
 
     <string name="how_it_works">كيف يعمل التطبيق؟</string>
-    <string name="how_it_works_desc">اختر تطبيقاتك المفضلة (مثل Spotify والخرائط والمؤقت). سيقوم Hyper Bridge بتحويل إشعاراتها إلى جزيرة تفاعلية أنيقة.</string>
+    <string name="how_it_works_desc">اختر تطبيقاتك المفضلة (مثل Spotify والخرائط والمؤقت). سيقوم HyperPop بتحويل إشعاراتها إلى جزيرة تفاعلية أنيقة.</string>
     <string name="beta_warning">ملاحظة: هذا التطبيق في مرحلة تجريبية (Beta). قد تواجه بعض الأخطاء أو عدم دقة في بعض العناصر المرئية.</string>
 
     <string name="device_compatible">الجهاز متوافق</string>
@@ -46,7 +46,7 @@ Hyper Bridge</string>
     <string name="no_apps_found">لم يتم العثور على تطبيقات</string>
 
     <string name="version_template">الإصدار %s</string>
-    <string name="developer_credit">بواسطة D4vidDf</string>
+    <string name="developer_credit">بواسطة sykeptical</string>
 
     <string name="group_configuration">التهيئة</string>
     <string name="system_setup">إعداد النظام</string>
@@ -58,12 +58,12 @@ Hyper Bridge</string>
     <string name="xmsf_workaround_credit_title">حل مشكلة XMSF</string>
     <string name="xmsf_workaround_credit_subtitle">أبحاث بواسطة Stardawn (星间晞)</string>
     <string name="developer">المطور</string>
-    <string name="developer_subtitle">زيارة d4viddf.com</string>
+    <string name="developer_subtitle">زيارة sykeptical</string>
     <string name="source_code">الكود المصدري</string>
     <string name="source_code_subtitle">مستودع GitHub</string>
     <string name="licenses">رخص المصادر المفتوحة</string>
     <string name="licenses_subtitle">برمجيات الطرف الثالث</string>
-    <string name="footer_made_with_love">صُنع بـ ❤️ في إسبانيا</string>
+    <string name="footer_made_with_love">صُنع بـ ❤️ في Türkiye</string>
 
     <string name="app_health_desc">تأكد من أن جميع الفحوصات باللون الأخضر ليعمل التطبيق بشكل صحيح في الخلفية.</string>
     <string name="req_permissions">الأذونات المطلوبة</string>
@@ -238,7 +238,7 @@ Hyper Bridge</string>
     <string name="title_0_3_0">التحديث العالمي</string>
 
     <string name="privacy_title">آمن ويعمل بدون إنترنت 100%</string>
-    <string name="privacy_desc">يعالج Hyper Bridge كل شيء مباشرة على معالج هاتفك.
+    <string name="privacy_desc">يعالج HyperPop كل شيء مباشرة على معالج هاتفك.
 
 لا يتطلب التطبيق أي اتصال بالإنترنت، مما يعني أن إشعاراتك وبياناتك الشخصية لا تغادر جهازك أبداً.</string>
 
@@ -252,7 +252,7 @@ Hyper Bridge</string>
     <string name="backup_options_subtitle">حدد البيانات المراد تضمينها في العملية</string>
 
     <string name="option_app_settings">إعدادات التطبيق</string>
-    <string name="option_app_settings_desc">حالة الإعداد، الثيم، وأنماط السلوك</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
 
     <string name="option_blocklist">قاعدة بيانات قائمة الحظر</string>
     <string name="option_blocklist_desc">الكلمات والتطبيقات المحظورة المخصصة</string>
@@ -288,19 +288,9 @@ Hyper Bridge</string>
 
     <string name="close">إغلاق</string>
     <string name="search">بحث</string>
-    <string name="widget_updated_toast">تم تحديث الأداة</string>
-    <string name="widget_settings_error">تعذر تعديل إعدادات هذه الأداة</string>
 
-    <string name="widget_picker_title">إضافة أداة</string>
     <string name="search_apps_placeholder">البحث في التطبيقات...</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="one">%d أداة</item>
-        <item quantity="many">%d أداة</item>
-        <item quantity="other">%d أدوات</item>
-    </plurals>
 
-    <string name="widget_config_title">تهيئة الأداة</string>
-    <string name="widget_settings_button">إعدادات الأداة</string>
 
     <string name="config_tab_appearance">المظهر</string>
     <string name="config_tab_behavior">السلوك</string>
@@ -342,38 +332,12 @@ Hyper Bridge</string>
     <string name="app_uninstalled_badge">تم إلغاء التثبيت</string>
     <string name="settings_action">الإعدادات</string>
 
-    <string name="saved_widgets_title">الأدوات المحفوظة</string>
-    <string name="no_saved_widgets">لم يتم العثور على أدوات محفوظة.</string>
-    <string name="widget_id_fmt">أداة رقم %d</string>
     <string name="show_on_island">إظهار على الجزيرة</string>
 
-    <string name="theme_installer_analyzing">جاري تحليل حزمة الثيم...</string>
-    <string name="theme_installer_success_title">الثيم جاهز</string>
-    <string name="theme_installer_author">صُمم بواسطة %s</string>
-    <string name="theme_installer_version">الإصدار %d</string>
-    <string name="theme_installer_apply_question">هل تريد تطبيق هذا الثيم على Hyper Bridge الآن؟</string>
-    <string name="theme_installer_action_apply">تطبيق الثيم</string>
-    <string name="theme_installer_action_later">حفظ لوقت لاحق</string>
-    <string name="theme_installer_error_title">فشل الاستيراد</string>
-    <string name="theme_installer_error_generic">تعذر التحقق من ملف الثيم.</string>
-    <string name="theme_installer_btn_close">إغلاق</string>
-    <string name="theme_manager_title">ثيماتي</string>
-    <string name="theme_manager_cd_add">إضافة ثيم جديد</string>
 
-    <string name="theme_card_author_format">بواسطة %s</string>
-    <string name="theme_card_cd_active">الثيم النشط</string>
-    <string name="theme_card_cd_delete">حذف الثيم</string>
 
-    <string name="theme_system_default_title">ثيم النظام الافتراضي</string>
-    <string name="theme_system_default_desc">المظهر القياسي</string>
 
-    <string name="theme_sheet_title">إضافة ثيم جديد</string>
 
-    <string name="theme_sheet_action_create">إنشاء ثيم جديد</string>
-    <string name="theme_sheet_action_find">بحث</string>
-    <string name="theme_action_import_short">استيراد</string>
-    <string name="theme_card_action_edit">تعديل</string>
-    <string name="theme_card_action_export">تصدير</string>
 
     <string name="creator_title_new">إنشاء ثيم</string>
     <string name="creator_title_edit">تعديل الثيم</string>
@@ -434,16 +398,11 @@ Hyper Bridge</string>
     <string name="design_hero_community_title">المجتمع</string>
     <string name="design_hero_community_subtitle">انضم إلينا على GitHub</string>
 
-    <string name="design_section_themes">الثيمات</string>
-    <string name="design_section_widgets">الأدوات (Widgets)</string>
 
     <string name="design_browse_more">استعراض المزيد</string>
     <string name="design_add_new">إضافة جديد</string>
     <string name="design_add_design">إضافة تصميم</string>
     <string name="design_add_to_island">التخصيص</string>
-    <string name="design_system_widget_beta">أداة النظام (تجريبي)</string>
-    <string name="design_get_themes">الحصول على ثيمات</string>
-    <string name="design_empty_widget_title">أضف أداتك الأولى</string>
     <string name="design">التصميم</string>
 
     <string name="creator_nav_actions">الإجراءات العامة</string>
@@ -483,8 +442,6 @@ Hyper Bridge</string>
     <string name="discard">تجاهل</string>
     <string name="unsaved_changes">تغييرات غير محفوظة</string>
     <string name="unsaved_changes_desc">لديك تغييرات غير محفوظة لهذا التطبيق. هل تريد حفظها قبل الخروج؟</string>
-    <string name="share_theme">مشاركة الثيم</string>
-    <string name="my_theme">ثيمي</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="one">%1$d إجراء مخصص</item>
         <item quantity="many">%1$d إجراءً مخصصاً</item>
@@ -501,9 +458,8 @@ Hyper Bridge</string>
     <string name="colors_label_material_you">Material You (ألوان النظام)</string>
     <string name="colors_desc_material_you">استخراج الألوان من خلفية الشاشة الحالية.</string>
 
-    <string name="kill_all_widgets">إيقاف الأدوات النشطة</string>
     <string name="permission_reminder_title">تنبيه التحديث</string>
-    <string name="permission_reminder_desc">تم تحديث Hyper Bridge! يُرجى التأكد من أن أذونات التشغيل التلقائي والبطارية في الخلفية لم يتم إلغاؤها تلقائياً من النظام لضمان استمرار عمل أدواتك بسلاسة.</string>
+    <string name="permission_reminder_desc">تم تحديث HyperPop! يُرجى التأكد من أن أذونات التشغيل التلقائي والبطارية في الخلفية لم يتم إلغاؤها تلقائياً من النظام لضمان استمرار عمل أدواتك بسلاسة.</string>
     <string name="got_it">فهمت ذلك</string>
 
     <string name="recommended">موصى به</string>
@@ -578,11 +534,8 @@ Hyper Bridge</string>
     <string name="reply_send_radius">نصف قطر حواف زر الإرسال</string>
     
     <string name="onboarding_can_be_changed">يمكنك تغيير هذه الخيارات لاحقاً في الإعدادات ومنشئ الثيمات.</string>
-    <string name="onboarding_widget_desc">إضافة أدوات أندرويد القياسية إلى جزيرتك للوصول السريع.</string>
-    <string name="onboard_theme_desc">تخصيص كامل لألوان وأشكال وأيقونات جزيرتك.</string>
     <string name="onboard_design_desc">توسيع الإمكانيات مع خيارات تخصيص متعددة</string>
     <string name="behavior_desc_glob_config">يحدد كيفية تصرف الجزيرة.</string>
-    <string name="widget_layout_snapshot">معاينة للأداة</string>
 
     <string name="title_0_5_7">تحديث الأداء والمزامنة</string>
 
@@ -596,11 +549,10 @@ Hyper Bridge</string>
 
     <string name="title_0_5_0">تحديث التحديثات المباشرة</string>
     <string name="notification_went_wrong">إذا كنت ترى هذا، فهناك خطأ ما! انقر هنا لمعرفة كيفية إصلاحه.</string>
-    <string name="widget_went_wrong">إذا كنت ترى هذا، فهناك خطأ ما! تعذر على النظام عرض الأداة</string>
     <string name="troubleshoot_featured_notification">استكشاف الأخطاء وإصلاحها</string>
 
     <string name="featured_notifications_check">فحص الإشعارات المميزة</string>
-    <string name="featured_notifications_check_desc">دعنا نتحقق مما إذا كان نظامك مهيأ بشكل صحيح لعرض جزر Hyper Bridge.</string>
+    <string name="featured_notifications_check_desc">دعنا نتحقق مما إذا كان نظامك مهيأ بشكل صحيح لعرض جزر HyperPop.</string>
     <string name="featured_notifications_not_supported">غير مدعوم</string>
     <string name="featured_notifications_enabled">مفعل</string>
     <string name="featured_notifications_open_settings">فتح إعدادات النظام</string>
@@ -610,9 +562,9 @@ Hyper Bridge</string>
 للإصلاح:
 1. انقر على "فتح إعدادات النظام"
 2. مرر لأسفل إلى "الإشعارات المميزة" (أو ما يماثلها)
-3. قم بتفعيل الإذن لتطبيق Hyper Bridge.</string>
+3. قم بتفعيل الإذن لتطبيق HyperPop.</string>
 
-    <string name="migration_title">تحديث Hyper Bridge</string>
+    <string name="migration_title">تحديث HyperPop</string>
     <string name="migration_message">جاري ترحيل قاعدة البيانات إلى وحدة التخزين المحمية للجهاز…</string>
     <string name="migration_complete">اكتمل التحديث</string>
 

@@ -1,0 +1,45 @@
+---
+description: HyperPop task routing and context-budget policy
+alwaysApply: true
+---
+
+# HyperPop task router
+
+For every user request, classify the task before broad exploration.
+
+If the request requires a non-trivial HyperPop code investigation,
+bug fix, feature, behavioral change, or refactor:
+- use the `hyperpop-change` skill;
+- delegate initial repository mapping to the `repo-scout` subagent before
+  broad main-agent exploration.
+
+If the request depends on Xiaomi/HyperOS private behavior, including SystemUI,
+XMSF, Dynamic Island, Focus notifications, Xiaomi plugin classloaders,
+native island lifecycle/state/geometry, or behavior observed on the phone:
+- also use the `xiaomi-systemui` skill;
+- do not guess undocumented Xiaomi behavior;
+- if current verified knowledge does not answer it, obtain evidence with
+  `android-mcp` and/or `jadx-analyzer`.
+
+After any non-trivial behavioral code change:
+- delegate independent verification to the `verifier` subagent before
+  claiming completion;
+- after local verification passes, use the `hyperpop-change` device-deployment
+  workflow by default for runtime changes, then perform relevant runtime checks.
+
+Trivial local edits such as spelling, comments, formatting, or an explicitly
+known one-line rename do not require repo-scout, verifier, or device deployment.
+
+Keep the main Grok context lean:
+- prefer symbol/range reads;
+- delegate broad searching;
+- never request all APK classes when a targeted search can answer the question;
+- never dump unfiltered logcat unless specifically necessary;
+- do not invoke MCP tools merely to prove that they are available.
+
+Device and deployment safety:
+- use only an already-connected wireless ADB target; ignore USB devices and emulators;
+- never connect or disconnect ADB targets, restart `adbd`, change ports or wireless-debugging settings, alter ADB authentication, fall back to USB, or reboot unless explicitly requested;
+- never install HyperPop with plain `adb install` or an Android-MCP install tool;
+- deploy APKs by pushing to `/data/local/tmp/__codex_install.apk`, running `pm install -r -g --user 0` through `adb shell su -c`, and removing the temporary APK afterward, including after failures when possible;
+- treat only Package Manager output containing `Success` as a successful install.

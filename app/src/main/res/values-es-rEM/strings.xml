@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
     <string name="back">Atrás</string>
     <string name="next">Siguiente</string>
     <string name="finish">Finalizar</string>
@@ -10,11 +10,11 @@
     <string name="configure">Configurar</string>
     <string name="clear">Borrar</string>
     <string name="sort_order">Orden</string>
-    <string name="welcome_title">Bienvenido a\nHyper Bridge</string>
+    <string name="welcome_title">Bienvenido a\nHyperPop</string>
     <string name="welcome_subtitle">Integra HyperIslands perfectamente en tu experiencia HyperOS.</string>
     <string name="get_started">Empezar</string>
     <string name="how_it_works">Cómo funciona</string>
-    <string name="how_it_works_desc">Selecciona tus aplicaciones favoritas (Spotify, Maps, Timer). Hyper Bridge transforma sus notificaciones en una elegante HyperIsland.</string>
+    <string name="how_it_works_desc">Selecciona tus aplicaciones favoritas (Spotify, Maps, Timer). HyperPop transforma sus notificaciones en una elegante HyperIsland.</string>
     <string name="beta_warning">Nota: Esta app está en Beta. Puedes encontrar errores o información visual incorrecta.</string>
     <string name="device_compatible">Dispositivo Compatible</string>
     <string name="unsupported_device">Dispositivo No Soportado</string>
@@ -36,18 +36,18 @@
     <string name="no_active_bridges_desc">Ve a la Biblioteca para habilitar aplicaciones.</string>
     <string name="no_apps_found">No se encontraron apps</string>
     <string name="version_template">Versión %s</string>
-    <string name="developer_credit">por D4vidDf</string>
+    <string name="developer_credit">por sykeptical</string>
     <string name="group_configuration">Configuración</string>
     <string name="system_setup">Configuración del Sistema</string>
     <string name="system_setup_subtitle">Arreglar permisos y batería</string>
     <string name="group_about">Sobre la aplicación</string>
     <string name="developer">Desarrollador</string>
-    <string name="developer_subtitle">Visita d4viddf.com</string>
+    <string name="developer_subtitle">Visita sykeptical</string>
     <string name="source_code">Código Fuente</string>
     <string name="source_code_subtitle">Repositorio en GitHub</string>
     <string name="licenses">Licencias Open Source</string>
     <string name="licenses_subtitle">Software de terceros</string>
-    <string name="footer_made_with_love">Hecho con ❤️ en España</string>
+    <string name="footer_made_with_love">Hecho con ❤️ en Türkiye</string>
     <string name="app_health_desc">Asegúrate de que todo esté en verde para que la aplicación funcione correctamente en segundo plano.</string>
     <string name="req_permissions">Permisos Requeridos</string>
     <string name="notif_access">Acceso a Notificaciones</string>
@@ -118,7 +118,7 @@
     <string name="title_0_2_0">La Actualización de Información</string>
     <string name="title_0_1_0">La Actualización Expresiva</string>
     <string name="priority_edu_title">Nuevo: Controla la Isla</string>
-    <string name="priority_edu_desc">Hyper Bridge ahora gestiona cómo se comportan múltiples notificaciones cuando se alcanza el límite de 9.\n\n&lt;b&gt;Por Defecto: Más Reciente&lt;/b&gt;\nLas nuevas notificaciones reemplazan a las más antiguas automáticamente.</string>
+    <string name="priority_edu_desc">HyperPop ahora gestiona cómo se comportan múltiples notificaciones cuando se alcanza el límite de 9.\n\n&lt;b&gt;Por Defecto: Más Reciente&lt;/b&gt;\nLas nuevas notificaciones reemplazan a las más antiguas automáticamente.</string>
     <string name="badge_new">NUEVO</string>
     <string name="nav_layout_title">Diseño de Navegación</string>
     <string name="nav_layout_desc">Elige dónde aparece la información</string>
@@ -196,7 +196,7 @@
     </string-array>
     <string name="title_0_3_0">La Actualización Global</string>
     <string name="privacy_title">100% Offline y Seguro</string>
-    <string name="privacy_desc">Hyper Bridge procesa todo directamente en el procesador de tu teléfono.\n\nNO requiere acceso a internet, lo que significa que tus notificaciones y datos personales nunca salen de tu dispositivo.</string>
+    <string name="privacy_desc">HyperPop procesa todo directamente en el procesador de tu teléfono.\n\nNO requiere acceso a internet, lo que significa que tus notificaciones y datos personales nunca salen de tu dispositivo.</string>
     <string name="language">Idioma</string>
     <string name="language_desc">Cambiar idioma de la aplicación</string>
     <string name="system_default">Predeterminado del sistema</string>
@@ -205,7 +205,7 @@
     <string name="backup_section_title">Gestionar datos</string>
     <string name="backup_options_subtitle">Selecciona los datos a incluir en la operación</string>
     <string name="option_app_settings">Ajustes de la aplicación</string>
-    <string name="option_app_settings_desc">Estado de configuración, tema, modos de comportamiento</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
     <string name="option_blocklist">Base de datos de bloqueo</string>
     <string name="option_blocklist_desc">Tus palabras clave bloqueadas y reglas por aplicación</string>
     <string name="option_priorities">Reglas de prioridad</string>
@@ -230,16 +230,7 @@
     <string name="title_0_3_1">Actualización de Copias y Idiomas</string>
     <string name="close">Cerrar</string>
     <string name="search">Search</string>
-    <string name="widget_updated_toast">Widget actualizado</string>
-    <string name="widget_settings_error">No se puede editar la configuración de este widget</string>
-    <string name="widget_picker_title">Añadir widget</string>
     <string name="search_apps_placeholder">Buscar aplicaciones…</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">%d widgets</item>
-        <item quantity="one">%d widget</item>
-    </plurals>
-    <string name="widget_config_title">Configurar widget</string>
-    <string name="widget_settings_button">Ajustes del widget</string>
     <string name="config_tab_appearance">Apariencia</string>
     <string name="config_tab_behavior">Comportamiento</string>
     <string name="config_render_mode_label">Modo de renderizado</string>
@@ -270,33 +261,7 @@
     <string name="size_xlarge">Extra Grande (380dp)</string>
     <string name="app_uninstalled_badge">Desinstalada</string>
     <string name="settings_action">Ajustes</string>
-    <string name="saved_widgets_title">Widgets Guardados</string>
-    <string name="no_saved_widgets">No hay widgets guardados.</string>
-    <string name="widget_id_fmt">Widget #%d</string>
     <string name="show_on_island">Mostrar en Isla</string>
-    <string name="theme_installer_analyzing">Analizando paquete del tema...</string>
-    <string name="theme_installer_success_title">Tema listo</string>
-    <string name="theme_installer_author">Creado por %s</string>
-    <string name="theme_installer_version">Versión %d</string>
-    <string name="theme_installer_apply_question">¿Quieres aplicar este tema a Hyper Bridge ahora?</string>
-    <string name="theme_installer_action_apply">Aplicar tema</string>
-    <string name="theme_installer_action_later">Guardar para luego</string>
-    <string name="theme_installer_error_title">Error al importar</string>
-    <string name="theme_installer_error_generic">No se pudo verificar el archivo del tema.</string>
-    <string name="theme_installer_btn_close">Cerrar</string>
-    <string name="theme_manager_title">Mis temas</string>
-    <string name="theme_manager_cd_add">Añadir nuevo tema</string>
-    <string name="theme_card_author_format">por %s</string>
-    <string name="theme_card_cd_active">Tema activo</string>
-    <string name="theme_card_cd_delete">Eliminar tema</string>
-    <string name="theme_system_default_title">Predeterminado del sistema</string>
-    <string name="theme_system_default_desc">Apariencia estándar</string>
-    <string name="theme_sheet_title">Añadir nuevo tema</string>
-    <string name="theme_sheet_action_create">Crear nuevo tema</string>
-    <string name="theme_sheet_action_find">Search</string>
-    <string name="theme_action_import_short">Importar</string>
-    <string name="theme_card_action_edit">Editar</string>
-    <string name="theme_card_action_export">Exportar</string>
     <string name="creator_title_new">Crear tema</string>
     <string name="creator_title_edit">Editar tema</string>
     <string name="creator_nav_colors">Colores</string>
@@ -348,15 +313,10 @@
     <string name="design_hero_pro_subtitle">Desbloquea todo el potencial</string>
     <string name="design_hero_community_title">Comunidad</string>
     <string name="design_hero_community_subtitle">Únete a nuestro GitHub</string>
-    <string name="design_section_themes">Temas</string>
-    <string name="design_section_widgets">Widgets</string>
     <string name="design_browse_more">Ver más</string>
     <string name="design_add_new">Añadir nuevo</string>
     <string name="design_add_design">Añadir diseño</string>
     <string name="design_add_to_island">Añadir a la Isla</string>
-    <string name="design_system_widget_beta">Widget del sistema (Beta)</string>
-    <string name="design_get_themes">Obtener temas</string>
-    <string name="design_empty_widget_title">Añade tu primer widget</string>
     <string name="design">Design</string>
     <string name="creator_nav_actions">Global Actions</string>
     <string name="creator_sub_actions">Style buttons by keyword</string>
@@ -374,8 +334,6 @@
     <string name="actions_search_hint">Search actions...</string>
     <string name="actions_search_empty_fmt">No actions found for \"%1$s\"</string>
     <string name="action_wip_warning">This feature is a Work in Progress. Keyword matching depends on how apps structure their notifications and may not work for every app.</string>
-    <string name="creator_dialog_apply_title">Apply Theme?</string>
-    <string name="creator_dialog_apply_desc">Do you want to apply this theme now?</string>
     <string name="creator_dialog_action_save_apply">Save &amp; Apply</string>
     <string name="creator_dialog_action_save_only">Save Only</string>
     <string name="select_icon">Select Icon</string>
@@ -391,8 +349,6 @@
     <string name="discard">Discard</string>
     <string name="unsaved_changes">Unsaved Changes</string>
     <string name="unsaved_changes_desc">You have unsaved changes for this app. Do you want to save them before exiting?</string>
-    <string name="share_theme">Share Theme</string>
-    <string name="my_theme">My Theme</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="one">%1$d custom action</item>
         <item quantity="other">%1$d custom actions</item>
@@ -408,7 +364,7 @@
 
     <string name="title_0_5_2">Actualización de Rendimiento y Estabilidad</string>
 
-    <string name="migration_title">Actualización de Hyper Bridge</string>
+    <string name="migration_title">Actualización de HyperPop</string>
     <string name="migration_message">Migrando la base de datos al almacenamiento protegido del dispositivo…</string>
     <string name="migration_complete">Actualización completada</string>
 
@@ -450,10 +406,10 @@
     <!-- Floating Notification Setup -->
     <string name="floating_setup_title">Configuración de notificaciones flotantes</string>
     <string name="floating_setup_settings_subtitle">Evita banners flotantes duplicados en apps seleccionadas</string>
-    <string name="floating_setup_intro">HyperBridge muestra las notificaciones seleccionadas en la Isla. La app de origen sigue gestionando el sonido, vibración y su entrada en el panel.</string>
+    <string name="floating_setup_intro">HyperPop muestra las notificaciones seleccionadas en la Isla. La app de origen sigue gestionando el sonido, vibración y su entrada en el panel.</string>
     <string name="floating_setup_limitation">Para evitar banners flotantes duplicados, abre los ajustes de notificaciones del sistema de cada app, desactiva sus notificaciones emergentes y confírmalo abajo.</string>
     <string name="floating_setup_alternative_title">¿Prefieres mantener las notificaciones flotantes nativas?</string>
-    <string name="floating_setup_alternative_desc">Puedes mantener activadas las notificaciones flotantes de tus apps y simplemente desactivar \"Notificación Emergente\" en los Ajustes Globales de HyperBridge para evitar duplicados.</string>
+    <string name="floating_setup_alternative_desc">Puedes mantener activadas las notificaciones flotantes de tus apps y simplemente desactivar \"Notificación Emergente\" en los Ajustes Globales de HyperPop para evitar duplicados.</string>
     <string name="floating_setup_no_apps_title">Sin apps conectadas</string>
     <string name="floating_setup_no_apps">Selecciona apps en la biblioteca primero. Esta configuración seguirá disponible después.</string>
     <string name="floating_status_user_confirmed">Confirmado</string>
@@ -484,7 +440,7 @@
     <string name="copy">Copiar</string>
     <string name="bug_report">Informe de error</string>
     <string name="copy_sanitized_diagnostics">Copiar</string>
-    <string name="diagnostic_export_header">Diagnóstico anonimizado de HyperBridge</string>
+    <string name="diagnostic_export_header">Diagnóstico anonimizado de HyperPop</string>
     <string name="connected">Conectado</string>
     <string name="disconnected">Desconectado</string>
     <string name="granted">Concedido</string>
@@ -518,6 +474,5 @@
     <string name="diagnostic_pending_count">%1$d pendientes</string>
     <string name="diagnostic_reason_prefix">Motivo: %1$s</string>
 </resources>
-
 
 

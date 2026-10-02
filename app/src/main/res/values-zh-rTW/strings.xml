@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
     <string name="back">返回</string>
     <string name="next">下一步</string>
     <string name="finish">完成</string>
@@ -10,11 +10,11 @@
     <string name="configure">設定</string>
     <string name="clear">清除</string>
     <string name="sort_order">排序方式</string>
-    <string name="welcome_title">歡迎使用\nHyper Bridge</string>
+    <string name="welcome_title">歡迎使用\nHyperPop</string>
     <string name="welcome_subtitle">將 HyperIslands 整合至你的 HyperOS 使用體驗中。</string>
     <string name="get_started">開始使用</string>
     <string name="how_it_works">如何運作</string>
-    <string name="how_it_works_desc">選擇你常用的應用程式（Spotify、地圖、計時器）。Hyper Bridge 會將它們的通知轉換為簡潔俐落的超級島。</string>
+    <string name="how_it_works_desc">選擇你常用的應用程式（Spotify、地圖、計時器）。HyperPop 會將它們的通知轉換為簡潔俐落的超級島。</string>
     <string name="beta_warning">注意：此應用程式目前為 Beta 測試版，您可能會遇到程式錯誤 或顯示資訊不正確的情況。</string>
     <string name="device_compatible">相容的裝置</string>
     <string name="unsupported_device">不支援此裝置</string>
@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">請前往「應用程式庫」以啟用 App。</string>
     <string name="no_apps_found">找不到應用程式</string>
     <string name="version_template">版本 %s</string>
-    <string name="developer_credit">開發者：D4vidDf</string>
+    <string name="developer_credit">開發者：sykeptical</string>
     <string name="group_configuration">設定</string>
     <string name="system_setup">系統設定</string>
     <string name="system_setup_subtitle">修正權限 &amp; 電池設定</string>
@@ -45,12 +45,12 @@
     <string name="xmsf_workaround_credit_title">小米服務框架解決方法</string>
     <string name="xmsf_workaround_credit_subtitle">研究人員：Stardawn(星间晞)</string>
     <string name="developer">開發者</string>
-    <string name="developer_subtitle">造訪 d4viddf.com</string>
+    <string name="developer_subtitle">造訪 sykeptical</string>
     <string name="source_code">原始碼</string>
     <string name="source_code_subtitle">GitHub 儲存庫</string>
     <string name="licenses">開源授權</string>
     <string name="licenses_subtitle">第三方軟體</string>
-    <string name="footer_made_with_love">在西班牙由 ❤️ 打造</string>
+    <string name="footer_made_with_love">在土耳其由 ❤️ 打造</string>
     <string name="app_health_desc">請確保所有檢查項目皆顯示為綠色，以確保應用程式能在背景正常運作。</string>
     <string name="req_permissions">必要的權限</string>
     <string name="notif_access">通知存取權</string>
@@ -120,7 +120,7 @@
     <string name="title_0_2_0">資訊更新</string>
     <string name="title_0_1_0">快速更新</string>
     <string name="priority_edu_title">全新：超級島控制功能</string>
-    <string name="priority_edu_desc">Hyper Bridge 現在可以管理當達到 9 個超級島上限時，多個通知的處理方式。\n\n&lt;b&gt;設值：最近優先&lt;/b&gt;\n新的通知將會自動替換掉最舊的通知。</string>
+    <string name="priority_edu_desc">HyperPop 現在可以管理當達到 9 個超級島上限時，多個通知的處理方式。\n\n&lt;b&gt;設值：最近優先&lt;/b&gt;\n新的通知將會自動替換掉最舊的通知。</string>
     <string name="badge_new">新功能</string>
     <string name="nav_layout_title">導航設定</string>
     <string name="nav_layout_desc">選擇資訊顯示的位置</string>
@@ -208,7 +208,7 @@
     </string-array>
     <string name="title_0_3_0">預設功能更新</string>
     <string name="privacy_title">100% 離線 &amp; 安全</string>
-    <string name="privacy_desc">Hyper Bridge 直接在您的手機處理器上處理所有資訊。\n\n它完全不需連接網路，這意味著您的通知與個人資料絕不會離開您的裝置。</string>
+    <string name="privacy_desc">HyperPop 直接在您的手機處理器上處理所有資訊。\n\n它完全不需連接網路，這意味著您的通知與個人資料絕不會離開您的裝置。</string>
     <string name="language">語言</string>
     <string name="language_desc">變更應用程式語言</string>
     <string name="system_default">系統預設</string>
@@ -217,7 +217,7 @@
     <string name="backup_section_title">資料維護</string>
     <string name="backup_options_subtitle">選擇要包含在操作中的資料</string>
     <string name="option_app_settings">App 設定</string>
-    <string name="option_app_settings_desc">設定狀態、主題、行為模式</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
     <string name="option_blocklist">封鎖名單資料庫</string>
     <string name="option_blocklist_desc">您自訂的封鎖關鍵字與 App</string>
     <string name="option_priorities">優先級規則</string>
@@ -242,15 +242,7 @@
     <string name="title_0_3_1">備份 &amp; 多語言更新</string>
     <string name="close">關閉</string>
     <string name="search">搜尋</string>
-    <string name="widget_updated_toast">小工具已更新</string>
-    <string name="widget_settings_error">無法編輯此小工具設定</string>
-    <string name="widget_picker_title">新增小工具</string>
     <string name="search_apps_placeholder">搜尋應用程式……</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">%d 個小工具</item>
-    </plurals>
-    <string name="widget_config_title">設定小工具</string>
-    <string name="widget_settings_button">小工具設定</string>
     <string name="config_tab_appearance">外觀</string>
     <string name="config_tab_behavior">行為</string>
     <string name="config_render_mode_label">渲染模式</string>
@@ -279,33 +271,7 @@
     <string name="size_xlarge">特大 (380dp)</string>
     <string name="app_uninstalled_badge">已卸載</string>
     <string name="settings_action">設定</string>
-    <string name="saved_widgets_title">已儲存的小工具</string>
-    <string name="no_saved_widgets">未發現已儲存的小工具。</string>
-    <string name="widget_id_fmt">小工具 #%d</string>
     <string name="show_on_island">顯示於超級島</string>
-    <string name="theme_installer_analyzing">正在分析主題包……</string>
-    <string name="theme_installer_success_title">主題已就緒</string>
-    <string name="theme_installer_author">建立者：%s</string>
-    <string name="theme_installer_version">版本 %d</string>
-    <string name="theme_installer_apply_question">您現在要將此主題套用到 Hyper Bridge 嗎？</string>
-    <string name="theme_installer_action_apply">套用主題</string>
-    <string name="theme_installer_action_later">稍後儲存</string>
-    <string name="theme_installer_error_title">匯入失敗</string>
-    <string name="theme_installer_error_generic">無法驗證主題檔案。</string>
-    <string name="theme_installer_btn_close">關閉</string>
-    <string name="theme_manager_title">我的主題</string>
-    <string name="theme_manager_cd_add">新增主題</string>
-    <string name="theme_card_author_format">作者：%s</string>
-    <string name="theme_card_cd_active">目前使用中的主題</string>
-    <string name="theme_card_cd_delete">刪除主題</string>
-    <string name="theme_system_default_title">系統預設</string>
-    <string name="theme_system_default_desc">標準外觀</string>
-    <string name="theme_sheet_title">新增主題</string>
-    <string name="theme_sheet_action_create">建立新主題</string>
-    <string name="theme_sheet_action_find">搜尋</string>
-    <string name="theme_action_import_short">匯入</string>
-    <string name="theme_card_action_edit">編輯</string>
-    <string name="theme_card_action_export">匯出</string>
     <string name="creator_title_new">建立主題</string>
     <string name="creator_title_edit">編輯主題</string>
     <string name="creator_nav_colors">色彩</string>
@@ -357,15 +323,10 @@
     <string name="design_hero_pro_subtitle">解鎖更多強大功能</string>
     <string name="design_hero_community_title">社群</string>
     <string name="design_hero_community_subtitle">加入我們的 GitHub</string>
-    <string name="design_section_themes">主題</string>
-    <string name="design_section_widgets">小工具</string>
     <string name="design_browse_more">瀏覽更多</string>
     <string name="design_add_new">新增</string>
     <string name="design_add_design">新增設計</string>
     <string name="design_add_to_island">個人化設定</string>
-    <string name="design_system_widget_beta">系統小工具 (Beta)</string>
-    <string name="design_get_themes">取得主題</string>
-    <string name="design_empty_widget_title">新增您的第一個小工具</string>
     <string name="design">設計</string>
     <string name="creator_nav_actions">預設動作</string>
     <string name="creator_sub_actions">依關鍵字設定按鈕樣式</string>
@@ -400,8 +361,6 @@
     <string name="discard">捨棄</string>
     <string name="unsaved_changes">未儲存的變更</string>
     <string name="unsaved_changes_desc">您有尚未儲存的變更。在結束前要先儲存嗎？</string>
-    <string name="share_theme">分享主題</string>
-    <string name="my_theme">我的主題</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="other">%1$d 個自訂動作</item>
     </plurals>
@@ -413,9 +372,8 @@
     <string name="colors_label_dynamic_modes">超級島顏色</string>
     <string name="colors_label_material_you">Material You (系統初始設定)</string>
     <string name="colors_desc_material_you">從目前壁紙中提取顏色。</string>
-    <string name="kill_all_widgets">停止運作中的小工具</string>
     <string name="permission_reminder_title">更新通知</string>
-    <string name="permission_reminder_desc">Hyper Bridge 已更新！請確保您的自啟動和後台運作權限未被系統移除，以確保您的小工具正常運作。</string>
+    <string name="permission_reminder_desc">HyperPop 已更新！請確保您的自啟動和後台運作權限未被系統移除，以確保您的小工具正常運作。</string>
     <string name="got_it">明白了</string>
     <string name="recommended">建議</string>
     <string name="all">全部</string>
@@ -423,7 +381,7 @@
     <string name="channel_live_updates">原生即時更新</string>
     <string name="engine_config_title">儲存配置</string>
     <string name="good_to_know">太好了</string>
-    <string name="nav_layout_info">• 導航佈局會在即將推出的更新中完全整合到主題引擎中。 \n• 使用原生即時更新引擎時，僅右側內容可見。</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">小米特色通知</string>
     <string name="island_behavior_title">超級島行為</string>
     <string name="island_behavior_desc"><![CDATA[超時、重複項及可見性]]></string>
@@ -480,11 +438,8 @@
     <string name="reply_textfield_radius">æ–‡å­—æ–¹å¡Šåœ“è§’åŠå¾‘</string>
     <string name="reply_send_radius">å‚³é€æŒ‰éˆ•åœ“è§’åŠå¾‘</string>
     <string name="onboarding_can_be_changed">æ‚¨ç¨å¾Œå¯ä»¥åœ¨ã€Œè¨­å®šã€å’Œã€Œä¸»é¡Œé…ç½®å™¨ã€ä¸­è®Šæ›´é€™äº›é¸é …ã€‚</string>
-    <string name="onboarding_widget_desc">åœ¨æ‚¨çš„è¶…ç´šå³¶ä¸Šæ·»åŠ Android å°å·¥å…·ï¼Œä»¥ä¾¿å¿«é€Ÿå­˜å–ã€‚</string>
-    <string name="onboard_theme_desc">å®Œå…¨è‡ªè¨‚è¶…ç´šå³¶çš„é¡è‰²ã€å½¢ç‹€å’Œåœ–ç¤ºã€‚</string>
     <string name="onboard_design_desc">åˆ©ç”¨ä¸åŒçš„è‡ªè¨‚é¸é …æ‹“å±•å¯èƒ½æ€§</string>
     <string name="behavior_desc_glob_config">æ±ºå®šè¶…ç´šå³¶çš„å‘ˆç¾æ–¹å¼ã€‚</string>
-    <string name="widget_layout_snapshot">é è¦½å°å·¥å…·</string>
     <string name="title_0_5_7">表現&amp;同步更新</string>
     <string name="title_0_5_6">橫向模式隱藏&amp;穩定性修復</string>
     <string name="title_0_5_5">訊息傳遞&amp;更新修復</string>
@@ -492,16 +447,15 @@
     <string name="title_0_5_1">ä¿®å¾© &amp; æ”¹é€²</string>
     <string name="title_0_5_0">å³æ™‚æ›´æ–°</string>
     <string name="notification_went_wrong">å¦‚æžœæ‚¨çœ‹åˆ°æ­¤è¨Šæ¯ï¼Œèªªæ˜Žå‡ºç¾éŒ¯èª¤ï¼</string>
-    <string name="widget_went_wrong">å¦‚æžœæ‚¨çœ‹åˆ°æ­¤è¨Šæ¯ï¼Œè¡¨ç¤ºå‡ºéŒ¯äº†ï¼ç³»çµ±ç„¡æ³•é¡¯ç¤ºè©²å°å·¥å…·</string>
     <string name="troubleshoot_featured_notification">æ•…éšœæŽ’é™¤</string>
     <string name="featured_notifications_check">ç²¾é¸é€šçŸ¥æª¢æŸ¥</string>
-    <string name="featured_notifications_check_desc">讓我們驗證一下您的系統是否已正確配置以顯示 Hyper Bridge 超級島。</string>
+    <string name="featured_notifications_check_desc">讓我們驗證一下您的系統是否已正確配置以顯示 HyperPop 超級島。</string>
     <string name="featured_notifications_not_supported">ä¸æ”¯æ´</string>
     <string name="featured_notifications_enabled">å•Ÿç”¨</string>
     <string name="featured_notifications_open_settings">é–‹å•Ÿç³»çµ±è¨­å®š</string>
     <string name="featured_notifications_troubleshoot_title">ç‚ºä»€éº¼æ²’æœ‰è¶…ç´šå³¶ï¼Ÿ</string>
-    <string name="featured_notifications_troubleshoot_desc">您的小米設備攔截了通知，但由於系統設定中權限已停用，因此無法將其顯示為精選通知。 \n\n要解決此問題：\n1. 點選「開啟系統設定」\n2. 向下捲動至「精選通知」（或類似選項）\n3. 為 Hyper Bridge 啟用此權限。</string>
-    <string name="migration_title">HyperBridge 更新</string>
+    <string name="featured_notifications_troubleshoot_desc">您的小米設備攔截了通知，但由於系統設定中權限已停用，因此無法將其顯示為精選通知。 \n\n要解決此問題：\n1. 點選「開啟系統設定」\n2. 向下捲動至「精選通知」（或類似選項）\n3. 為 HyperPop 啟用此權限。</string>
+    <string name="migration_title">HyperPop 更新</string>
     <string name="migration_message">將資料庫遷移到設備保護儲存…</string>
     <string name="migration_complete">更新完成</string>
     <string name="inline_reply_title">å³¶å…§å›žè¦†</string>
@@ -512,7 +466,7 @@
     <!-- Guides & Documentation -->
     <string name="group_guides">指南&amp;幫助</string>
     <string name="documentation_title">指南&amp;文件</string>
-    <string name="documentation_subtitle">了解如何配置和自訂 Hyper Bridge</string>
+    <string name="documentation_subtitle">了解如何配置和自訂 HyperPop</string>
     <!-- Changelog & Website -->
     <string name="view_changelog">查看更新日誌</string>
     <string name="view_full_changelog">在網站上查看</string>
@@ -534,11 +488,6 @@
     <string name="bug_report_include_device_desc">型號、HyperOS/MIUI 版本、Android 版本、ROM 地區</string>
     <string name="bug_report_include_permissions">系統權限&amp;受限設定</string>
     <string name="bug_report_include_permissions_desc">通知監聽、懸浮窗、電池以及 Android 13+ 受限設置</string>
-    <string name="bug_report_include_theme">主題設定</string>
-    <string name="bug_report_include_theme_desc">活動主題、引擎模式、自訂主題元數據</string>
-    <string name="bug_report_include_widgets">小工具設定</string>
-    <string name="bug_report_include_widgets_desc">已儲存的小部件、更新間隔、尺寸及陰影可見性</string>
-    <string name="bug_report_widget_scope_all">所有小工具</string>
     <string name="bug_report_include_app_config">應用程式設定&amp;配置</string>
     <string name="bug_report_app_scope_none">無</string>
     <string name="bug_report_app_scope_none_desc">請勿在報告中包含任何應用程式配置。</string>
@@ -548,7 +497,7 @@
     <string name="bug_report_app_scope_all_desc">包含所有應用程式的配置和覆蓋設置</string>
     <string name="bug_report_select_app">選擇應用程式</string>
     <string name="bug_report_include_logs">近期應用日誌 (Logcat)</string>
-    <string name="bug_report_include_logs_desc">系統和 Hyper Bridge 日誌的最後 500 行</string>
+    <string name="bug_report_include_logs_desc">系統和 HyperPop 日誌的最後 500 行</string>
     <string name="bug_report_preview_title">報告示意圖</string>
     <string name="bug_report_preview_desc">查看將要共享的確切數據</string>
     <string name="bug_report_submit_github">提交至 GitHub</string>
@@ -557,7 +506,7 @@
     <string name="bug_report_share">分享</string>
     <string name="bug_report_copied_github_toast">診斷資訊已複製到剪貼簿！請將其貼到 GitHub 上的 Logs（日誌）部分。</string>
     <string name="bug_report_copied_toast">報告已複製到剪貼簿。</string>
-    <string name="bug_report_email_subject">Hyper Bridge 錯誤報告</string>
+    <string name="bug_report_email_subject">HyperPop 錯誤報告</string>
     <string name="bug_report_entry_title">錯誤回報</string>
     <string name="bug_report_entry_subtitle">排查問題並回報系統日誌相關問題</string>
     <string name="bug_report_need_help">遇到權限或超級島上的問題了嗎？</string>
@@ -566,7 +515,7 @@
     <string name="bug_report_change_app">更改應用程式</string>
     <string name="privacy_policy_title">隱私政策</string>
     <string name="privacy_policy_subtitle">了解您的資料如何受到保護及處理</string>
-    <string name="bug_report_screen_description">產生詳細的系統診斷資訊和日誌，以便排查 Hyper Bridge 相關問題並進行報告。</string>
+    <string name="bug_report_screen_description">產生詳細的系統診斷資訊和日誌，以便排查 HyperPop 相關問題並進行報告。</string>
     <string name="cancel">取消</string>
     <string name="continue_action">繼續</string>
     <string name="type_screen_recording">螢幕錄影中</string>

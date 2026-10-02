@@ -34,12 +34,12 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
--keep class com.d4viddf.hyperbridge.xposed.HyperBridgeModule { *; }
--keep class com.d4viddf.hyperbridge.xposed.** { *; }
--keep class com.d4viddf.hyperbridge.screenrecorder.** { *; }
--keep class com.d4viddf.hyperbridge.island.backend.IslandProtocol { *; }
--keep class com.d4viddf.hyperbridge.island.backend.IslandVisualExtras { *; }
--keep class com.d4viddf.hyperbridge.models.GlowMode { *; }
--keep class com.d4viddf.hyperbridge.models.MarqueeDismissMode { *; }
--keep class com.d4viddf.hyperbridge.models.IslandVisualMetadata { *; }
--keep class com.d4viddf.hyperbridge.models.IslandGlowResolver { *; }
+-keep class com.sykeptical.hyperpop.xposed.HyperPopModule { *; }
+-keep class com.sykeptical.hyperpop.xposed.** { *; }
+-keep class com.sykeptical.hyperpop.screenrecorder.** { *; }
+-keep class com.sykeptical.hyperpop.island.backend.IslandProtocol { *; }
+-keep class com.sykeptical.hyperpop.island.backend.IslandVisualExtras { *; }
+-keep class com.sykeptical.hyperpop.models.GlowMode { *; }
+-keep class com.sykeptical.hyperpop.models.MarqueeDismissMode { *; }
+-keep class com.sykeptical.hyperpop.models.IslandVisualMetadata { *; }
+-keep class com.sykeptical.hyperpop.models.IslandGlowResolver { *; }

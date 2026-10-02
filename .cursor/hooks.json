@@ -1,0 +1,18 @@
+{
+    "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "uv run --python 3.13 .cursor/hooks/session-init.py",
+        "timeout": 60
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "uv run --python 3.13 .cursor/hooks/filter-noisy-mcp.py",
+        "matcher": "MCP:(?:ListDevices|Device|Snapshot|Logcat|Shell|load_apk|get_(?:all_classes|class_source|methods_of_class|fields_of_class|method_by_name|xrefs_to_(?:class|method|field)|callees|type_hierarchy|overrides|exported_components|deeplink_components|android_manifest|main_activity_class|all_resource_file_names|resource_file|smali_of_(?:class|method))|search_(?:method_by_name|classes_by_keyword))$",
+        "timeout": 10
+      }
+    ]
+  }
+}

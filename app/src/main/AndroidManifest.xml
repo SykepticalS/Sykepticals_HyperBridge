@@ -3,9 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <permission
-        android:name="com.sykeptical.hyperbridge.permission.SEND_ISLAND"
+        android:name="com.sykeptical.hyperpop.permission.SEND_ISLAND"
         android:protectionLevel="signature" />
-    <uses-permission android:name="com.sykeptical.hyperbridge.permission.SEND_ISLAND" />
+    <uses-permission android:name="com.sykeptical.hyperpop.permission.SEND_ISLAND" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="PackageVisibilityPolicy,QueryAllPackagesPermission" />
 
@@ -13,9 +13,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <permission
-        android:name="com.sykeptical.hyperbridge.permission.CONTROL_SCREEN_RECORDER"
+        android:name="com.sykeptical.hyperpop.permission.CONTROL_SCREEN_RECORDER"
         android:protectionLevel="normal" />
-    <uses-permission android:name="com.sykeptical.hyperbridge.permission.CONTROL_SCREEN_RECORDER" />
+    <uses-permission android:name="com.sykeptical.hyperpop.permission.CONTROL_SCREEN_RECORDER" />
 
     <uses-feature
         android:name="android.software.companion_device_setup"
@@ -25,14 +25,6 @@
         <intent>
             <action android:name="android.net.VpnService" />
         </intent>
-        <intent>
-            <action android:name="android.appwidget.action.APPWIDGET_PICK" />
-        </intent>
-
-        <intent>
-            <action android:name="com.d4viddf.hyperbridge.THEME_PROVIDER" />
-        </intent>
-
         <package android:name="com.miui.screenrecorder" />
 
         <intent>
@@ -41,7 +33,7 @@
     </queries>
 
     <application
-        android:name=".HyperBridgeApplication"
+        android:name=".HyperPopApplication"
         android:directBootAware="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -51,13 +43,13 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
-        android:theme="@style/Theme.HyperBridge">
+        android:theme="@style/Theme.HyperPop">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:stateNotNeeded="true"
-            android:theme="@style/Theme.HyperBridge">
+            android:theme="@style/Theme.HyperPop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -76,15 +68,9 @@
                 <action android:name="android.intent.action.USER_UNLOCKED" />
                 <action android:name="android.intent.action.USER_PRESENT" />
                 <action android:name="android.intent.action.USER_SWITCHED" />
-                <action android:name="com.d4viddf.hyperbridge.ACTION_TEST_MIGRATION" />
+                <action android:name="com.sykeptical.hyperpop.ACTION_TEST_MIGRATION" />
             </intent-filter>
         </receiver>
-
-        <service
-            android:name=".service.WidgetOverlayService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="shortService" />
 
         <service
             android:name=".service.NotificationProcessingService"
@@ -97,38 +83,9 @@
             android:exported="true"
             android:stopWithTask="false">
             <intent-filter>
-                <action android:name="com.sykeptical.hyperbridge.action.SCREEN_RECORDER_CONTROL" />
+                <action android:name="com.sykeptical.hyperpop.action.SCREEN_RECORDER_CONTROL" />
             </intent-filter>
         </service>
-
-        <activity
-            android:name=".ui.screens.theme.ThemeInstallerActivity"
-            android:exported="true"
-            android:theme="@style/Theme.HyperBridge.Transparent"
-            android:excludeFromRecents="true">
-
-            <intent-filter>
-                <action android:name="com.d4viddf.hyperbridge.APPLY_THEME" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/zip" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-
-                <data android:mimeType="application/zip" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/x-zip-compressed" />
-            </intent-filter>
-        </activity>
 
         <receiver
             android:name=".receiver.InlineReplyReceiver"
@@ -152,12 +109,12 @@
             android:excludeFromRecents="true"
             android:autoRemoveFromRecents="true"
             android:launchMode="singleInstance"
-            android:taskAffinity="com.sykeptical.hyperbridge.inline_reply"
+            android:taskAffinity="com.sykeptical.hyperpop.inline_reply"
             android:documentLaunchMode="never"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize|stateVisible"
-            android:theme="@style/Theme.HyperBridge.Transparent" />
+            android:theme="@style/Theme.HyperPop.Transparent" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

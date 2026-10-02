@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
     <string name="back">Vissza</string>
     <string name="next">TovÃ¡bb</string>
     <string name="finish">BefejezÃ©s</string>
@@ -10,11 +10,11 @@
     <string name="configure">KonfigurÃ¡lÃ¡s</string>
     <string name="clear">TÃ¶rlÃ©s</string>
     <string name="sort_order">RendezÃ©si sorrend</string>
-    <string name="welcome_title">ÃœdvÃ¶zlÃ¼nk a\nHyper Bridge-nÃ©l</string>
+    <string name="welcome_title">ÃœdvÃ¶zlÃ¼nk a\nHyperPop-nÃ©l</string>
     <string name="welcome_subtitle">IntegrÃ¡ld zÃ¶kkenÅ‘mentesen a HyperIslands-t a HyperOS Ã©lmÃ©nyÃ©be.</string>
     <string name="get_started">Kezdj hozzÃ¡</string>
     <string name="how_it_works">Hogyan mÅ±kÃ¶dik</string>
-    <string name="how_it_works_desc">Kiválaszthatod a kedvenc alkalmazásaid (Spotify, Térkép, Óra). A Hyper Bridge ezek értesítéseit stílusos HyperIsland-dé alakítja át.</string>
+    <string name="how_it_works_desc">Kiválaszthatod a kedvenc alkalmazásaid (Spotify, Térkép, Óra). A HyperPop ezek értesítéseit stílusos HyperIsland-dé alakítja át.</string>
     <string name="beta_warning">MegjegyzÃ©s: Ez az alkalmazÃ¡s bÃ©ta verziÃ³ban van. Lehet, hogy hibÃ¡kkal vagy helytelen vizuÃ¡lis informÃ¡ciÃ³kkal talÃ¡lkozol.</string>
     <string name="device_compatible">Kompatibilis eszkÃ¶z</string>
     <string name="unsupported_device">Nem tÃ¡mogatott eszkÃ¶z</string>
@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">Menj a KÃ¶nyvtÃ¡rba az alkalmazÃ¡sok engedÃ©lyezÃ©sÃ©hez.</string>
     <string name="no_apps_found">Nincsenek alkalmazÃ¡sok</string>
     <string name="version_template">VerziÃ³ %s</string>
-    <string name="developer_credit">D4vidDf kÃ©szÃ­tette</string>
+    <string name="developer_credit">sykeptical kÃ©szÃ­tette</string>
     <string name="group_configuration">KonfigurÃ¡ciÃ³</string>
     <string name="system_setup">RendszerbeÃ¡llÃ­tÃ¡s</string>
     <string name="system_setup_subtitle">EngedÃ©lyek Ã©s akkumulÃ¡tor javÃ­tÃ¡sa</string>
@@ -45,12 +45,12 @@
     <string name="xmsf_workaround_credit_title">XMSF Workaround</string>
     <string name="xmsf_workaround_credit_subtitle">Research by Stardawn (星间晞)</string>
     <string name="developer">FejlesztÅ‘</string>
-    <string name="developer_subtitle">Keresd fel d4viddf.com</string>
+    <string name="developer_subtitle">Keresd fel sykeptical</string>
     <string name="source_code">ForrÃ¡skÃ³d</string>
     <string name="source_code_subtitle">GitHub adattÃ¡rolÃ³</string>
     <string name="licenses">NyÃ­lt forrÃ¡skÃ³d licenszek</string>
     <string name="licenses_subtitle">Harmadik fÃ©ltÅ‘l szÃ¡rmazÃ³ szoftverek</string>
-    <string name="footer_made_with_love">❤️ készült Spanyolországban</string>
+    <string name="footer_made_with_love">❤️ készült Türkiye</string>
     <string name="app_health_desc">GyÅ‘zÅ‘dj meg arrÃ³l, hogy minden ellenÅ‘rzÃ©s zÃ¶ld, hogy az alkalmazÃ¡s megfelelÅ‘en mÅ±kÃ¶djÃ¶n a hÃ¡ttÃ©rben.</string>
     <string name="req_permissions">SzÃ¼ksÃ©ges engedÃ©lyek</string>
     <string name="notif_access">HozzÃ¡fÃ©rÃ©s az Ã©rtesÃ­tÃ©sekhez</string>
@@ -120,7 +120,7 @@
     <string name="title_0_2_0">Az informÃ¡ciÃ³s frissÃ­tÃ©s</string>
     <string name="title_0_1_0">A kifejezÅ‘ frissÃ­tÃ©s</string>
     <string name="priority_edu_title">ÃšjdonsÃ¡g: VezÃ©reld a Island-ot</string>
-    <string name="priority_edu_desc">A Hyper Bridge mostantól kezelni tudja, hogy több értesítés hogyan viselkedik, amikor eléri a 9-szigetes korlátot.\n\n&lt;b&gt;Alapértelmezett: Legújabb&lt;/b&gt;\nAz új értesítések automatikusan felülírják a legrégebbieket.</string>
+    <string name="priority_edu_desc">A HyperPop mostantól kezelni tudja, hogy több értesítés hogyan viselkedik, amikor eléri a 9-szigetes korlátot.\n\n&lt;b&gt;Alapértelmezett: Legújabb&lt;/b&gt;\nAz új értesítések automatikusan felülírják a legrégebbieket.</string>
     <string name="badge_new">ÃšJ</string>
     <string name="nav_layout_title">NavigÃ¡ciÃ³s elrendezÃ©s</string>
     <string name="nav_layout_desc">InformÃ¡ciÃ³k megjelenÃ©si helyÃ©nek kivÃ¡lasztÃ¡sa</string>
@@ -208,7 +208,7 @@
     </string-array>
     <string name="title_0_3_0">Az Ã¡ltalÃ¡nos frissÃ­tÃ©s</string>
     <string name="privacy_title">100% offline Ã©s biztonsÃ¡gos</string>
-    <string name="privacy_desc">A Hyper Bridge mindent kÃ¶zvetlenÃ¼l a telefon processzorÃ¡n dolgoz fel.\n\nNem igÃ©nyel internet-hozzÃ¡fÃ©rÃ©st, vagyis az Ã©rtesÃ­tÃ©sek Ã©s a szemÃ©lyes adatok soha nem hagyjÃ¡k el az eszkÃ¶zt.</string>
+    <string name="privacy_desc">A HyperPop mindent kÃ¶zvetlenÃ¼l a telefon processzorÃ¡n dolgoz fel.\n\nNem igÃ©nyel internet-hozzÃ¡fÃ©rÃ©st, vagyis az Ã©rtesÃ­tÃ©sek Ã©s a szemÃ©lyes adatok soha nem hagyjÃ¡k el az eszkÃ¶zt.</string>
     <string name="language">Nyelv</string>
     <string name="language_desc">AlkalmazÃ¡s nyelvÃ©nek kivÃ¡lasztÃ¡sa</string>
     <string name="system_default">Rendszer nyelvÃ©nek hasznÃ¡lata</string>
@@ -217,7 +217,7 @@
     <string name="backup_section_title">Adatok kezelÃ©se</string>
     <string name="backup_options_subtitle">VÃ¡laszd ki a mÅ±veletbe bevonni kÃ­vÃ¡nt adatokat</string>
     <string name="option_app_settings">AlkalmazÃ¡sbeÃ¡llÃ­tÃ¡sok</string>
-    <string name="option_app_settings_desc">Ãllapot, tÃ©ma, viselkedÃ©si mÃ³dok beÃ¡llÃ­tÃ¡sa</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
     <string name="option_blocklist">TiltÃ³lista adatbÃ¡zis</string>
     <string name="option_blocklist_desc">Az Ã¡ltalad tiltott kulcsszavak Ã©s alkalmazÃ¡sok</string>
     <string name="option_priorities">FontossÃ¡gi szabÃ¡lyok</string>
@@ -242,16 +242,7 @@
     <string name="title_0_3_1">MentÃ©s Ã©s tÃ¶bbnyelvÅ± frissÃ­tÃ©s</string>
     <string name="close">BezÃ¡r</string>
     <string name="search">KeresÃ©s</string>
-    <string name="widget_updated_toast">Modul frissÃ­tve</string>
-    <string name="widget_settings_error">A modul beÃ¡llÃ­tÃ¡sait nem lehet szerkeszteni.</string>
-    <string name="widget_picker_title">Modul hozzÃ¡adÃ¡sa</string>
     <string name="search_apps_placeholder">AlkalmazÃ¡sok keresÃ©se...</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">%d modul</item>
-        <item quantity="one">%d modul</item>
-    </plurals>
-    <string name="widget_config_title">Modul testreszabÃ¡sa</string>
-    <string name="widget_settings_button">Modul beÃ¡llÃ­tÃ¡sai</string>
     <string name="config_tab_appearance">MegjelenÃ©s</string>
     <string name="config_tab_behavior">MÅ±kÃ¶dÃ©s</string>
     <string name="config_render_mode_label">RenderelÃ©si mÃ³d</string>
@@ -282,33 +273,7 @@
     <string name="size_xlarge">Extra nagy (380dp)</string>
     <string name="app_uninstalled_badge">EltÃ¡volÃ­tva</string>
     <string name="settings_action">BeÃ¡llÃ­tÃ¡sok</string>
-    <string name="saved_widgets_title">Elmentett modulok</string>
-    <string name="no_saved_widgets">Nincsenek elmentett modulok</string>
-    <string name="widget_id_fmt">Modul #%d</string>
     <string name="show_on_island">MegjelenÃ­tÃ©s az Island-on</string>
-    <string name="theme_installer_analyzing">TÃ©macsomag elemzÃ©se...</string>
-    <string name="theme_installer_success_title">TÃ©ma kÃ©sz</string>
-    <string name="theme_installer_author">AlkotÃ³: %s</string>
-    <string name="theme_installer_version">VerziÃ³ %d</string>
-    <string name="theme_installer_apply_question">Szeretnéd ezt a témát alkalmazni a Hyper Bridge-re?</string>
-    <string name="theme_installer_action_apply">TÃ©ma alkalmazÃ¡sa</string>
-    <string name="theme_installer_action_later">MentÃ©s kÃ©sÅ‘bbre</string>
-    <string name="theme_installer_error_title">Behozatal sikertelen</string>
-    <string name="theme_installer_error_generic">Nem sikerÃ¼lt ellenÅ‘rizni a tÃ©ma fÃ¡jlt.</string>
-    <string name="theme_installer_btn_close">BezÃ¡r</string>
-    <string name="theme_manager_title">SajÃ¡t tÃ©mÃ¡im</string>
-    <string name="theme_manager_cd_add">Ãšj tÃ©ma lÃ©trehozÃ¡sa</string>
-    <string name="theme_card_author_format">%s alkotta</string>
-    <string name="theme_card_cd_active">AktÃ­v tÃ©ma</string>
-    <string name="theme_card_cd_delete">TÃ©ma tÃ¶rlÃ©se</string>
-    <string name="theme_system_default_title">AlapÃ©rtelmezett</string>
-    <string name="theme_system_default_desc">NormÃ¡l megjelenÃ©s</string>
-    <string name="theme_sheet_title">Ãšj tÃ©ma lÃ©trehozÃ¡sa</string>
-    <string name="theme_sheet_action_create">Ãšj tÃ©ma lÃ©trehozÃ¡sa</string>
-    <string name="theme_sheet_action_find">KeresÃ©s</string>
-    <string name="theme_action_import_short">Behozatal</string>
-    <string name="theme_card_action_edit">SzerkesztÃ©s</string>
-    <string name="theme_card_action_export">KÃ¼lvitel</string>
     <string name="creator_title_new">TÃ©ma lÃ©trehozÃ¡sa</string>
     <string name="creator_title_edit">TÃ©ma szerkesztÃ©se</string>
     <string name="creator_nav_colors">SzÃ­nek</string>
@@ -360,15 +325,10 @@
     <string name="design_hero_pro_subtitle">TÃ¶bb hatalom feloldÃ¡sa</string>
     <string name="design_hero_community_title">KÃ¶zÃ¶ssÃ©g</string>
     <string name="design_hero_community_subtitle">Csatlakozz a GitHub-unkhoz</string>
-    <string name="design_section_themes">TÃ©mÃ¡k</string>
-    <string name="design_section_widgets">Modulok</string>
     <string name="design_browse_more">TovÃ¡bbiak felfedezÃ©se</string>
     <string name="design_add_new">Ãšj lÃ©trehozÃ¡s</string>
     <string name="design_add_design">Ãšj dizÃ¡jn</string>
     <string name="design_add_to_island">TestreszabÃ¡s</string>
-    <string name="design_system_widget_beta">Rendszer modul (BÃ©ta)</string>
-    <string name="design_get_themes">TÃ©mÃ¡k szerzÃ©se</string>
-    <string name="design_empty_widget_title">Hozd lÃ©tre az elsÅ‘ modulod</string>
     <string name="design">DizÃ¡jn</string>
     <string name="creator_nav_actions">ÃltalÃ¡nos mÅ±veletek</string>
     <string name="creator_sub_actions">StÃ­lus gombok kulcsszÃ³ra</string>
@@ -403,8 +363,6 @@
     <string name="discard">ElvetÃ©s</string>
     <string name="unsaved_changes">Nem mentett mÃ³dosÃ­tÃ¡sok</string>
     <string name="unsaved_changes_desc">Van mÃ©g mentetlen vÃ¡ltozÃ¡s ebben az appban. SzeretnÃ©d menteni Å‘ket kilÃ©pÃ©s elÅ‘tt?</string>
-    <string name="share_theme">TÃ©ma megosztÃ¡sa</string>
-    <string name="my_theme">SajÃ¡t tÃ©ma</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="one">%1$d egyedi mÅ±velet</item>
         <item quantity="other">%1$d egyedi mÅ±velet</item>
@@ -417,9 +375,8 @@
     <string name="colors_label_dynamic_modes">Dinamikus szÃ­nek</string>
     <string name="colors_label_material_you">Material You (Rendszer)</string>
     <string name="colors_desc_material_you">A hÃ¡ttÃ©rkÃ©ped szÃ­neit hasznÃ¡lja</string>
-    <string name="kill_all_widgets">AktÃ­v modulok megÃ¶lÃ©se</string>
     <string name="permission_reminder_title">FrissÃ­tÃ©si Ã©rtesÃ­tÃ©s</string>
-    <string name="permission_reminder_desc">Hyper Bridge frissítve lett! Ellenőrizd, hogy az Automatikus indítás és a Háttérben való futás nem lett-e csendben elvéve a rendszer által, hogy a modulok továbbra is folyékonyan tudjanak működni.</string>
+    <string name="permission_reminder_desc">HyperPop frissítve lett! Ellenőrizd, hogy az Automatikus indítás és a Háttérben való futás nem lett-e csendben elvéve a rendszer által, hogy a modulok továbbra is folyékonyan tudjanak működni.</string>
     <string name="got_it">Ã‰rtem</string>
     <string name="recommended">AjÃ¡nlott</string>
     <string name="all">Mind</string>
@@ -427,7 +384,7 @@
     <string name="channel_live_updates">NatÃ­v Ã©lÅ‘ frissÃ­tÃ©sek</string>
     <string name="engine_config_title">Motor beÃ¡llÃ­tÃ¡s</string>
     <string name="good_to_know">Ã‰rdemes tudni</string>
-    <string name="nav_layout_info">• A navigációs elrendezések egy közelgő frissítéssel teljes mértékben beépülnek a témamotorba.\n• A Natív élő frissítési motor használata esetén csak a jobb oldali tartalom látható.</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">Xiaomi kiemelt Ã©rtesÃ­tÃ©s</string>
     <string name="island_behavior_title">Island mÅ±kÃ¶dÃ©se</string>
     <string name="island_behavior_desc"><![CDATA[IdÅ‘korlÃ¡tok, duplikÃ¡ciÃ³k Ã©s lÃ¡thatÃ³sÃ¡g]]></string>
@@ -483,12 +440,8 @@
     <string name="reply_blur_effect_desc">Apply glassmorphism to textfield</string>
     <string name="reply_textfield_radius">Textfield Corner Radius</string>
     <string name="reply_send_radius">Send Button Corner Radius</string>
-    <string name="onboarding_can_be_changed">You can change these options later in Settings and Theme Configurator.</string>
-    <string name="onboarding_widget_desc">Add standard Android widgets to your island for quick access.</string>
-    <string name="onboard_theme_desc">Fully customize colors, shapes and icons of your island.</string>
     <string name="onboard_design_desc">Expand the possibilities with different customization options</string>
     <string name="behavior_desc_glob_config">Determines how the island behaves.</string>
-    <string name="widget_layout_snapshot">Preview of the widget</string>
     <string name="title_0_5_7">Performance &amp; Sync Update</string>
     <string name="title_0_5_6">Landscape Hide &amp; Stability Fixes</string>
     <string name="title_0_5_5">Messaging &amp; Update Fixes</string>
@@ -496,16 +449,15 @@
     <string name="title_0_5_1">Fixes &amp; Refinements</string>
     <string name="title_0_5_0">The Live Update</string>
     <string name="notification_went_wrong">If you are seeing this, something went wrong!</string>
-    <string name="widget_went_wrong">If you are seeing this, something went wrong! The system couldn\'t show the widget</string>
     <string name="troubleshoot_featured_notification">Troubleshoot</string>
     <string name="featured_notifications_check">Featured Notifications Check</string>
-    <string name="featured_notifications_check_desc">Let\'s verify if your system is configured correctly to display Hyper Bridge islands.</string>
+    <string name="featured_notifications_check_desc">Let\'s verify if your system is configured correctly to display HyperPop islands.</string>
     <string name="featured_notifications_not_supported">Not Supported</string>
     <string name="featured_notifications_enabled">Enabled</string>
     <string name="featured_notifications_open_settings">Open System Settings</string>
     <string name="featured_notifications_troubleshoot_title">Why is this not an island?</string>
-    <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap \"Open System Settings\"\n2. Scroll down to \"Featured Notifications\" (or similar)\n3. Enable it for Hyper Bridge.</string>
-    <string name="migration_title">Hyper Bridge Update</string>
+    <string name="featured_notifications_troubleshoot_desc">Your Xiaomi device intercepted the notification but failed to display it as a featured island because the permission is disabled in your system settings.\n\nTo fix this:\n1. Tap \"Open System Settings\"\n2. Scroll down to \"Featured Notifications\" (or similar)\n3. Enable it for HyperPop.</string>
+    <string name="migration_title">HyperPop Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
     <string name="inline_reply_title">Inline Reply</string>
@@ -516,7 +468,7 @@
     <!-- Guides & Documentation -->
     <string name="group_guides">Guides &amp; Help</string>
     <string name="documentation_title">Guides &amp; Documentation</string>
-    <string name="documentation_subtitle">Learn how to configure and customize Hyper Bridge</string>
+    <string name="documentation_subtitle">Learn how to configure and customize HyperPop</string>
     <!-- Changelog & Website -->
     <string name="view_changelog">View Changelog</string>
     <string name="view_full_changelog">View on Website</string>
@@ -538,11 +490,6 @@
     <string name="bug_report_include_device_desc">Model, HyperOS/MIUI version, Android version, ROM region</string>
     <string name="bug_report_include_permissions">System Permissions &amp; Restricted Settings</string>
     <string name="bug_report_include_permissions_desc">Root, LSPosed scopes, SystemUI ingress, island backend, and Focus hooks</string>
-    <string name="bug_report_include_theme">Theme Configuration</string>
-    <string name="bug_report_include_theme_desc">Active theme, engine mode, custom theme metadata</string>
-    <string name="bug_report_include_widgets">Widget Configuration</string>
-    <string name="bug_report_include_widgets_desc">Saved widgets, update intervals, sizes, and shade visibility</string>
-    <string name="bug_report_widget_scope_all">All Widgets</string>
     <string name="bug_report_include_app_config">App Settings &amp; Configuration</string>
     <string name="bug_report_app_scope_none">None</string>
     <string name="bug_report_app_scope_none_desc">Do not include any app configurations in the report</string>
@@ -552,7 +499,7 @@
     <string name="bug_report_app_scope_all_desc">Include configurations and overrides for all apps</string>
     <string name="bug_report_select_app">Select App</string>
     <string name="bug_report_include_logs">Recent App Logs (Logcat)</string>
-    <string name="bug_report_include_logs_desc">Last 500 lines of system and Hyper Bridge logs</string>
+    <string name="bug_report_include_logs_desc">Last 500 lines of system and HyperPop logs</string>
     <string name="bug_report_preview_title">Report Preview</string>
     <string name="bug_report_preview_desc">Review the exact data that will be shared</string>
     <string name="bug_report_submit_github">Submit on GitHub</string>
@@ -561,7 +508,7 @@
     <string name="bug_report_share">Share</string>
     <string name="bug_report_copied_github_toast">Diagnostics copied to clipboard! Paste it into the Logs section on GitHub.</string>
     <string name="bug_report_copied_toast">Report copied to clipboard.</string>
-    <string name="bug_report_email_subject">Hyper Bridge Bug Report</string>
+    <string name="bug_report_email_subject">HyperPop Bug Report</string>
     <string name="bug_report_entry_title">Bug Report</string>
     <string name="bug_report_entry_subtitle">Troubleshoot and report issues with system logs</string>
     <string name="bug_report_need_help">Having issues with permissions or islands?</string>
@@ -570,7 +517,7 @@
     <string name="bug_report_change_app">Change App</string>
     <string name="privacy_policy_title">Privacy Policy</string>
     <string name="privacy_policy_subtitle">Learn how your data is protected and handled</string>
-    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with Hyper Bridge.</string>
+    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with HyperPop.</string>
     <string name="cancel">Cancel</string>
     <string name="continue_action">Continue</string>
     <string name="type_screen_recording">Screen recording</string>

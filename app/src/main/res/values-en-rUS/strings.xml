@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
 
     <string name="back">Back</string>
     <string name="next">Next</string>
@@ -11,12 +11,12 @@
     <string name="clear">Clear</string>
     <string name="sort_order">Sort Order</string>
 
-    <string name="welcome_title">Welcome to\nHyper Bridge</string>
+    <string name="welcome_title">Welcome to\nHyperPop</string>
     <string name="welcome_subtitle">Seamlessly integrate HyperIslands into your HyperOS experience.</string>
     <string name="get_started">Get Started</string>
 
     <string name="how_it_works">How it Works</string>
-    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). Hyper Bridge transforms their notifications into a sleek HyperIsland.</string>
+    <string name="how_it_works_desc">Select your favorite apps (Spotify, Maps, Timer). HyperPop transforms their notifications into a sleek HyperIsland.</string>
     <string name="beta_warning">Note: This app is in Beta. You may encounter bugs or incorrect visual information.</string>
 
     <string name="device_compatible">Device Compatible</string>
@@ -45,7 +45,7 @@
     <string name="no_apps_found">No apps found</string>
 
     <string name="version_template">Version %s</string>
-    <string name="developer_credit">by D4vidDf</string>
+    <string name="developer_credit">by sykeptical</string>
 
     <string name="group_configuration">Configuration</string>
     <string name="system_setup">System Setup</string>
@@ -53,12 +53,12 @@
 
     <string name="group_about">About</string>
     <string name="developer">Developer</string>
-    <string name="developer_subtitle">Visit d4viddf.com</string>
+    <string name="developer_subtitle">Türkiye</string>
     <string name="source_code">Source Code</string>
     <string name="source_code_subtitle">GitHub Repository</string>
     <string name="licenses">Open Source Licenses</string>
     <string name="licenses_subtitle">Third-party software</string>
-    <string name="footer_made_with_love">Made with ❤️ in Spain</string>
+    <string name="footer_made_with_love">Made with ❤️ in Türkiye</string>
 
     <string name="app_health_desc">Ensure all checks are green for the app to work correctly in the background.</string>
     <string name="req_permissions">Required Permissions</string>
@@ -228,7 +228,7 @@
     <string name="title_0_3_0">The Global Update</string>
 
     <string name="privacy_title">100% Offline &amp; Secure</string>
-    <string name="privacy_desc">Hyper Bridge processes everything directly on your phone\'s processor.\n\nIt does NOT require internet access, meaning your notifications and personal data never leave your device.</string>
+    <string name="privacy_desc">HyperPop processes everything directly on your phone\'s processor.\n\nIt does NOT require internet access, meaning your notifications and personal data never leave your device.</string>
 
     <string name="language">Language</string>
     <string name="language_desc">Change application language</string>
@@ -240,7 +240,7 @@
     <string name="backup_options_subtitle">Select data to include in the operation</string>
 
     <string name="option_app_settings">App Settings</string>
-    <string name="option_app_settings_desc">Setup status, theme, behavior modes</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
 
     <string name="option_blocklist">Blocklist Database</string>
     <string name="option_blocklist_desc">Your custom blocked keywords and apps</string>
@@ -275,19 +275,9 @@
 
     <string name="close">Close</string>
     <string name="search">Search</string>
-    <string name="widget_updated_toast">Widget updated</string>
-    <string name="widget_settings_error">Cannot edit this widget settings</string>
 
-    <string name="widget_picker_title">Add Widget</string>
     <string name="search_apps_placeholder">Search apps...</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="many">%d widgets</item>
-        <item quantity="other">%d widgets</item>
-        <item quantity="one">%d widget</item>
-    </plurals>
 
-    <string name="widget_config_title">Configure Widget</string>
-    <string name="widget_settings_button">Widget Settings</string>
 
     <string name="config_tab_appearance">Appearance</string>
     <string name="config_tab_behavior">Behavior</string>
@@ -329,54 +319,23 @@
     <string name="app_uninstalled_badge">Uninstalled</string>
     <string name="settings_action">Settings</string>
 
-    <string name="saved_widgets_title">Saved Widgets</string>
-    <string name="no_saved_widgets">No saved widgets found.</string>
-    <string name="widget_id_fmt">Widget #%d</string>
     <string name="show_on_island">Show on Island</string>
 
-    <string name="theme_installer_analyzing">Analyzing theme package...</string>
-    <string name="theme_installer_success_title">Theme Ready</string>
-    <string name="theme_installer_author">Created by %s</string>
-    <string name="theme_installer_version">Version %d</string>
-    <string name="theme_installer_apply_question">Do you want to apply this theme to Hyper Bridge now?</string>
-    <string name="theme_installer_action_apply">Apply Theme</string>
-    <string name="theme_installer_action_later">Save for Later</string>
-    <string name="theme_installer_error_title">Import Failed</string>
-    <string name="theme_installer_error_generic">Could not verify the theme file.</string>
-    <string name="theme_installer_btn_close">Close</string>
-    <string name="theme_manager_title">My Themes</string>
-    <string name="theme_manager_cd_add">Add New Theme</string>
 
-    <string name="theme_card_author_format">by %s</string>
-    <string name="theme_card_cd_active">Active Theme</string>
-    <string name="theme_card_cd_delete">Delete Theme</string>
 
-    <string name="theme_system_default_title">System Default</string>
-    <string name="theme_system_default_desc">Standard Look</string>
 
-    <string name="theme_sheet_title">Add New Theme</string>
 
-    <string name="theme_sheet_action_create">Create New Theme</string>
-    <string name="theme_sheet_action_find">Search</string>
-    <string name="theme_action_import_short">Import</string>
-    <string name="theme_card_action_edit">Edit</string>
-    <string name="theme_card_action_export">Export</string>
 
-    <string name="creator_title_new">Create Theme</string>
-    <string name="creator_title_edit">Edit Theme</string>
     <string name="creator_nav_colors">Colors</string>
     <string name="creator_nav_icons">Icons &amp; Shapes</string>
     <string name="creator_nav_calls">Call Style</string>
     <string name="creator_nav_apps">App Config</string>
     <string name="creator_action_save">Save</string>
-    <string name="creator_btn_edit_info">Edit Theme Info</string>
     <string name="creator_sub_colors">Palettes &amp; contrast</string>
     <string name="creator_sub_icons">Shape &amp; padding</string>
     <string name="creator_sub_calls">Answer &amp; decline buttons</string>
     <string name="creator_sub_apps">Per-app overrides</string>
 
-    <string name="meta_title">Theme Info</string>
-    <string name="meta_label_name">Theme Name</string>
     <string name="meta_label_author">Author Name</string>
     <string name="meta_action_done">Done</string>
 
@@ -415,22 +374,16 @@
     <string name="apps_empty">No apps configured</string>
 
     <string name="design_hero_customization_title">Customization</string>
-    <string name="design_hero_customization_subtitle">Learn how to create themes</string>
     <string name="design_hero_pro_title">Pro Features</string>
     <string name="design_hero_pro_subtitle">Unlock more power</string>
     <string name="design_hero_community_title">Community</string>
     <string name="design_hero_community_subtitle">Join our GitHub</string>
 
-    <string name="design_section_themes">Themes</string>
-    <string name="design_section_widgets">Widgets</string>
 
     <string name="design_browse_more">Browse More</string>
     <string name="design_add_new">Add New</string>
     <string name="design_add_design">Add Design</string>
     <string name="design_add_to_island">Customization</string>
-    <string name="design_system_widget_beta">System Widget (Beta)</string>
-    <string name="design_get_themes">Get Themes</string>
-    <string name="design_empty_widget_title">Add your first Widget</string>
     <string name="design">Design</string>
 
     <string name="creator_nav_actions">Global Actions</string>
@@ -451,8 +404,6 @@
     <string name="actions_search_empty_fmt">No actions found for "%1$s"</string>
 
     <string name="action_wip_warning">This feature is a Work in Progress. Keyword matching depends on how apps structure their notifications and may not work for every app.</string>
-    <string name="creator_dialog_apply_title">Apply Theme?</string>
-    <string name="creator_dialog_apply_desc">Do you want to apply this theme now?</string>
     <string name="creator_dialog_action_save_apply">Save &amp; Apply</string>
     <string name="creator_dialog_action_save_only">Save Only</string>
     <string name="select_icon">Select Icon</string>
@@ -470,8 +421,6 @@
     <string name="discard">Discard</string>
     <string name="unsaved_changes">Unsaved Changes</string>
     <string name="unsaved_changes_desc">You have unsaved changes for this app. Do you want to save them before exiting?</string>
-    <string name="share_theme">Share Theme</string>
-    <string name="my_theme">My Theme</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="one">%1$d custom action</item>
         <item quantity="other">%1$d custom actions</item>
@@ -489,9 +438,7 @@
     <string name="colors_label_material_you">Material You (System)</string>
     <string name="colors_desc_material_you">Extracts colors from your current wallpaper.</string>
 
-    <string name="kill_all_widgets">Kill Active Widgets</string>
     <string name="permission_reminder_title">Update Notice</string>
-    <string name="permission_reminder_desc">Hyper Bridge has been updated! Please ensure that your Autostart and Background Battery permissions haven\'t been silently revoked by the system to keep your widgets running smoothly.</string>
     <string name="got_it">Got it</string>
 
     <string name="recommended">Recommended</string>
@@ -503,7 +450,7 @@
 
     <string name="engine_config_title">Engine Configuration</string>
     <string name="good_to_know">Good to know</string>
-    <string name="nav_layout_info">• Navigation layouts will be fully integrated into the Theme Engine in an upcoming update.\n• When using the Native Live Update engine, only the Right Side content is visible.</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">Xiaomi Featured Notifications</string>
     <string name="island_behavior_title">Island Behavior</string>
     <string name="island_behavior_desc"><![CDATA[Timeouts, duplicates & visibility]]></string>
@@ -529,10 +476,6 @@
     <string name="trigger_app_desc">Select which events trigger the island for this app.</string>
     <string name="enable_triggers">Enable specific triggers</string>
     <string name="open_source_licenses">Open Source Licenses</string>
-    <string name="onboarding_can_be_changed">You can change these options later in Settings and Theme Configurator.</string>
-    <string name="onboarding_widget_desc">Add standard Android widgets to your island for quick access.</string>
-    <string name="onboard_theme_desc">Fully customize colors, shapes and icons of your island.</string>
     <string name="onboard_design_desc">Expand the possibilities with different customization options</string>
 </resources>
-
 

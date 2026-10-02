@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
     <string name="back">ë’¤ë¡œ</string>
     <string name="next">ë‹¤ìŒ</string>
     <string name="finish">ì™„ë£Œ</string>
@@ -10,11 +10,11 @@
     <string name="configure">ì„¤ì •í•˜ê¸°</string>
     <string name="clear">ì§€ìš°ê¸°</string>
     <string name="sort_order">ì •ë ¬ ìˆœì„œ</string>
-    <string name="welcome_title">Hyper Bridgeì— ì˜¤ì‹  ê²ƒì„\ní™˜ì˜í•©ë‹ˆë‹¤</string>
+    <string name="welcome_title">HyperPopì— ì˜¤ì‹  ê²ƒì„\ní™˜ì˜í•©ë‹ˆë‹¤</string>
     <string name="welcome_subtitle">HyperIsland를 HyperOS 시스템에 쉽게 통합하세요.</string>
     <string name="get_started">ì‹œìž‘í•˜ê¸°</string>
     <string name="how_it_works">ìž‘ë™ ë°©ì‹</string>
-    <string name="how_it_works_desc">좋아하는 앱(Spotify, 지도, 타이머)을 선택하세요. Hyper Bridge가 알림을 아름다운 HyperIsland로 변환합니다.</string>
+    <string name="how_it_works_desc">좋아하는 앱(Spotify, 지도, 타이머)을 선택하세요. HyperPop가 알림을 아름다운 HyperIsland로 변환합니다.</string>
     <string name="beta_warning">ì°¸ê³ : ì´ ì•±ì€ ë² íƒ€ ë²„ì „ìž…ë‹ˆë‹¤. ì˜¤ë¥˜ë‚˜ ì‹œê°ì  ë¬¸ì œê°€ ë°œìƒí•  ìˆ˜ ìžˆìŠµë‹ˆë‹¤.</string>
     <string name="device_compatible">í˜¸í™˜ë˜ëŠ” ê¸°ê¸°</string>
     <string name="unsupported_device">ì§€ì›ë˜ì§€ ì•ŠëŠ” ê¸°ê¸°</string>
@@ -36,7 +36,7 @@
     <string name="no_active_bridges_desc">ë¼ì´ë¸ŒëŸ¬ë¦¬ì—ì„œ ì•±ì„ í™œì„±í™”í•˜ì„¸ìš”.</string>
     <string name="no_apps_found">ì•±ì„ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤</string>
     <string name="version_template">ë²„ì „ %s</string>
-    <string name="developer_credit">D4vidDf ì œìž‘</string>
+    <string name="developer_credit">sykeptical ì œìž‘</string>
     <string name="group_configuration">êµ¬ì„±</string>
     <string name="system_setup">ì‹œìŠ¤í…œ ì„¤ì •</string>
     <string name="system_setup_subtitle">ê¶Œí•œ ë° ë°°í„°ë¦¬ ë¬¸ì œ í•´ê²°</string>
@@ -45,12 +45,12 @@
     <string name="xmsf_workaround_credit_title">XMSF 우회책</string>
     <string name="xmsf_workaround_credit_subtitle">싱젠시 (星间晞)의 연구</string>
     <string name="developer">ê°œë°œìž</string>
-    <string name="developer_subtitle">d4viddf.com ë°©ë¬¸</string>
+    <string name="developer_subtitle">sykeptical ë°©ë¬¸</string>
     <string name="source_code">ì†ŒìŠ¤ ì½”ë“œ</string>
     <string name="source_code_subtitle">GitHub ì €ìž¥ì†Œ</string>
     <string name="licenses">ì˜¤í”ˆì†ŒìŠ¤ ë¼ì´ì„ ìŠ¤</string>
     <string name="licenses_subtitle">ì„œë“œíŒŒí‹° ì†Œí”„íŠ¸ì›¨ì–´</string>
-    <string name="footer_made_with_love">스페인에서 ❤️로 제작됨</string>
+    <string name="footer_made_with_love">튀르키예에서 ❤️로 제작됨</string>
     <string name="app_health_desc">ë°±ê·¸ë¼ìš´ë“œ ìž‘ë™ì„ ìœ„í•´ ëª¨ë“  í•­ëª©ì´ ì´ˆë¡ìƒ‰ì¸ì§€ í™•ì¸í•˜ì„¸ìš”.</string>
     <string name="req_permissions">í•„ìˆ˜ ê¶Œí•œ</string>
     <string name="notif_access">ì•Œë¦¼ ì ‘ê·¼</string>
@@ -120,7 +120,7 @@
     <string name="title_0_2_0">The Information ì—…ë°ì´íŠ¸</string>
     <string name="title_0_1_0">The Expressive ì—…ë°ì´íŠ¸</string>
     <string name="priority_edu_title">새 기능: Island 제어</string>
-    <string name="priority_edu_desc">Hyper Bridge는 이제 9개 제한에 도달했을 때 여러 알림을 어떻게 처리할지 관리할 수 있습니다.\n\n<b>기본값: 최신순</b>\n새로운 알림이 오래된 알림을 자동으로 대체합니다.</string>
+    <string name="priority_edu_desc">HyperPop는 이제 9개 제한에 도달했을 때 여러 알림을 어떻게 처리할지 관리할 수 있습니다.\n\n<b>기본값: 최신순</b>\n새로운 알림이 오래된 알림을 자동으로 대체합니다.</string>
     <string name="badge_new">ì‹ ê·œ</string>
     <string name="nav_layout_title">ë‚´ë¹„ê²Œì´ì…˜ ë ˆì´ì•„ì›ƒ</string>
     <string name="nav_layout_desc">í‘œì‹œí•  ì •ë³´ë¥¼ ì„ íƒí•˜ì„¸ìš”</string>
@@ -208,7 +208,7 @@
     </string-array>
     <string name="title_0_3_0">The Hidden ì—…ë°ì´íŠ¸</string>
     <string name="privacy_title">100% ì˜¤í”„ë¼ì¸ &amp; ë³´ì•ˆ</string>
-    <string name="privacy_desc">Hyper BridgeëŠ” ëª¨ë“  ìž‘ì—…ì„ íœ´ëŒ€í°ì˜ í”„ë¡œì„¸ì„œì—ì„œ ì§ì ‘ ì²˜ë¦¬í•©ë‹ˆë‹¤.\n\nì¸í„°ë„· ì—°ê²°ì´ í•„ìš”í•˜ì§€ ì•Šìœ¼ë©°, ì´ëŠ” ì•Œë¦¼ê³¼ ê°œì¸ ë°ì´í„°ê°€ ì ˆëŒ€ ê¸°ê¸°ë¥¼ ë– ë‚˜ì§€ ì•ŠìŒì„ ì˜ë¯¸í•©ë‹ˆë‹¤.</string>
+    <string name="privacy_desc">HyperPopëŠ” ëª¨ë“  ìž‘ì—…ì„ íœ´ëŒ€í°ì˜ í”„ë¡œì„¸ì„œì—ì„œ ì§ì ‘ ì²˜ë¦¬í•©ë‹ˆë‹¤.\n\nì¸í„°ë„· ì—°ê²°ì´ í•„ìš”í•˜ì§€ ì•Šìœ¼ë©°, ì´ëŠ” ì•Œë¦¼ê³¼ ê°œì¸ ë°ì´í„°ê°€ ì ˆëŒ€ ê¸°ê¸°ë¥¼ ë– ë‚˜ì§€ ì•ŠìŒì„ ì˜ë¯¸í•©ë‹ˆë‹¤.</string>
     <string name="language">ì–¸ì–´</string>
     <string name="language_desc">ì• í”Œë¦¬ì¼€ì´ì…˜ ì–¸ì–´ ë³€ê²½</string>
     <string name="system_default">ì‹œìŠ¤í…œ ê¸°ë³¸ê°’</string>
@@ -217,7 +217,7 @@
     <string name="backup_section_title">ë°ì´í„° ê´€ë¦¬</string>
     <string name="backup_options_subtitle">ìž‘ì—…ì— í¬í•¨í•  ë°ì´í„°ë¥¼ ì„ íƒí•˜ì„¸ìš”</string>
     <string name="option_app_settings">ì•± ì„¤ì •</string>
-    <string name="option_app_settings_desc">ì„¤ì • ìƒíƒœ, í…Œë§ˆ, ë™ìž‘ ëª¨ë“œ</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
     <string name="option_blocklist">ì°¨ë‹¨ ëª©ë¡ ë°ì´í„°ë² ì´ìŠ¤</string>
     <string name="option_blocklist_desc">ì‚¬ìš©ìžê°€ ì§€ì •í•œ ì°¨ë‹¨ëœ í‚¤ì›Œë“œ ë° ì•±</string>
     <string name="option_priorities">ìš°ì„ ìˆœìœ„ ê·œì¹™</string>
@@ -242,15 +242,7 @@
     <string name="title_0_3_1">ë°±ì—… &amp; ë‹¤êµ­ì–´ ì—…ë°ì´íŠ¸</string>
     <string name="close">닫기</string>
     <string name="search">검색</string>
-    <string name="widget_updated_toast">위젯이 업데이트되었습니다</string>
-    <string name="widget_settings_error">이 위젯 설정을 수정할 수 없습니다</string>
-    <string name="widget_picker_title">위젯 추가</string>
     <string name="search_apps_placeholder">앱 검색...</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">%d widgets</item>
-    </plurals>
-    <string name="widget_config_title">위젯 설정</string>
-    <string name="widget_settings_button">위젯 설정</string>
     <string name="config_tab_appearance">외형</string>
     <string name="config_tab_behavior">동작</string>
     <string name="config_render_mode_label">렌더링 모드</string>
@@ -279,33 +271,7 @@
     <string name="size_xlarge">매우 크게 (380dp)</string>
     <string name="app_uninstalled_badge">삭제됨</string>
     <string name="settings_action">설정</string>
-    <string name="saved_widgets_title">저장된 위젯</string>
-    <string name="no_saved_widgets">저장된 위젯이 없습니다.</string>
-    <string name="widget_id_fmt">위젯 #%d</string>
     <string name="show_on_island">Island에 표시</string>
-    <string name="theme_installer_analyzing">테마 패키지 분석 중...</string>
-    <string name="theme_installer_success_title">테마 준비 완료</string>
-    <string name="theme_installer_author">제작자: %s</string>
-    <string name="theme_installer_version">버전 %d</string>
-    <string name="theme_installer_apply_question">지금 이 테마를 Hyper Bridge에 적용하시겠습니까?</string>
-    <string name="theme_installer_action_apply">테마 적용</string>
-    <string name="theme_installer_action_later">나중에 저장</string>
-    <string name="theme_installer_error_title">가져오기 실패</string>
-    <string name="theme_installer_error_generic">테마 파일을 검증할 수 없습니다.</string>
-    <string name="theme_installer_btn_close">닫기</string>
-    <string name="theme_manager_title">내 테마</string>
-    <string name="theme_manager_cd_add">새 테마 추가</string>
-    <string name="theme_card_author_format">제작: %s</string>
-    <string name="theme_card_cd_active">사용 중인 테마</string>
-    <string name="theme_card_cd_delete">테마 삭제</string>
-    <string name="theme_system_default_title">시스템 기본값</string>
-    <string name="theme_system_default_desc">표준 디자인</string>
-    <string name="theme_sheet_title">새 테마 추가</string>
-    <string name="theme_sheet_action_create">새 테마 만들기</string>
-    <string name="theme_sheet_action_find">검색</string>
-    <string name="theme_action_import_short">가져오기</string>
-    <string name="theme_card_action_edit">편집</string>
-    <string name="theme_card_action_export">내보내기</string>
     <string name="creator_title_new">테마 만들기</string>
     <string name="creator_title_edit">테마 편집</string>
     <string name="creator_nav_colors">색상</string>
@@ -357,15 +323,10 @@
     <string name="design_hero_pro_subtitle">더 강력한 기능을 잠금 해제하세요</string>
     <string name="design_hero_community_title">커뮤니티</string>
     <string name="design_hero_community_subtitle">GitHub에 참여하세요</string>
-    <string name="design_section_themes">테마</string>
-    <string name="design_section_widgets">위젯</string>
     <string name="design_browse_more">더 둘러보기</string>
     <string name="design_add_new">새로 추가</string>
     <string name="design_add_design">디자인 추가</string>
     <string name="design_add_to_island">커스텀 설정</string>
-    <string name="design_system_widget_beta">시스템 위젯 (베타)</string>
-    <string name="design_get_themes">테마 받기</string>
-    <string name="design_empty_widget_title">첫 번째 위젯을 추가하세요</string>
     <string name="design">디자인</string>
     <string name="creator_nav_actions">전역 동작</string>
     <string name="creator_sub_actions">키워드별 버튼 스타일 설정</string>
@@ -400,8 +361,6 @@
     <string name="discard">취소</string>
     <string name="unsaved_changes">저장되지 않은 변경 사항</string>
     <string name="unsaved_changes_desc">이 앱에 대한 저장되지 않은 변경 사항이 있습니다. 나가기 전에 저장하시겠습니까?</string>
-    <string name="share_theme">테마 공유</string>
-    <string name="my_theme">내 테마</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="other">사용자 지정 동작 %1$d개</item>
     </plurals>
@@ -413,9 +372,8 @@
     <string name="colors_label_dynamic_modes">동적 색상</string>
     <string name="colors_label_material_you">Material You (시스템)</string>
     <string name="colors_desc_material_you">현재 배경화면에서 색상을 추출합니다.</string>
-    <string name="kill_all_widgets">활성 위젯 모두 종료</string>
     <string name="permission_reminder_title">업데이트 안내</string>
-    <string name="permission_reminder_desc">Hyper Bridge가 업데이트되었습니다! 위젯이 원활하게 작동할 수 있도록 자동 실행 및 백그라운드 배터리 권한이 시스템에 의해 몰래 취소되지 않았는지 확인해 주세요.</string>
+    <string name="permission_reminder_desc">HyperPop가 업데이트되었습니다! 위젯이 원활하게 작동할 수 있도록 자동 실행 및 백그라운드 배터리 권한이 시스템에 의해 몰래 취소되지 않았는지 확인해 주세요.</string>
     <string name="got_it">확인했습니다</string>
     <string name="recommended">추천</string>
     <string name="all">전체</string>
@@ -423,7 +381,7 @@
     <string name="channel_live_updates">Android 라이브 업데이트</string>
     <string name="engine_config_title">엔진 구성</string>
     <string name="good_to_know">참고 사항</string>
-    <string name="nav_layout_info">• 내비게이션 레이아웃은 향후 업데이트를 통해 테마 엔진에 완전 통합될 예정입니다.\n• 네이티브 라이브 업데이트 엔진을 사용할 경우 오른쪽 콘텐츠만 표시됩니다.</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">Xiaomi HyperIsland</string>
     <string name="island_behavior_title">Island 동작 방식</string>
     <string name="island_behavior_desc"><![CDATA[시간 초과, 중복 및 표시 여부]]></string>
@@ -480,11 +438,8 @@
     <string name="reply_textfield_radius">텍스트 입력창 모서리 곡률</string>
     <string name="reply_send_radius">전송 버튼 모서리 곡률</string>
     <string name="onboarding_can_be_changed">이 옵션들은 나중에 설정 및 테마 설정에서 변경할 수 있습니다.</string>
-    <string name="onboarding_widget_desc">빠른 액세스를 위해 Island에 안드로이드 표준 위젯을 추가하세요.</string>
-    <string name="onboard_theme_desc">Island의 색상, 모양 및 아이콘을 자유롭게 커스텀하세요.</string>
     <string name="onboard_design_desc">다양한 커스텀 옵션으로 가능성을 확장하세요</string>
     <string name="behavior_desc_glob_config">Island의 동작 방식을 결정합니다.</string>
-    <string name="widget_layout_snapshot">위젯 미리보기</string>
     <string name="title_0_5_7">성능 및 동기화 업데이트</string>
     <string name="title_0_5_6">가로 모드 숨김 및 안정성 개선</string>
     <string name="title_0_5_5">메시지 및 업데이트 수정</string>
@@ -492,16 +447,15 @@
     <string name="title_0_5_1">수정 및 다듬기</string>
     <string name="title_0_5_0">The Live Update</string>
     <string name="notification_went_wrong">이 문구가 보인다면 무언가 문제가 발생한 것입니다!</string>
-    <string name="widget_went_wrong">이 문구가 보인다면 무언가 문제가 발생한 것입니다! 시스템이 위젯을 표시할 수 없습니다.</string>
     <string name="troubleshoot_featured_notification">문제 해결</string>
     <string name="featured_notifications_check">주요 알림 검사</string>
-    <string name="featured_notifications_check_desc">Hyper Bridge Island를 표시하도록 시스템이 올바르게 설정되어 있는지 확인해 봅시다.</string>
+    <string name="featured_notifications_check_desc">HyperPop Island를 표시하도록 시스템이 올바르게 설정되어 있는지 확인해 봅시다.</string>
     <string name="featured_notifications_not_supported">지원되지 않음</string>
     <string name="featured_notifications_enabled">활성화됨</string>
     <string name="featured_notifications_open_settings">시스템 설정 열기</string>
     <string name="featured_notifications_troubleshoot_title">왜 Island로 표시되지 않나요?</string>
-    <string name="featured_notifications_troubleshoot_desc">Xiaomi 기기가 알림을 수신했으나 시스템 설정에서 권한이 비활성화되어 있어 Island로 표시하지 못했습니다.\n\n해결 방법:\n1. \"시스템 설정 열기\"를 누릅니다.\n2. 아래로 스크롤하여 \"주요 알림(Featured Notifications)\" (또는 유사 항목)을 찾습니다.\n3. Hyper Bridge에 대한 권한을 활성화합니다.</string>
-    <string name="migration_title">Hyper Bridge 업데이트</string>
+    <string name="featured_notifications_troubleshoot_desc">Xiaomi 기기가 알림을 수신했으나 시스템 설정에서 권한이 비활성화되어 있어 Island로 표시하지 못했습니다.\n\n해결 방법:\n1. \"시스템 설정 열기\"를 누릅니다.\n2. 아래로 스크롤하여 \"주요 알림(Featured Notifications)\" (또는 유사 항목)을 찾습니다.\n3. HyperPop에 대한 권한을 활성화합니다.</string>
+    <string name="migration_title">HyperPop 업데이트</string>
     <string name="migration_message">기기 보호 저장소로 데이터베이스를 마이그레이션하는 중…</string>
     <string name="migration_complete">업데이트 완료</string>
     <string name="inline_reply_title">인라인 답장</string>
@@ -512,7 +466,7 @@
     <!-- Guides & Documentation -->
     <string name="group_guides">Guides &amp; Help</string>
     <string name="documentation_title">Guides &amp; Documentation</string>
-    <string name="documentation_subtitle">Learn how to configure and customize Hyper Bridge</string>
+    <string name="documentation_subtitle">Learn how to configure and customize HyperPop</string>
     <!-- Changelog & Website -->
     <string name="view_changelog">View Changelog</string>
     <string name="view_full_changelog">View on Website</string>
@@ -534,11 +488,6 @@
     <string name="bug_report_include_device_desc">Model, HyperOS/MIUI version, Android version, ROM region</string>
     <string name="bug_report_include_permissions">System Permissions &amp; Restricted Settings</string>
     <string name="bug_report_include_permissions_desc">Root, LSPosed scopes, SystemUI ingress, island backend, and Focus hooks</string>
-    <string name="bug_report_include_theme">Theme Configuration</string>
-    <string name="bug_report_include_theme_desc">Active theme, engine mode, custom theme metadata</string>
-    <string name="bug_report_include_widgets">Widget Configuration</string>
-    <string name="bug_report_include_widgets_desc">Saved widgets, update intervals, sizes, and shade visibility</string>
-    <string name="bug_report_widget_scope_all">All Widgets</string>
     <string name="bug_report_include_app_config">App Settings &amp; Configuration</string>
     <string name="bug_report_app_scope_none">None</string>
     <string name="bug_report_app_scope_none_desc">Do not include any app configurations in the report</string>
@@ -548,7 +497,7 @@
     <string name="bug_report_app_scope_all_desc">Include configurations and overrides for all apps</string>
     <string name="bug_report_select_app">Select App</string>
     <string name="bug_report_include_logs">Recent App Logs (Logcat)</string>
-    <string name="bug_report_include_logs_desc">Last 500 lines of system and Hyper Bridge logs</string>
+    <string name="bug_report_include_logs_desc">Last 500 lines of system and HyperPop logs</string>
     <string name="bug_report_preview_title">Report Preview</string>
     <string name="bug_report_preview_desc">Review the exact data that will be shared</string>
     <string name="bug_report_submit_github">Submit on GitHub</string>
@@ -557,7 +506,7 @@
     <string name="bug_report_share">Share</string>
     <string name="bug_report_copied_github_toast">Diagnostics copied to clipboard! Paste it into the Logs section on GitHub.</string>
     <string name="bug_report_copied_toast">Report copied to clipboard.</string>
-    <string name="bug_report_email_subject">Hyper Bridge Bug Report</string>
+    <string name="bug_report_email_subject">HyperPop Bug Report</string>
     <string name="bug_report_entry_title">Bug Report</string>
     <string name="bug_report_entry_subtitle">Troubleshoot and report issues with system logs</string>
     <string name="bug_report_need_help">Having issues with permissions or islands?</string>
@@ -566,7 +515,7 @@
     <string name="bug_report_change_app">Change App</string>
     <string name="privacy_policy_title">Privacy Policy</string>
     <string name="privacy_policy_subtitle">Learn how your data is protected and handled</string>
-    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with Hyper Bridge.</string>
+    <string name="bug_report_screen_description">Generate detailed system diagnostics and logs to troubleshoot and report issues with HyperPop.</string>
     <string name="cancel">Cancel</string>
     <string name="continue_action">Continue</string>
     <string name="type_screen_recording">Screen recording</string>

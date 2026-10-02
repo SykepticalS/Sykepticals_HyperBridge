@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
 
     <string name="back">戻る</string>
     <string name="next">次へ</string>
@@ -12,12 +12,12 @@
     <string name="clear">クリア</string>
     <string name="sort_order">並び順</string>
 
-    <string name="welcome_title">Hyper Bridgeへ\nようこそ</string>
+    <string name="welcome_title">HyperPopへ\nようこそ</string>
     <string name="welcome_subtitle">HyperIslandsをHyperOSにシームレスに統合します。</string>
     <string name="get_started">はじめる</string>
 
     <string name="how_it_works">使い方</string>
-    <string name="how_it_works_desc">お気に入りのアプリ（Spotify、マップ、タイマーなど）を選択してください。Hyper Bridgeが通知をスタイリッシュなHyperIslandに変換します。</string>
+    <string name="how_it_works_desc">お気に入りのアプリ（Spotify、マップ、タイマーなど）を選択してください。HyperPopが通知をスタイリッシュなHyperIslandに変換します。</string>
     <string name="beta_warning">注意: このアプリはベータ版です。不具合や表示の誤りが発生する場合があります。</string>
 
     <string name="device_compatible">対応デバイス</string>
@@ -46,7 +46,7 @@
     <string name="no_apps_found">アプリが見つかりません</string>
 
     <string name="version_template">バージョン %s</string>
-    <string name="developer_credit">by D4vidDf</string>
+    <string name="developer_credit">by sykeptical</string>
 
     <string name="group_configuration">設定</string>
     <string name="system_setup">システム設定</string>
@@ -54,12 +54,12 @@
 
     <string name="group_about">アプリについて</string>
     <string name="developer">開発者</string>
-    <string name="developer_subtitle">d4viddf.comにアクセス</string>
+    <string name="developer_subtitle">sykepticalにアクセス</string>
     <string name="source_code">ソースコード</string>
     <string name="source_code_subtitle">GitHubリポジトリ</string>
     <string name="licenses">オープンソースライセンス</string>
     <string name="licenses_subtitle">サードパーティ製ソフトウェア</string>
-    <string name="footer_made_with_love">スペインで❤️を込めて制作</string>
+    <string name="footer_made_with_love">トルコで❤️を込めて制作</string>
 
     <string name="app_health_desc">アプリがバックグラウンドで正しく動作するには、すべての項目が緑色である必要があります。</string>
     <string name="req_permissions">必要な権限</string>
@@ -240,7 +240,7 @@
     <string name="title_0_3_0">グローバルアップデート</string>
 
     <string name="privacy_title">完全オフライン＆セキュア</string>
-    <string name="privacy_desc">Hyper Bridgeはすべての処理をスマートフォンのプロセッサ上で直接行います。\n\nインターネット接続を必要としないため、通知や個人データが端末の外に送信されることはありません。</string>
+    <string name="privacy_desc">HyperPopはすべての処理をスマートフォンのプロセッサ上で直接行います。\n\nインターネット接続を必要としないため、通知や個人データが端末の外に送信されることはありません。</string>
 
     <string name="language">言語</string>
     <string name="language_desc">アプリの言語を変更</string>
@@ -252,7 +252,7 @@
     <string name="backup_options_subtitle">操作に含めるデータを選択してください</string>
 
     <string name="option_app_settings">アプリ設定</string>
-    <string name="option_app_settings_desc">セットアップ状況、テーマ、動作モード</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
 
     <string name="option_blocklist">ブロックリストのデータベース</string>
     <string name="option_blocklist_desc">カスタムでブロックしたキーワードとアプリ</string>
@@ -287,17 +287,9 @@
 
     <string name="close">閉じる</string>
     <string name="search">検索</string>
-    <string name="widget_updated_toast">ウィジェットを更新しました</string>
-    <string name="widget_settings_error">このウィジェットの設定は編集できません</string>
 
-    <string name="widget_picker_title">ウィジェットを追加</string>
     <string name="search_apps_placeholder">アプリを検索...</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">ウィジェット %d 個</item>
-    </plurals>
 
-    <string name="widget_config_title">ウィジェットを設定</string>
-    <string name="widget_settings_button">ウィジェット設定</string>
 
     <string name="config_tab_appearance">外観</string>
     <string name="config_tab_behavior">動作</string>
@@ -335,38 +327,12 @@
     <string name="app_uninstalled_badge">アンインストール済み</string>
     <string name="settings_action">設定</string>
 
-    <string name="saved_widgets_title">保存済みウィジェット</string>
-    <string name="no_saved_widgets">保存されたウィジェットがありません。</string>
-    <string name="widget_id_fmt">ウィジェット #%d</string>
     <string name="show_on_island">アイランドに表示</string>
 
-    <string name="theme_installer_analyzing">テーマパッケージを解析中...</string>
-    <string name="theme_installer_success_title">テーマの準備が完了しました</string>
-    <string name="theme_installer_author">作成者: %s</string>
-    <string name="theme_installer_version">バージョン %d</string>
-    <string name="theme_installer_apply_question">このテーマを今すぐHyper Bridgeに適用しますか？</string>
-    <string name="theme_installer_action_apply">テーマを適用</string>
-    <string name="theme_installer_action_later">後で使用するため保存</string>
-    <string name="theme_installer_error_title">インポートに失敗しました</string>
-    <string name="theme_installer_error_generic">テーマファイルを検証できませんでした。</string>
-    <string name="theme_installer_btn_close">閉じる</string>
-    <string name="theme_manager_title">マイテーマ</string>
-    <string name="theme_manager_cd_add">新しいテーマを追加</string>
 
-    <string name="theme_card_author_format">by %s</string>
-    <string name="theme_card_cd_active">使用中のテーマ</string>
-    <string name="theme_card_cd_delete">テーマを削除</string>
 
-    <string name="theme_system_default_title">システムのデフォルト</string>
-    <string name="theme_system_default_desc">標準の外観</string>
 
-    <string name="theme_sheet_title">新しいテーマを追加</string>
 
-    <string name="theme_sheet_action_create">新しいテーマを作成</string>
-    <string name="theme_sheet_action_find">検索</string>
-    <string name="theme_action_import_short">インポート</string>
-    <string name="theme_card_action_edit">編集</string>
-    <string name="theme_card_action_export">エクスポート</string>
 
     <string name="creator_title_new">テーマを作成</string>
     <string name="creator_title_edit">テーマを編集</string>
@@ -427,16 +393,11 @@
     <string name="design_hero_community_title">コミュニティ</string>
     <string name="design_hero_community_subtitle">GitHubに参加する</string>
 
-    <string name="design_section_themes">テーマ</string>
-    <string name="design_section_widgets">ウィジェット</string>
 
     <string name="design_browse_more">もっと見る</string>
     <string name="design_add_new">新規追加</string>
     <string name="design_add_design">デザインを追加</string>
     <string name="design_add_to_island">カスタマイズ</string>
-    <string name="design_system_widget_beta">システムウィジェット（ベータ）</string>
-    <string name="design_get_themes">テーマを入手</string>
-    <string name="design_empty_widget_title">最初のウィジェットを追加</string>
     <string name="design">デザイン</string>
 
     <string name="creator_nav_actions">全体アクション</string>
@@ -476,8 +437,6 @@
     <string name="discard">破棄</string>
     <string name="unsaved_changes">未保存の変更</string>
     <string name="unsaved_changes_desc">このアプリの変更が保存されていません。終了する前に保存しますか？</string>
-    <string name="share_theme">テーマを共有</string>
-    <string name="my_theme">マイテーマ</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="one">%1$d custom action</item>
         <item quantity="other">カスタムアクション %1$d 件</item>
@@ -495,9 +454,8 @@
     <string name="colors_label_material_you">Material You（システム）</string>
     <string name="colors_desc_material_you">現在の壁紙から色を抽出します。</string>
 
-    <string name="kill_all_widgets">有効なウィジェットを終了</string>
     <string name="permission_reminder_title">更新のお知らせ</string>
-    <string name="permission_reminder_desc">Hyper Bridgeが更新されました！ウィジェットを問題なく動作させるため、自動起動とバックグラウンドでのバッテリー使用権限が、システムによって無効化されていないかご確認ください。</string>
+    <string name="permission_reminder_desc">HyperPopが更新されました！ウィジェットを問題なく動作させるため、自動起動とバックグラウンドでのバッテリー使用権限が、システムによって無効化されていないかご確認ください。</string>
     <string name="got_it">わかりました</string>
 
     <string name="recommended">おすすめ</string>
@@ -509,7 +467,7 @@
 
     <string name="engine_config_title">エンジン設定</string>
     <string name="good_to_know">知っておくと良いこと</string>
-    <string name="nav_layout_info">• ナビゲーションレイアウトは、今後のアップデートでテーマエンジンに完全統合される予定です。\n• ネイティブライブアップデートエンジンを使用している場合、右側のコンテンツのみ表示されます。</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">Xiaomi Featured通知</string>
     <string name="island_behavior_title">アイランドの動作</string>
     <string name="island_behavior_desc"><![CDATA[タイムアウト、重複、表示設定]]></string>
@@ -536,7 +494,5 @@
     <string name="enable_triggers">特定のトリガーを有効にする</string>
     <string name="open_source_licenses">オープンソースライセンス</string>
     <string name="onboarding_can_be_changed">これらのオプションは、後から設定画面やテーマ設定でいつでも変更できます。</string>
-    <string name="onboarding_widget_desc">標準的なAndroidウィジェットをアイランドに追加し、すぐにアクセスできるようにします。</string>
-    <string name="onboard_theme_desc">アイランドの色、形、アイコンを自由にカスタマイズできます。</string>
     <string name="onboard_design_desc">さまざまなカスタマイズオプションで可能性を広げましょう</string>
 </resources>

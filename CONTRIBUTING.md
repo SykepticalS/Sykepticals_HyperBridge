@@ -1,4 +1,4 @@
-# Contributing to Hyper Bridge
+# Contributing to HyperPop
 
 Thank you for your interest in contributing!
 

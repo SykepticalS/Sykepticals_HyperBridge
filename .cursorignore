@@ -1,0 +1,11 @@
+.agent-local/
+
+**/build/
+**/.gradle/
+**/.idea/
+**/captures/
+**/logs/
+
+**/*.apk
+**/*.aab
+**/*.mapping

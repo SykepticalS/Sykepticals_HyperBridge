@@ -1,156 +1,73 @@
 <p align="center">
-  <img src="app/src/main/ic_launcher-playstore.png" width="150" alt="HyperBridge Logo" style="border-radius: 20%;" />
+  <img src="app/src/main/ic_launcher-playstore.png" width="150" alt="HyperPop Logo" style="border-radius: 20%;" />
 </p>
 
-<h1 align="center">HyperBridge — Sykeptical Edition</h1>
+<h1 align="center">HyperPop</h1>
 
 <p align="center">
-  <strong>The official HyperBridge 0.6.0 codebase, plus app badges for notification avatars.</strong>
-</p>
-
-<p align="center">
-  This fork tracks the official HyperBridge implementation and retains one additional visual enhancement: when a notification supplies an avatar or content image, its source app icon is shown as a badge beside it in the Island.
+  <strong>HyperOS Dynamic Island notifications for rooted Xiaomi devices.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/SykepticalS/Sykepticals_HyperBridge/releases"><img src="https://img.shields.io/badge/download-GitHub_Releases-181717?style=for-the-badge&amp;logo=github" alt="Download from GitHub Releases" /></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.0-blue?style=for-the-badge&logo=github" alt="Version 0.6.0" />
+  <img src="https://img.shields.io/badge/version-0.6.1--sykeptical-blue?style=for-the-badge&logo=github" alt="Version 0.6.1-sykeptical" />
   <img src="https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
   <img src="https://img.shields.io/badge/Material%20Design-757575?style=for-the-badge&logo=material-design&logoColor=white" alt="Material Design" />
-  <a href="https://crowdin.com/project/hyper-bridge"><img src="https://badges.crowdin.net/hyper-bridge/localized.svg" alt="Crowdin" /></a>
 </p>
 
 <br>
 
-## About this fork
+## About
 
-The Sykeptical Edition is based directly on the official HyperBridge `dev/0_6_0` code. The reliability, messaging, call-handling, screen-recording, VPN, diagnostics, and settings work previously maintained in this fork has now been integrated upstream. This repository therefore follows the official application identity (`com.d4viddf.hyperbridge`) and keeps only the app-avatar badge enhancement on top.
+HyperPop is the current application. Its package is `com.sykeptical.hyperpop`. It posts, updates, and cancels islands inside SystemUI through a libxposed module. There is no Shizuku or app-side island fallback.
 
-HyperBridge was created and is developed upstream by [D4vidDf](https://github.com/D4vidDf/HyperBridge). This fork is maintained by [Sykeptical](https://github.com/SykepticalS).
+HyperPop grew out of HyperBridge. HyperBridge was the upstream project created by [D4vidDf](https://github.com/D4vidDf/HyperBridge). This application is developed by sykeptical in Türkiye. A future References / Credits page will collect that history; it is not the current app name.
 
-## What's new in 0.6.0
+## Features
 
-* Updated the entire project to the official HyperBridge 0.6.0 development codebase.
-* Added native Xiaomi screen-recording and VPN Islands.
-* Added stronger notification lifecycle handling, message deduplication, and call-session controls.
-* Added app-icon badges to notification avatars, pictures, and large icons while avoiding duplicate badges for fallback icons.
+* **Native visuals:** Turns selected notifications into HyperOS islands.
+* **App avatar badges:** Keeps a sender or content image and adds the source app icon as a compact badge.
+* **Smart colors:** Extracts brand colors from app icons and tints dark or monochrome icons so they stay visible.
+* **Media, navigation, downloads, calls, VPN, and screen recording:** Dedicated island layouts, including album art, turn-by-turn instructions, download progress, call timers, VPN status, and Xiaomi screen recording.
+* **Spoiler protection:** Block terms globally or per app.
+* **Login codes:** Surfaces one-time codes on the island with a copy action.
+* **Privileged SystemUI backend:** A versioned IPC contract sends each island to the injected SystemUI dispatcher. The dispatcher checks ownership and performs tagged post, update, and cancel operations. Heads-up suppression fails open. Focus hooks and heartbeat checks run only while the backend is healthy. Hook configuration is synchronized with libxposed `RemotePreferences`.
 
-See the [complete 0.6.0 release notes](docs/releases/0.6.0.md).
+## Languages
 
-## 🚀 Features
+HyperPop ships with community translations. The Crowdin project used for those translations is still the historical project at [hyper-bridge](https://crowdin.com/project/hyper-bridge).
 
-* **Native Visuals:** Transforms notifications into HyperOS system-style islands.
-* **App Avatar Badges:** Keeps the sender or content image visible while adding its source app icon as a compact badge.
-* **🎨 Theme Engine:** Customize every pixel.
-    * **Theme Creator:** Built-in editor to design your own themes with real-time previews.
-    * **Smart Colors:** Automatically extract vibrant brand colors from app icons.
-    * **Icon Shaping:** Choose between shapes like *Squircle*, *Clover*, *Arch*, and *Cookie*.
-    * **Granular Control:** Per-app overrides for colors, icons, and action styles.
-    * **Smart Icon Tinting:** Intelligently tints dark/monochrome icons to remain visible.
-* **🧩 Widgets:** Pin standard Android widgets to the island layer for quick access—even on the Lockscreen!
-* **Smart Integration:**
-    * **🎵 Media:** Show album art and "Now Playing" status with visualizer support.
-    * **🧭 Navigation:** Real-time turn-by-turn instructions (Google Maps, Waze).
-    * **⬇️ Downloads:** Dedicated circular progress layout with a satisfying "Green Tick" animation upon completion.
-    * **📞 Calls:** Dedicated layout for incoming and active calls with timers.
-* **🛡️ Spoiler Protection:** Define blocked terms globally or per-app to prevent specific notifications (e.g., message spoilers) from popping up on the Island.
-* **Privileged SystemUI backend:** Islands are posted, updated, and cancelled inside SystemUI through a modern libxposed module; there is no Shizuku or app-side island fallback.
-* **Total Control:** Choose exactly which apps trigger the island, customize timeouts, and toggle floating behavior per app.
+## Tech stack
 
-## 👩‍💻 For Developers: Create Themes
+* Kotlin
+* Jetpack Compose (Material 3)
+* Room
+* LSPosed / libxposed hooks in `com.android.systemui` and `com.xiaomi.xmsf`
 
-HyperBridge supports an open theming standard (`.hbr` packages). You can create themes and distribute them, or integrate a "Apply Theme" button directly into your own app (Launcher, Icon Pack, etc.).
+## Installation
 
-* **Documentation:** [Full Guide on Creating & Distributing Themes](https://github.com/D4vidDf/HyperBridge/discussions/78)
-* **Intent API:** Send themes programmatically using `com.d4viddf.hyperbridge.APPLY_THEME`.
+HyperPop is a new application id. It can be installed beside an older HyperBridge package. Do not uninstall the previous package unless you intend to.
 
-## 🌐 Supported Languages
+1. Install the HyperPop APK on a rooted Xiaomi, POCO, or Redmi device.
+2. Enable the module in a libxposed API 102 implementation for both `com.android.systemui` and `com.xiaomi.xmsf`.
+3. Use **Restart scopes** in setup or diagnostics.
 
-HyperBridge is fully localized thanks to our amazing community. **Want to add your language?** We now use Crowdin for easy translation management.
+Source notifications are intercepted inside SystemUI. The app does not need a notification-listener, overlay, or auxiliary service permission for that path.
 
-👉 **[Help translate HyperBridge on Crowdin](https://crowdin.com/project/hyper-bridge)**
+Most policy changes hot-reload. Hook-installation changes require restarting the affected SystemUI or XMSF scope.
 
-* 🇺🇸 **English** (Default)
-* 🇪🇸 **Spanish** (Español)
-* 🇧🇷 **Portuguese** (Português Brasileiro) — Thanks to [@NIICKTCHUNS](https://github.com/NIICKTCHUNS)
-* 🇵🇱 **Polish** (Polski) — Thanks to [@kacskrz](https://github.com/kacskrz)
-* 🇸🇰 **Slovak** (Slovenčina)
-* 🇰🇷 **Korean** (한국어) — Thanks to [@alexkoala](https://github.com/alexkoala)
-* 🇺🇦 **Ukrainian** (Українська) — Thanks to [@ItzDFPlayer](https://github.com/ItzDFPlayer)
-* 🇷🇺 **Russian** (Русский) — Thanks to [@kilo3528](https://github.com/kilo3528)
-* 🇩🇪 **German** (Deutsch) — Thanks to [@kilo3528](https://github.com/kilo3528)
-* 🇮🇩 **Indonesian** (Bahasa Indonesia)
-* 🇹🇷 **Turkish** (Türkçe)
+## Acknowledgements
 
-## 🛠️ Tech Stack
+* **[Stardawn](https://www.coolapk1s.com/feed/70418983)** for the XMSF notification research used on Chinese ROMs.
+* **[HyperIsland](https://github.com/1812z/HyperIsland)** by 1812z, MIT License: libxposed service, scope, classloader, Xiaomi Focus, and SystemUI hook patterns.
+* **[HyperIsland-ToolKit](https://github.com/D4vidDf/HyperIsland-ToolKit)** by D4vidDf, Apache 2.0.
 
-* **Language:** Kotlin
-* **UI:** Jetpack Compose (Material 3 Expressive)
-* **Architecture:** MVVM
-* **Storage:** Room Database (SQLite)
-* **Runtime:** LSPosed hooks in SystemUI/XMSF plus the optional widget overlay service
-* **Concurrency:** Kotlin Coroutines & Flow
+## Contributing
 
-## 📸 Screenshots
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-| Home Screen | Active Island | Theme Creator | Widget Picker |
-|:---:|:---:|:---:|:---:|
-| ![Home](./screenshots/home.png) | ![Island](./screenshots/island_example.png) | ![Creator](./screenshots/theme_creator.png) | ![Widgets](./screenshots/widget_picker.png) |
+## License
 
-## 🤝 Acknowledgements
+Apache License 2.0. See `LICENSE`.
 
-Special thanks to the following people and projects for their invaluable contributions:
-
-*   **[Stardawn](https://www.coolapk1s.com/feed/70418983)**: For the extensive research on the XMSF notification workaround that enables HyperIslands on Chinese ROMs.
-*   **[HyperIsland](https://github.com/1812z/HyperIsland)** by 1812z: modern libxposed service, scope, classloader, Xiaomi Focus, and SystemUI-hook patterns adapted under the MIT License. See [donor attribution](docs/HYPERISLAND_ATTRIBUTION.md).
-
-## 📥 Installation
-
-### Option 1: Google Play Store (Recommended)
-The easiest way to install and keep the app updated.
-
-<a href='https://play.google.com/store/apps/details?id=com.d4viddf.hyperbridge'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height="60"/></a>
-
-### Option 2: Manual APK
-1.  Download the latest APK from this fork's [Releases](https://github.com/SykepticalS/Sykepticals_HyperBridge/releases) page.
-2.  Install the APK on your Xiaomi/POCO/Redmi device.
-
-### ⚙️ Setup (Required for both methods)
-HyperBridge requires a rooted Xiaomi/POCO/Redmi device and a modern LSPosed implementation supporting libxposed API 102. Enable the module for both `com.android.systemui` and `com.xiaomi.xmsf`, then use **Restart scopes** in setup/diagnostics. Source notifications are intercepted inside SystemUI and no Android notification, overlay, or auxiliary service permission is required.
-
-### Architecture
-
-HyperBridge's existing parsers, translators, themes, actions, and lifecycle logic still build each notification. A versioned IPC contract sends that notification to the injected SystemUI dispatcher, which validates ownership metadata and performs tagged post/update/cancel operations. SystemUI applies fail-open heads-up suppression; XMSF/SystemUI Focus hooks and heartbeat handshakes ensure a proxy is attempted only while the complete backend is healthy. Compact hook state is synchronized with libxposed `RemotePreferences`.
-
-Most policy/theme changes hot-reload. Hook-installation changes require restarting the affected SystemUI/XMSF scope from the privileged-environment screen.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a Pull Request.
-
-1.  **Fork** the repository.
-2.  Create a new branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a **Pull Request**.
-
-## 💖 Support the Project
-
-Hyper Bridge is an open-source project developed in my free time. If this app has improved your daily experience, please consider supporting its development!
-
-<a href="https://github.com/sponsors/D4vidDf">
-  <img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86" width="150" alt="Sponsor"/>
-</a>
-
-## 📜 License
-
-Distributed under the Apache 2.0 License. See `LICENSE` for more information.
-
-## 👤 Developer
-
-* **Original developer:** [D4vidDf](https://github.com/D4vidDf)
-* **Fork maintainer:** [Sykeptical](https://github.com/SykepticalS)
+Third-party notices that name their own authors stay with those works. Do not remove them during rebrands.

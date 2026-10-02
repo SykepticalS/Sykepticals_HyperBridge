@@ -1,0 +1,12 @@
+package com.sykeptical.hyperpop.processing;
+
+import android.os.Bundle;
+import com.sykeptical.hyperpop.processing.IIslandDispatcher;
+
+interface INotificationProcessingService {
+    boolean processPosted(inout Bundle request);
+    void processRemoved(in Bundle request);
+    void reconcile(in Bundle request);
+    void reload();
+    void attachDispatcher(IIslandDispatcher dispatcher);
+}

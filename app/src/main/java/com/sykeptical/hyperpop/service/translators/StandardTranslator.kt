@@ -1,0 +1,96 @@
+package com.sykeptical.hyperpop.service.translators
+
+import android.content.Context
+import android.service.notification.StatusBarNotification
+import com.sykeptical.hyperpop.models.HyperIslandData
+import com.sykeptical.hyperpop.models.IslandConfig
+import com.sykeptical.hyperpop.service.logincode.LoginCodePresentation
+import io.github.d4viddf.hyperisland_kit.HyperAction
+import io.github.d4viddf.hyperisland_kit.HyperIslandNotification
+
+class StandardTranslator(context: Context) : BaseTranslator(context) {
+
+    fun translate(
+        sbn: StatusBarNotification,
+        title: String,
+        text: String,
+        picKey: String,
+        config: IslandConfig,
+        isUpdate: Boolean = false,
+        loginCode: LoginCodePresentation? = null,
+    ): HyperIslandData {
+        val highlightColor = "#FFFFFF"
+        val presentation = resolveIslandText(sbn, title, text, config, sender = title)
+            .withLoginCode(loginCode)
+        val compact = compactIslandAssets(sbn, picKey, presentation)
+
+        val builder = HyperIslandNotification.Builder(context, stableBusinessId(picKey), title)
+
+        // --- CONFIGURATION ---
+        builder.applyFloatingPresentation(config.firstFloat ?: false, config.floatOnUpdate ?: false, isUpdate)
+        val floatPresentation = IslandFloatingPresentationPolicy.resolve(
+            config.firstFloat ?: false,
+            config.floatOnUpdate ?: false,
+            isUpdate,
+        )
+        builder.setIslandConfig(
+            timeout = config.timeout,
+            // dismissible serializes to dismissIsland, which removes an existing island.
+            dismissible = false,
+            highlightColor = highlightColor,
+            expandedTimeMs = floatPresentation.expandedTimeMs(config.floatTimeout),
+        )
+        builder.setShowNotification(config.isShowShade ?: false)
+
+        val bridgeActions = actionsWithLoginCode(sbn, loginCode) {
+            extractBridgeActions(
+                sbn = sbn,
+                config = config
+            )
+        }
+
+        builder.addPicture(compact.avatar)
+        compact.attachment?.let(builder::addPicture)
+        builder.setIconTextInfo(
+            picKey = compact.smallKey,
+            title = title,
+            content = text
+        )
+        builder.setBigIslandInfo(left = compact.left, right = compact.right)
+        builder.setSmallIsland(compact.smallKey)
+
+        // Add Actions
+        if (bridgeActions.isNotEmpty()) {
+            // [FIX] Specific configuration for Shade Text Buttons:
+            // 1. actionBgColor = null -> Transparent Background
+            // 2. titleColor = "#FFFFFF" -> White Text (Neutral/No Color)
+            val textActions = bridgeActions.map { it.action }.map { original ->
+                HyperAction(
+                    key = original.key,
+                    title = original.title,
+                    icon = original.icon,
+                    pendingIntent = original.pendingIntent,
+                    actionIntentType = original.actionIntentType,
+                    actionBgColor = null,
+                    titleColor = "#FFFFFF"
+                )
+            }.toTypedArray()
+
+            // Set actions visible in shade
+            builder.setTextButtons(*textActions)
+
+            // Register them internally
+            textActions.forEach {
+                builder.addHiddenAction(it)
+            }
+
+            // Register any custom icons if available
+            bridgeActions.forEach {
+                it.actionImage?.let { pic -> builder.addPicture(pic) }
+            }
+        }
+
+
+        return HyperIslandData(builder.buildResourceBundle(), builder.buildJsonParam(), highlightColor)
+    }
+}

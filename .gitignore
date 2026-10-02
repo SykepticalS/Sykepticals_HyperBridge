@@ -55,7 +55,8 @@ captures/
 *compose_metrics.txt
 *compose_reports.txt
 
-# Custom HyperBridge project additions
+# Custom HyperPop project additions
+/.agent-local/
 caps_build.txt
 reference-apps/popupControl/
 gradle/gradle-daemon-jvm.properties

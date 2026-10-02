@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hyper Bridge</string>
+    <string name="app_name">HyperPop</string>
     <string name="back">Atrás</string>
     <string name="next">Siguiente</string>
     <string name="finish">Finalizar</string>
@@ -10,11 +10,11 @@
     <string name="configure">Configurar</string>
     <string name="clear">Borrar</string>
     <string name="sort_order">Orden</string>
-    <string name="welcome_title">Bienvenido a\nHyper Bridge</string>
+    <string name="welcome_title">Bienvenido a\nHyperPop</string>
     <string name="welcome_subtitle">Integra Hyper Islands perfectamente en tu experiencia HyperOS.</string>
     <string name="get_started">Empezar</string>
     <string name="how_it_works">Cómo funciona</string>
-    <string name="how_it_works_desc">Selecciona tus aplicaciones favoritas (Spotify, Navegación, Relojes). Hyper Bridge transforma sus notificaciones en una elegante Hyper Island.</string>
+    <string name="how_it_works_desc">Selecciona tus aplicaciones favoritas (Spotify, Navegación, Relojes). HyperPop transforma sus notificaciones en una elegante Hyper Island.</string>
     <string name="beta_warning">Nota: Esta app está en Beta. Puedes encontrar errores o información visual incorrecta.</string>
     <string name="device_compatible">Dispositivo Compatible</string>
     <string name="unsupported_device">Dispositivo No Soportado</string>
@@ -36,18 +36,18 @@
     <string name="no_active_bridges_desc">Ve a la Biblioteca para habilitar aplicaciones.</string>
     <string name="no_apps_found">No se encontraron apps</string>
     <string name="version_template">Versión %s</string>
-    <string name="developer_credit">por D4vidDf</string>
+    <string name="developer_credit">por sykeptical</string>
     <string name="group_configuration">Configuración</string>
     <string name="system_setup">Configuración del Sistema</string>
     <string name="system_setup_subtitle">Arreglar permisos y batería</string>
     <string name="group_about">Sobre la aplicación</string>
     <string name="developer">Desarrollador</string>
-    <string name="developer_subtitle">Visita d4viddf.com</string>
+    <string name="developer_subtitle">Visita sykeptical</string>
     <string name="source_code">Código Fuente</string>
     <string name="source_code_subtitle">Repositorio en GitHub</string>
     <string name="licenses">Licencias Open Source</string>
     <string name="licenses_subtitle">Software de terceros</string>
-    <string name="footer_made_with_love">Hecho con ❤️ en España</string>
+    <string name="footer_made_with_love">Hecho con ❤️ en Türkiye</string>
     <string name="app_health_desc">Asegúrate de que todo esté en verde para que la aplicación funcione correctamente en segundo plano.</string>
     <string name="req_permissions">Permisos Requeridos</string>
     <string name="notif_access">Acceso a Notificaciones</string>
@@ -194,7 +194,7 @@
     </string-array>
     <string name="title_0_3_0">La Actualización Global</string>
     <string name="privacy_title">100% Offline y Seguro</string>
-    <string name="privacy_desc">Hyper Bridge procesa todo directamente en el procesador de tu teléfono.\n\nNO requiere acceso a internet, lo que significa que tus notificaciones y datos personales nunca salen de tu dispositivo.</string>
+    <string name="privacy_desc">HyperPop procesa todo directamente en el procesador de tu teléfono.\n\nNO requiere acceso a internet, lo que significa que tus notificaciones y datos personales nunca salen de tu dispositivo.</string>
     <string name="language">Idioma</string>
     <string name="language_desc">Cambiar idioma de la aplicación</string>
     <string name="system_default">Predeterminado del sistema</string>
@@ -203,7 +203,7 @@
     <string name="backup_section_title">Gestionar datos</string>
     <string name="backup_options_subtitle">Selecciona los datos a incluir en la operación</string>
     <string name="option_app_settings">Ajustes de la aplicación</string>
-    <string name="option_app_settings_desc">Estado de configuración, tema, modos de comportamiento</string>
+    <string name="option_app_settings_desc">Setup status and behavior modes</string>
     <string name="option_blocklist">Base de datos de bloqueo</string>
     <string name="option_blocklist_desc">Tus palabras clave bloqueadas y reglas por aplicación</string>
     <string name="option_priorities">Reglas de prioridad</string>
@@ -228,16 +228,7 @@
     <string name="title_0_3_1">Actualización de Copias y Idiomas</string>
     <string name="close">Cerrar</string>
     <string name="search">Buscar</string>
-    <string name="widget_updated_toast">Widget actualizado</string>
-    <string name="widget_settings_error">No se puede editar la configuración de este widget</string>
-    <string name="widget_picker_title">Añadir widget</string>
     <string name="search_apps_placeholder">Buscar aplicaciones…</string>
-    <plurals name="widget_count_fmt">
-        <item quantity="other">%d widgets</item>
-        <item quantity="one">%d widget</item>
-    </plurals>
-    <string name="widget_config_title">Configurar widget</string>
-    <string name="widget_settings_button">Ajustes del widget</string>
     <string name="config_tab_appearance">Apariencia</string>
     <string name="config_tab_behavior">Comportamiento</string>
     <string name="config_render_mode_label">Modo de renderizado</string>
@@ -268,33 +259,7 @@
     <string name="size_xlarge">Extra Grande (380dp)</string>
     <string name="app_uninstalled_badge">Desinstalada</string>
     <string name="settings_action">Ajustes</string>
-    <string name="saved_widgets_title">Widgets Guardados</string>
-    <string name="no_saved_widgets">No hay widgets guardados.</string>
-    <string name="widget_id_fmt">Widget #%d</string>
     <string name="show_on_island">Mostrar en Isla</string>
-    <string name="theme_installer_analyzing">Analizando paquete del tema...</string>
-    <string name="theme_installer_success_title">Tema listo</string>
-    <string name="theme_installer_author">Creado por %s</string>
-    <string name="theme_installer_version">Versión %d</string>
-    <string name="theme_installer_apply_question">¿Quieres aplicar este tema a Hyper Bridge ahora?</string>
-    <string name="theme_installer_action_apply">Aplicar tema</string>
-    <string name="theme_installer_action_later">Guardar para luego</string>
-    <string name="theme_installer_error_title">Error al importar</string>
-    <string name="theme_installer_error_generic">No se pudo verificar el archivo del tema.</string>
-    <string name="theme_installer_btn_close">Cerrar</string>
-    <string name="theme_manager_title">Mis temas</string>
-    <string name="theme_manager_cd_add">Añadir nuevo tema</string>
-    <string name="theme_card_author_format">por %s</string>
-    <string name="theme_card_cd_active">Tema activo</string>
-    <string name="theme_card_cd_delete">Eliminar tema</string>
-    <string name="theme_system_default_title">Predeterminado del sistema</string>
-    <string name="theme_system_default_desc">Apariencia estándar</string>
-    <string name="theme_sheet_title">Añadir nuevo tema</string>
-    <string name="theme_sheet_action_create">Crear nuevo tema</string>
-    <string name="theme_sheet_action_find">Buscar</string>
-    <string name="theme_action_import_short">Importar</string>
-    <string name="theme_card_action_edit">Editar</string>
-    <string name="theme_card_action_export">Exportar</string>
     <string name="creator_title_new">Crear tema</string>
     <string name="creator_title_edit">Editar tema</string>
     <string name="creator_nav_colors">Colores</string>
@@ -346,15 +311,10 @@
     <string name="design_hero_pro_subtitle">Desbloquea todo el potencial</string>
     <string name="design_hero_community_title">Comunidad</string>
     <string name="design_hero_community_subtitle">Únete a nuestro GitHub</string>
-    <string name="design_section_themes">Temas</string>
-    <string name="design_section_widgets">Widgets</string>
     <string name="design_browse_more">Ver más</string>
     <string name="design_add_new">Añadir nuevo</string>
     <string name="design_add_design">Añadir diseño</string>
     <string name="design_add_to_island">Añadir a la Isla</string>
-    <string name="design_system_widget_beta">Widget del sistema (Beta)</string>
-    <string name="design_get_themes">Obtener temas</string>
-    <string name="design_empty_widget_title">Añade tu primer widget</string>
     <string name="design">Diseño</string>
     <string name="creator_nav_actions">Acciones globales</string>
     <string name="creator_sub_actions">Personalizar botones con palabras clave</string>
@@ -389,8 +349,6 @@
     <string name="discard">Descartar</string>
     <string name="unsaved_changes">Cambios sin guardar</string>
     <string name="unsaved_changes_desc">Tiene cambios no guardados para esta aplicación. ¿Desea guardarlos antes de salir?</string>
-    <string name="share_theme">Compartir tema</string>
-    <string name="my_theme">Mi tema</string>
     <plurals name="creator_sub_actions_count">
         <item quantity="one">%1$d acción personalizada</item>
         <item quantity="other">%1$d acciones personalizadas</item>
@@ -403,9 +361,7 @@
     <string name="colors_label_dynamic_modes">Colores Dinámicos</string>
     <string name="colors_label_material_you">Material You (Sistema)</string>
     <string name="colors_desc_material_you">Extrae los colores de tu fondo de pantalla actual.</string>
-    <string name="kill_all_widgets">Detener widgets activos</string>
     <string name="permission_reminder_title">Aviso de actualización</string>
-    <string name="permission_reminder_desc">¡Hyper Bridge se ha actualizado! Por favor, asegúrate de que los permisos de Inicio automático y Batería en segundo plano no hayan sido revocados silenciosamente por el sistema para que tus widgets sigan funcionando sin problemas.</string>
     <string name="got_it">Entendido</string>
     <string name="recommended">Recomendados</string>
     <string name="all">Todos</string>
@@ -413,7 +369,7 @@
     <string name="channel_live_updates">Actualizaciones nativas en vivo</string>
     <string name="engine_config_title">Configuación del motor</string>
     <string name="good_to_know">Debe saber que</string>
-    <string name="nav_layout_info">• Los diseños de navegación se integrarán completamente en el Motor de Temas en una próxima actualización.\n• Al usar el motor nativo de Live Updates, solo el contenido del Lado Derecho es visible.</string>
+    <string name="nav_layout_info">Choose which navigation details appear in the compact island.</string>
     <string name="xiaomi_featured_notifications">Notificaciones Destacadas de Xiaomi</string>
     <string name="island_behavior_title">Comportamiento de la Isla</string>
     <string name="island_behavior_desc"><![CDATA[Tiempos de espera, duplicados y visibilidad]]></string>
@@ -469,11 +425,8 @@
     <string name="reply_textfield_radius">Borde del Cuadro de Texto</string>
     <string name="reply_send_radius">Borde del Botón de Enviar</string>
     <string name="onboarding_can_be_changed">Puedes cambiar estas opciones más tarde en Ajustes y el Configurador de Temas.</string>
-    <string name="onboarding_widget_desc">Añade widgets estándar de Android a tu isla para un acceso rápido.</string>
-    <string name="onboard_theme_desc">Personaliza completamente los colores, formas e iconos de tu isla.</string>
     <string name="onboard_design_desc">Amplía las posibilidades con diferentes opciones de personalización</string>
     <string name="behavior_desc_glob_config">Determina el comportamiento de la isla.</string>
-    <string name="widget_layout_snapshot">Vista previa del widget</string>
     <string name="title_0_5_6">Modo Horizontal y Correcciones de Estabilidad</string>
 
     <string name="title_0_5_5">Mensajería y Correcciones</string>
@@ -481,16 +434,15 @@
     <string name="title_0_5_1">Correcciones y Mejoras</string>
     <string name="title_0_5_0">La actualización en vivo</string>
     <string name="notification_went_wrong">¡Si ves esto, algo salió mal! Haz clic aquí para ver cómo solucionarlo.</string>
-    <string name="widget_went_wrong">Si estás viendo esto, algo salió mal! El sistema no puede mostrar el widget</string>
     <string name="troubleshoot_featured_notification">Solucionar</string>
     <string name="featured_notifications_check">Test Notificaciones Destacadas</string>
-    <string name="featured_notifications_check_desc">Vamos a verificar si tu sistema está configurado correctamente para mostrar las islas de Hyper Bridge.</string>
+    <string name="featured_notifications_check_desc">Vamos a verificar si tu sistema está configurado correctamente para mostrar las islas de HyperPop.</string>
     <string name="featured_notifications_not_supported">No Soportado</string>
     <string name="featured_notifications_enabled">Habilitado</string>
     <string name="featured_notifications_open_settings">Abrir Ajustes del Sistema</string>
     <string name="featured_notifications_troubleshoot_title">¿Por qué esto no es una isla?</string>
-    <string name="featured_notifications_troubleshoot_desc">Tu dispositivo Xiaomi interceptó la notificación pero no pudo mostrarla como una isla destacada porque el permiso está deshabilitado en los ajustes del sistema.\n\nPara solucionar esto:\n1. Toca \"Abrir Ajustes del Sistema\"\n2. Desplázate hacia abajo hasta \"Notificaciones Destacadas\" (o similar)\n3. Habilítalo para Hyper Bridge.</string>
-    <string name="migration_title">Hyper Bridge Update</string>
+    <string name="featured_notifications_troubleshoot_desc">Tu dispositivo Xiaomi interceptó la notificación pero no pudo mostrarla como una isla destacada porque el permiso está deshabilitado en los ajustes del sistema.\n\nPara solucionar esto:\n1. Toca \"Abrir Ajustes del Sistema\"\n2. Desplázate hacia abajo hasta \"Notificaciones Destacadas\" (o similar)\n3. Habilítalo para HyperPop.</string>
+    <string name="migration_title">HyperPop Update</string>
     <string name="migration_message">Migrating database to Device Protected storage…</string>
     <string name="migration_complete">Update Complete</string>
     <string name="inline_reply_title">Respuesta rápida</string>
@@ -504,7 +456,7 @@
     <!-- Guides & Documentation -->
     <string name="group_guides">Guías y Ayuda</string>
     <string name="documentation_title">Guías y Documentación</string>
-    <string name="documentation_subtitle">Aprende a configurar y personalizar Hyper Bridge</string>
+    <string name="documentation_subtitle">Aprende a configurar y personalizar HyperPop</string>
 
     <!-- Changelog & Website -->
     <string name="view_changelog">Ver Registro de Cambios</string>
@@ -528,11 +480,6 @@
     <string name="bug_report_include_device_desc">Modelo, versión de HyperOS/MIUI, versión de Android, región de la ROM</string>
     <string name="bug_report_include_permissions">Permisos del Sistema y Ajustes Restringidos</string>
     <string name="bug_report_include_permissions_desc">Permisos de escucha, superposición, batería y ajustes restringidos de Android 13+</string>
-    <string name="bug_report_include_theme">Configuración del Tema</string>
-    <string name="bug_report_include_theme_desc">Tema activo, motor de renderizado, metadatos del tema personalizado</string>
-    <string name="bug_report_include_widgets">Configuración de Widgets</string>
-    <string name="bug_report_include_widgets_desc">Widgets guardados, intervalos de actualización, tamaños y visibilidad</string>
-    <string name="bug_report_widget_scope_all">Todos los Widgets</string>
     <string name="bug_report_include_app_config">Ajustes y Configuración de Apps</string>
     <string name="bug_report_app_scope_none">Ninguno</string>
     <string name="bug_report_app_scope_none_desc">No incluir ninguna configuración de apps en el reporte</string>
@@ -542,7 +489,7 @@
     <string name="bug_report_app_scope_all_desc">Incluir configuraciones y reglas de todas las apps</string>
     <string name="bug_report_select_app">Seleccionar App</string>
     <string name="bug_report_include_logs">Registros Recientes de la App (Logcat)</string>
-    <string name="bug_report_include_logs_desc">Últimas 500 líneas de registros del sistema y Hyper Bridge</string>
+    <string name="bug_report_include_logs_desc">Últimas 500 líneas de registros del sistema y HyperPop</string>
     <string name="bug_report_preview_title">Vista Previa del Reporte</string>
     <string name="bug_report_preview_desc">Revisa los datos exactos que se compartirán</string>
     <string name="bug_report_submit_github">Reportar en GitHub</string>
@@ -551,7 +498,7 @@
     <string name="bug_report_share">Compartir</string>
     <string name="bug_report_copied_github_toast">¡Diagnóstico copiado al portapapeles! Pégalo en la sección de Logs en GitHub.</string>
     <string name="bug_report_copied_toast">Reporte copiado al portapapeles.</string>
-    <string name="bug_report_email_subject">Reporte de Error de Hyper Bridge</string>
+    <string name="bug_report_email_subject">Reporte de Error de HyperPop</string>
     <string name="bug_report_entry_title">Reporte de errores</string>
     <string name="bug_report_entry_subtitle">Soluciona y reporta errores con registros del sistema</string>
     <string name="bug_report_need_help">¿Tienes problemas con permisos o islas?</string>
@@ -560,7 +507,7 @@
     <string name="bug_report_change_app">Cambiar App</string>
     <string name="privacy_policy_title">Política de Privacidad</string>
     <string name="privacy_policy_subtitle">Conoce cómo se protegen y gestionan tus datos</string>
-    <string name="bug_report_screen_description">Genera diagnósticos y registros detallados del sistema para solucionar y reportar errores de Hyper Bridge.</string>
+    <string name="bug_report_screen_description">Genera diagnósticos y registros detallados del sistema para solucionar y reportar errores de HyperPop.</string>
     <string name="cancel">Cancelar</string>
     <string name="continue_action">Continuar</string>
     <string name="type_screen_recording">Grabación de pantalla</string>
@@ -600,10 +547,10 @@
     <!-- Floating Notification Setup -->
     <string name="floating_setup_title">Configuración de notificaciones flotantes</string>
     <string name="floating_setup_settings_subtitle">Evita banners flotantes duplicados en apps seleccionadas</string>
-    <string name="floating_setup_intro">HyperBridge muestra las notificaciones seleccionadas en la Isla. La app de origen sigue gestionando el sonido, vibración y su entrada en el panel.</string>
+    <string name="floating_setup_intro">HyperPop muestra las notificaciones seleccionadas en la Isla. La app de origen sigue gestionando el sonido, vibración y su entrada en el panel.</string>
     <string name="floating_setup_limitation">Para evitar banners flotantes duplicados, abre los ajustes de notificaciones del sistema de cada app, desactiva sus notificaciones emergentes y confírmalo abajo.</string>
     <string name="floating_setup_alternative_title">¿Prefieres mantener las notificaciones flotantes nativas?</string>
-    <string name="floating_setup_alternative_desc">Puedes mantener activadas las notificaciones flotantes de tus apps y simplemente desactivar \"Notificación Emergente\" en los Ajustes Globales de HyperBridge para evitar duplicados.</string>
+    <string name="floating_setup_alternative_desc">Puedes mantener activadas las notificaciones flotantes de tus apps y simplemente desactivar \"Notificación Emergente\" en los Ajustes Globales de HyperPop para evitar duplicados.</string>
     <string name="floating_setup_no_apps_title">Sin apps conectadas</string>
     <string name="floating_setup_no_apps">Selecciona apps en la biblioteca primero. Esta configuración seguirá disponible después.</string>
     <string name="floating_status_user_confirmed">Confirmado</string>
@@ -634,7 +581,7 @@
     <string name="copy">Copiar</string>
     <string name="bug_report">Informe de error</string>
     <string name="copy_sanitized_diagnostics">Copiar</string>
-    <string name="diagnostic_export_header">Diagnóstico anonimizado de HyperBridge</string>
+    <string name="diagnostic_export_header">Diagnóstico anonimizado de HyperPop</string>
     <string name="connected">Conectado</string>
     <string name="disconnected">Desconectado</string>
     <string name="granted">Concedido</string>
@@ -674,24 +621,16 @@
 
     <!-- App Configuration Screen -->
     <string name="app_config_title">Configuración de la App</string>
-    <string name="app_config_subtitle">Comportamientos, widgets y extensiones</string>
+    <string name="app_config_subtitle">Behaviors &amp; extensions</string>
     <string name="custom_design_title">Custom Design</string>
     <string name="custom_design_badge">PRÓXIMAMENTE</string>
     <string name="custom_design_desc">Los diseños visuales personalizados y temas de la Isla están en desarrollo. Muy pronto disponibles.</string>
     <string name="custom_translators_title">Custom Translators</string>
     <string name="custom_translators_badge">PRÓXIMAMENTE</string>
     <string name="custom_translators_desc">Crea e instala traductores personalizados de la comunidad para formatear y controlar los datos de las notificaciones de esta app.</string>
-    <string name="app_widgets_section_title">Widgets de la Isla</string>
-    <string name="app_widgets_section_desc">Configura widgets de esta app para mostrarlos como Hyper Islands.</string>
-    <string name="add_island_widget">Añadir Widget</string>
-    <string name="no_widgets_for_app">Aún no hay widgets de la isla configurados para esta app.</string>
-    <string name="no_available_widgets_for_app">Esta aplicación no proporciona ningún widget.</string>
-    <string name="select_app_widget">Seleccionar Widget</string>
-    <string name="theme_managed_banner">Los comportamientos están gestionados por tu Tema activo.</string>
     <string name="app_status_bridged">Vinculada</string>
     <string name="app_status_not_bridged">No vinculada</string>
     <string name="custom_behavior_desc">Usando comportamiento personalizado. Activa para usar valores globales.</string>
     <string name="no_blocked_terms">No hay términos bloqueados configurados</string>
     <string name="no_blocked_terms_desc">Las notificaciones que contengan las palabras añadidas no activarán la isla.</string>
 </resources>
-

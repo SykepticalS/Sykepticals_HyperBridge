@@ -1,0 +1,36 @@
+{
+    "mcpServers": {
+      "android-mcp": {
+        "type": "stdio",
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "C:\\Users\\ataha\\Desktop\\Desktop\\HyperBridge-master\\.cursor\\scripts\\android-mcp-wireless.ps1"
+        ],
+        "env": {
+          "SCREENSHOT_QUANTIZED": "true"
+        }
+      },
+  
+      "jadx-analyzer": {
+        "type": "stdio",
+        "command": "C:\\Users\\ataha\\Tools\\jadx-mcp-server\\.venv\\Scripts\\python.exe",
+        "args": [
+          "C:\\Users\\ataha\\Tools\\jadx-mcp-server\\mcp_server\\jadx_mcp.py"
+        ],
+        "env": {
+          "JAVA_BIN": "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.14.7-hotspot\\bin\\java.exe",
+          "PYTHONUTF8": "1",
+          "PYTHONUNBUFFERED": "1",
+          "JADX_HEAP": "6g",
+          "JADX_TIMEOUT": "600",
+          "JADX_LOG_FILE": "C:\\tmp\\jadx-mcp-server.log",
+          "JADX_DAEMON_LOG": "C:\\tmp\\jadx-daemon.log",
+          "JADX_DAEMON_LOCK": "C:\\tmp\\jadx-daemon.lock"
+        }
+      }
+    }
+  }
