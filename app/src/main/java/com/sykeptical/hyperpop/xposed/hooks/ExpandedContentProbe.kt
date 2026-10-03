@@ -27,7 +27,8 @@ object ExpandedContentProbe {
         val leaves = ArrayList<ContentLeaf>(16)
         val seen = intArrayOf(0)
         walk(content, content, 0, leaves, seen)
-        if (leaves.isEmpty()) return null
+        val shown = leaves.mapNotNull { it.visibleWithin(content.width, content.height) }
+        if (shown.isEmpty()) return null
         val clusters = (content as? ViewGroup)?.let { group ->
             (0 until group.childCount).mapNotNull { index ->
                 val child = group.getChildAt(index)
@@ -39,7 +40,7 @@ object ExpandedContentProbe {
             nativeTopMarginPx = margin,
             contentWidthPx = content.width,
             contentHeightPx = content.height,
-            leaves = leaves,
+            leaves = shown,
             clusters = clusters,
         )
     }

@@ -1,6 +1,7 @@
 package com.sykeptical.hyperpop.service.animation.expanded
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -71,6 +72,55 @@ class ExpandedPillPolicyTest {
         assertTrue(result.radiusPx <= ExpandedPillPolicy.radiusCap(result.cardBottom - 36, nativeRadius, density))
         assertTrue(result.radiusPx >= 0f)
     }
+
+    @Test
+    fun aButtonParkedOffTheEdgeDoesNotCountAsContent() {
+        val parked = ContentLeaf(IslandRect(1069, 48, 1224, 203), ContentLeafKind.INTERACTIVE)
+        val shown = ContentLeaf(IslandRect(884, 48, 1039, 203), ContentLeafKind.INTERACTIVE)
+        val straddling = ContentLeaf(IslandRect(1000, 48, 1120, 203), ContentLeafKind.INTERACTIVE)
+        assertNull(parked.visibleWithin(1087, 251))
+        assertEquals(shown, shown.visibleWithin(1087, 251))
+        assertEquals(IslandRect(1000, 48, 1087, 203), straddling.visibleWithin(1087, 251)?.bounds)
+    }
+
+    @Test
+    fun outgoingCallAfterItsStateChangeStillGetsThePill() {
+        val probed = listOf(
+            ContentLeaf(IslandRect(884, 48, 1039, 203), ContentLeafKind.INTERACTIVE),
+            ContentLeaf(IslandRect(1069, 48, 1224, 203), ContentLeafKind.INTERACTIVE),
+            ContentLeaf(IslandRect(54, 54, 197, 197), ContentLeafKind.PLAIN),
+            ContentLeaf(IslandRect(161, 161, 209, 209), ContentLeafKind.PLAIN),
+            ContentLeaf(IslandRect(233, 60, 854, 133), ContentLeafKind.TEXT),
+            ContentLeaf(IslandRect(233, 133, 510, 190), ContentLeafKind.TEXT),
+        )
+        assertEquals(89.625f, callRadius(probed).radiusPx, 0.01f)
+        val pill = callRadius(probed.mapNotNull { it.visibleWithin(1087, 251) })
+        assertEquals(
+            ExpandedPillPolicy.radiusCap(pill.cardBottom - 30, 89.625f, density),
+            pill.radiusPx,
+            0.01f,
+        )
+        assertTrue(pill.radiusPx > 110f)
+    }
+
+    private fun callRadius(leaves: List<ContentLeaf>) = ExpandedPillPolicy.apply(
+        enabled = true,
+        cardLeft = 56,
+        cardRight = 1143,
+        cardTop = 30,
+        provisionalBottom = 351,
+        contentOriginY = 30,
+        contentLeft = 56,
+        nativeRadiusPx = 89.625f,
+        density = density,
+        profile = ExpandedContentProfile(
+            nativeTopMarginPx = 0,
+            contentWidthPx = 1087,
+            contentHeightPx = 251,
+            leaves = leaves,
+        ),
+        displayHeight = 2608,
+    )
 
     private fun apply(
         enabled: Boolean,

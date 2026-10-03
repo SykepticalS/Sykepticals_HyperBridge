@@ -62,7 +62,26 @@ enum class ContentLeafKind {
 data class ContentLeaf(
     val bounds: IslandRect,
     val kind: ContentLeafKind,
-)
+) {
+    /**
+     * The part the content view can draw. A leaf mostly outside the content,
+     * such as a call button parked off the edge during a state change, is
+     * not on screen and returns null.
+     */
+    fun visibleWithin(contentWidth: Int, contentHeight: Int): ContentLeaf? {
+        val clipped = IslandRect(
+            left = bounds.left.coerceAtLeast(0),
+            top = bounds.top.coerceAtLeast(0),
+            right = bounds.right.coerceAtMost(contentWidth),
+            bottom = bounds.bottom.coerceAtMost(contentHeight),
+        )
+        if (clipped.isEmpty() || bounds.isEmpty()) return null
+        val shown = clipped.width.toLong() * clipped.height
+        val whole = bounds.width.toLong() * bounds.height
+        if (shown * 2 < whole) return null
+        return if (clipped == bounds) this else copy(bounds = clipped)
+    }
+}
 
 /** Direct child of the expanded content view, in child index order. */
 data class ContentCluster(
