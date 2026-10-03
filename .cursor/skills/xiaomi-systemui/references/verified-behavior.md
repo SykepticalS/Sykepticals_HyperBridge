@@ -110,6 +110,23 @@ of extrapolating from an unrelated build.
   - Runtime, same day, after the stabilization build: a Spotify expanded island on the app drawer kept `expanded_view` centered at `(599, 337)` from 0:11 through 0:40 and across a track change, with no bottom gap. Collapse restored `big_island_view` at `(600, 81)` and the clock. No second island was visible, so secondary hide/show was not observed on the phone.
 - HyperPop implication: override `getExpandedViewY` / `getExpandedViewHeight` so the existing Folme target starts at `islandViewMarginTop` and grows downward. Leave the compact-pill Folme end state alone so alpha 0 and blur 1 can finish. Fade the three status-bar containers with `transitionAlpha`. While the primary takeover is active, play the secondary's `getHiddenAnimState` at its current `containerX`. Skip the secondary reposition methods, including `smallIslandToBigIslandAnimation` (`getBigIslandAnimState`, which centers the vacated big slot on the cutout) and `smallIslandToTempHiddenAnimation`. On collapse, let Xiaomi's big-to-small transition run; call `smallIslandChangedAnimation` only if that island is no longer in the big state and its handler still has it. Do not abandon a settled expanded session when Folme stops emitting frames. Portrait and unlocked only; any failed self-check returns the native values.
 
+## Secondary island click while another island is expanded
+
+### Finding
+
+- Date: 2026-10-03
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandTouchInteractor.onInterceptTouchEvent` / `performClick`; `DynamicIslandContentView.onIslandClick`; `ClickEventCoordinator.handleAppEvent`; `DynamicIslandEventCoordinator.getSmallBigIslandRegion` / `updateTouchRegion`; `DynamicIslandAnimationDelegate.getHiddenAnimState` / `smallIslandToExpandedAnimation`.
+- Evidence source: JADX on the pulled plugin APK above. No new phone trace.
+- Observation:
+  - A compact click is not a view `OnClickListener`. `onInterceptTouchEvent` sets `downInBigIsland` from `getBigIslandRect`, and `downInSmallIsland` only when both big and small handler currents exist, using `getSmallIslandRect` at `bigX + bigWidth + space` (RTL mirrored). `performClick` then calls `onIslandClick` on that handler's current view. `onIslandClick` dispatches `ClickDynamicIsland`.
+  - `ClickEventCoordinator` expands a big island by clearing the big handler and moving that view to expanded. It expands a small island by leaving the big handler current in place, clearing the small handler, and moving the small view to expanded. `getExpandedAnimState` builds the target for both `bigIslandToExpandedAnimation` and `smallIslandToExpandedAnimation`.
+  - `updateTouchRegion` unions `getExpandedIslandRegion` with `getSmallBigIslandRegion`. When the big handler is empty and only a small island remains, that second region is `createDefaultRegion`: a 200dp-wide band around screen center, from 10dp to 42dp. Alpha 0 does not clear either press flag.
+  - `getHiddenAnimState` is the small-island hidden Folme state (container alpha 0, clip inset, `CONTAINER_X` from `getSmallIslandX`). It does not remove the press flags.
+- HyperPop implication: status-bar fade has to arm for whichever content view is entering `Expanded`, including one whose previous state is `SmallIsland`, using that circle as the compact rect. While the other island is hidden, clear only its `downInBigIsland` / `downInSmallIsland` flag before `performClick`, and drop only its contribution from `getSmallBigIslandRegion`. Leave expanded-island and shade touches alone. Do not cancel the hidden source.
+
 ## Entry template
 
 ### Finding

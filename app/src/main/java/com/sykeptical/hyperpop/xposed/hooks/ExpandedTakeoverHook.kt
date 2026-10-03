@@ -15,6 +15,8 @@ import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutRequest
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedTakeoverCoordinator
 import com.sykeptical.hyperpop.service.animation.expanded.IslandRect
 import com.sykeptical.hyperpop.service.animation.expanded.TakeoverPhase
+import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouch
+import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouchPolicy
 import com.sykeptical.hyperpop.xposed.HookConfig
 import com.sykeptical.hyperpop.xposed.log
 import io.github.libxposed.api.XposedInterface.Chain
@@ -32,9 +34,11 @@ import java.util.WeakHashMap
  * that transition reads: expanded Y and height, the clip bottom (Xiaomi's
  * getter truncates height to a multiple of the compact height), and the touch
  * region. Compact ears keep Xiaomi's expanded end state (alpha 0, blur 1) so
- * their fade can finish. While the primary is expanded, the secondary plays
- * Xiaomi's hidden Folme state at its current X. Reposition and cutout
- * transitions are skipped until collapse, and the source is not cancelled.
+ * their fade can finish. Whichever island is expanding owns that fade. The
+ * other compact island yields: a circle plays Xiaomi's hidden Folme state at
+ * its current X, and a big island fades with the same alpha as the status
+ * bar. Its touch flags and compact touch region are cleared while it is
+ * hidden, and the source is not cancelled.
  */
 object ExpandedTakeoverHook {
     private const val BASE =
@@ -45,6 +49,8 @@ object ExpandedTakeoverHook {
         "miui.systemui.dynamicisland.event.DynamicIslandEventCoordinator"
     private const val PHONE_HELPER =
         "miui.systemui.dynamicisland.window.content.helpers.DynamicIslandContentViewPhoneHelper"
+    private const val TOUCH =
+        "miui.systemui.dynamicisland.touch.domain.interactor.DynamicIslandTouchInteractor"
     private const val UTILS = "miui.systemui.util.CommonUtils"
     private const val SELF_CHECK_PX = 20
     private val SECONDARY_MOTION = setOf(
@@ -164,8 +170,11 @@ object ExpandedTakeoverHook {
                 }
             }
             coordinatorClass.noArgOrNull("getSmallBigIslandRegion")?.let { method ->
-                hook(module, loader, method) { chain -> withoutSecondary(chain.proceed()) }
+                hook(module, loader, method) { chain ->
+                    withoutSecondary(chain.thisObject, chain.proceed())
+                }
             }
+            hookYieldedTouch(module, loader)
             deoptimizeCallers(module, base, delegate, coordinatorClass, loader)
             module.log("HyperPop: expand-over-status-bar hook installed loader=${loader.hashCode()}")
         }.onFailure {
@@ -235,6 +244,7 @@ object ExpandedTakeoverHook {
         }
         StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
         trackSecondary(view)
+        if (coordinator.fadesUnexpandedCompact()) applyYieldedFade(view)
     }
 
     private fun narrowedRegion(eventCoordinator: Any, native: Any?): Any? {
@@ -264,12 +274,32 @@ object ExpandedTakeoverHook {
         return region
     }
 
-    private fun withoutSecondary(native: Any?): Any? {
+    private fun withoutSecondary(eventCoordinator: Any, native: Any?): Any? {
         val region = native as? Region ?: return native
-        if (!coordinator.secondarySuppressed) return region
-        val rect = secondaryRect() ?: return region
-        region.op(Region(rect.left, rect.top, rect.right, rect.bottom), Region.Op.DIFFERENCE)
-        return region
+        val big = handlerCurrent(eventCoordinator, "getBigIslandStateHandler")
+        val small = handlerCurrent(eventCoordinator, "getSmallIslandStateHandler")
+        val decision = YieldedCompactTouchPolicy.decide(
+            blockTouch = coordinator.blocksYieldedIslandTouch(),
+            hasBig = big != null,
+            bigYielded = big != null && coordinator.blocksTouchFor(System.identityHashCode(big)),
+            hasSmall = small != null,
+            smallYielded = small != null && coordinator.blocksTouchFor(System.identityHashCode(small)),
+        )
+        return when (decision) {
+            YieldedCompactTouch.KEEP -> region
+            YieldedCompactTouch.DROP_ALL -> region.apply { setEmpty() }
+            YieldedCompactTouch.DROP_SMALL -> {
+                val rect = small?.let { xiaomiSmallRect(big, it) } ?: return region
+                region.op(Region(rect.left, rect.top, rect.right, rect.bottom), Region.Op.DIFFERENCE)
+                region
+            }
+            YieldedCompactTouch.DROP_BIG -> {
+                val rect = big?.let { rectOf(it.call("getBigIslandRect", java.lang.Boolean.FALSE)) }
+                    ?: return region
+                region.op(Region(rect.left, rect.top, rect.right, rect.bottom), Region.Op.DIFFERENCE)
+                region
+            }
+        }
     }
 
     private fun beginOrContinue(view: View): ExpandedLayoutDecision.Takeover? {
@@ -290,13 +320,24 @@ object ExpandedTakeoverHook {
         }
         coordinator.requestEnable()
         if (blocked(view)) return null
-        val request = layoutRequest(view) ?: return null
+        val fromSmallIsland = view.call("getState")?.javaClass?.simpleName == "SmallIsland"
+        val request = layoutRequest(view, fromSmallIsland) ?: return null
         val decision = ExpandedIslandLayoutPolicy.decide(request)
         if (decision !is ExpandedLayoutDecision.Takeover) return null
-        val generation = coordinator.arm(id, SystemClock.uptimeMillis())
+        val generation = coordinator.arm(
+            id,
+            SystemClock.uptimeMillis(),
+            fromSmallIsland = fromSmallIsland,
+        )
         if (generation < 0) return null
         synchronized(lock) {
-            session = Session(view, generation, decision, request.compact)
+            session = Session(
+                view,
+                generation,
+                decision,
+                request.compact,
+                fromSmallIsland,
+            )
         }
         applyOffset(view, decision.bodyOffsetPx)
         scheduleWatchdog(view, generation)
@@ -344,10 +385,14 @@ object ExpandedTakeoverHook {
         applyOffset(view, current.decision.bodyOffsetPx)
     }
 
-    private fun layoutRequest(view: View): ExpandedLayoutRequest? {
+    private fun layoutRequest(view: View, fromSmallIsland: Boolean): ExpandedLayoutRequest? {
         val metrics = view.resources.displayMetrics
         val cutout = cutoutRect(view) ?: return null
-        val compact = rectOf(view.call("getBigIslandRect", java.lang.Boolean.FALSE)) ?: return null
+        val compact = if (fromSmallIsland) {
+            smallCompactRect(view) ?: rectOf(view.call("getBigIslandRect", java.lang.Boolean.FALSE))
+        } else {
+            rectOf(view.call("getBigIslandRect", java.lang.Boolean.FALSE))
+        } ?: return null
         val nativeY = view.intField("expandedViewY") ?: return null
         val nativeHeight = view.intField("expandedViewHeight") ?: return null
         val margin = (view.call("getExpandedViewMarginHorizontal") as? Number)?.toInt() ?: return null
@@ -416,7 +461,8 @@ object ExpandedTakeoverHook {
         val phase = coordinator.phase
         if (phase != TakeoverPhase.EXPANDING && phase != TakeoverPhase.EXPANDED) return false
         if (System.identityHashCode(view) == coordinator.ownerId) return false
-        coordinator.onSecondaryPresence(true)
+        noteYielded(view)
+        if (coordinator.fadesUnexpandedCompact()) return true
         if (yieldedSecondaryId != System.identityHashCode(view)) playSecondaryHide(view)
         return true
     }
@@ -443,7 +489,8 @@ object ExpandedTakeoverHook {
             coordinator.onSecondaryPresence(false)
             return
         }
-        coordinator.onSecondaryPresence(true)
+        noteYielded(secondary)
+        if (coordinator.fadesUnexpandedCompact()) return
         playSecondaryHide(secondary)
     }
 
@@ -452,12 +499,26 @@ object ExpandedTakeoverHook {
             coordinator.onSecondaryPresence(false)
             return
         }
-        coordinator.onSecondaryPresence(true)
+        noteYielded(secondary)
+        if (coordinator.fadesUnexpandedCompact()) return
         if (coordinator.suppressesSecondaryVisual() &&
             yieldedSecondaryId != System.identityHashCode(secondary)
         ) {
             playSecondaryHide(secondary)
         }
+    }
+
+    private fun noteYielded(secondary: View) {
+        coordinator.onSecondaryPresence(true, System.identityHashCode(secondary))
+    }
+
+    private fun applyYieldedFade(expanded: View) {
+        val sibling = secondaryView(expanded) ?: return
+        if (System.identityHashCode(sibling) == coordinator.ownerId) return
+        val alpha = coordinator.secondaryAlpha
+        sibling.alpha = alpha
+        (sibling.call("getBigIslandView") as? View)?.alpha = alpha
+        (sibling.call("getSmallIslandView") as? View)?.alpha = alpha
     }
 
     private fun playSecondaryHide(secondary: View) {
@@ -505,9 +566,21 @@ object ExpandedTakeoverHook {
             coordinator.onSecondaryPresence(false)
             return
         }
-        coordinator.onSecondaryPresence(true)
-        if (secondary.call("getState")?.javaClass?.simpleName == "BigIsland") return
-        secondary.call("getAnimatorDelegate")?.call("smallIslandChangedAnimation", secondary)
+        val id = System.identityHashCode(secondary)
+        coordinator.onSecondaryPresence(true, id)
+        if (!coordinator.shouldRestoreYieldedIsland()) return
+        val fromSmallIsland = synchronized(lock) { session }?.fromSmallIsland == true
+        if (fromSmallIsland && coordinator.phase != TakeoverPhase.NATIVE) return
+        secondary.alpha = 1f
+        (secondary.call("getBigIslandView") as? View)?.alpha = 1f
+        (secondary.call("getSmallIslandView") as? View)?.alpha = 1f
+        if (fromSmallIsland) return
+        val delegate = secondary.call("getAnimatorDelegate") ?: return
+        if (secondary.call("getState")?.javaClass?.simpleName == "BigIsland") {
+            delegate.call("bigIslandChangedAnimation", secondary)
+            return
+        }
+        delegate.call("smallIslandChangedAnimation", secondary)
     }
 
     private fun secondaryView(expanded: View): View? {
@@ -519,13 +592,71 @@ object ExpandedTakeoverHook {
         return null
     }
 
-    private fun secondaryRect(): IslandRect? {
-        val current = synchronized(lock) { session }?.owner?.get() ?: return null
-        val coordinatorView = current.call("getDynamicIslandEventCoordinator") ?: return null
-        val secondary = coordinatorView.call("getSmallIslandStateHandler")?.call("getCurrent") as? View
+    private fun smallCompactRect(view: View): IslandRect? {
+        viewRect(view.call("getSmallIslandView") as? View)?.let { return it }
+        val big = view.call("getDynamicIslandEventCoordinator")
+            ?.call("getBigIslandStateHandler")
+            ?.call("getCurrent") as? View
             ?: return null
-        if (secondary === current) return null
-        return rectOf(secondary.call("getSmallIslandRect")) ?: viewRect(secondary.call("getSmallIslandView") as? View)
+        if (big === view) return null
+        return xiaomiSmallRect(big, view)
+    }
+
+    private fun xiaomiSmallRect(big: View?, small: View): IslandRect? {
+        val anchor = big ?: return viewRect(small.call("getSmallIslandView") as? View)
+        val rtl = small.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        val bigX = (anchor.call("getCurrentBigIslandX", java.lang.Boolean.FALSE) as? Number)?.toInt()
+            ?: return viewRect(small.call("getSmallIslandView") as? View)
+        val bigWidth = (anchor.call("getCurrentBigIslandWidth", java.lang.Boolean.FALSE) as? Number)?.toInt()
+            ?: return null
+        val space = (anchor.call("getSpace") as? Number)?.toInt() ?: return null
+        val smallWidth = (small.call("getSmallIslandViewWidth") as? Number)?.toInt() ?: return null
+        val x = if (rtl) bigX - space - smallWidth else bigX + bigWidth + space
+        return rectOf(small.call("getSmallIslandRect", x))
+            ?: viewRect(small.call("getSmallIslandView") as? View)
+    }
+
+    private fun handlerCurrent(host: Any, accessor: String): View? =
+        host.call(accessor)?.call("getCurrent") as? View
+
+    private fun hookYieldedTouch(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val touch = loader.loadClass(TOUCH)
+            val names = setOf(
+                "performClick",
+                "onInterceptTouchEvent",
+                "access$" + "onInterceptTouchEvent",
+            )
+            touch.methodsNamedIn(names).forEach { method ->
+                hook(module, loader, method) { chain ->
+                    if (method.name == "performClick") clearYieldedPress(chain.thisObject)
+                    val result = chain.proceed()
+                    if (method.name != "performClick") clearYieldedPress(chain.thisObject)
+                    result
+                }
+            }
+            deoptimizeNamed(module, touch, names)
+        }.onFailure {
+            module.log("HyperPop: yielded-island touch hook unavailable: ${it.message}")
+        }
+    }
+
+    private fun clearYieldedPress(interactor: Any) {
+        if (!coordinator.blocksYieldedIslandTouch()) return
+        val big = lazyCurrent(interactor, "bigIslandStateHandler")
+        val small = lazyCurrent(interactor, "smallIslandStateHandler")
+        if (big != null && coordinator.blocksTouchFor(System.identityHashCode(big))) {
+            setBooleanField(interactor, "downInBigIsland", false)
+        }
+        if (small != null && coordinator.blocksTouchFor(System.identityHashCode(small))) {
+            setBooleanField(interactor, "downInSmallIsland", false)
+        }
+    }
+
+    private fun lazyCurrent(host: Any, fieldName: String): View? {
+        val lazy = host.field(fieldName) ?: return null
+        val handler = lazy.call("get") ?: return null
+        return handler.call("getCurrent") as? View
     }
 
     private fun applyOffset(view: View, extra: Int) {
@@ -630,7 +761,13 @@ object ExpandedTakeoverHook {
             "bigIslandChangedNoAnimation",
             "bigIslandToTempHiddenAnimation",
         )
-        val coordinatorNames = setOf("getExpandedIslandRegion", "updateWindowHeight", "onAnimationStart")
+        val coordinatorNames = setOf(
+            "getExpandedIslandRegion",
+            "getSmallBigIslandRegion",
+            "updateTouchRegion",
+            "updateWindowHeight",
+            "onAnimationStart",
+        )
         listOf(base to baseNames, delegate to delegateNames, coordinatorClass to coordinatorNames)
             .forEach { (clazz, names) -> deoptimizeNamed(module, clazz, names) }
         runCatching { loader.loadClass(PHONE_HELPER) }.getOrNull()?.let { helper ->
@@ -703,6 +840,7 @@ object ExpandedTakeoverHook {
         val generation: Long,
         val decision: ExpandedLayoutDecision.Takeover,
         val compact: IslandRect,
+        val fromSmallIsland: Boolean,
     ) {
         val owner = java.lang.ref.WeakReference(view)
         @Volatile var selfCheckDone: Boolean = false
@@ -765,4 +903,10 @@ private fun setFloatField(target: Any, name: String, value: Float) {
     val found = target.javaClass.findField(name) ?: return
     found.isAccessible = true
     found.setFloat(target, value)
+}
+
+private fun setBooleanField(target: Any, name: String, value: Boolean) {
+    val found = target.javaClass.findField(name) ?: return
+    found.isAccessible = true
+    found.setBoolean(target, value)
 }

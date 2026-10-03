@@ -1,7 +1,8 @@
 package com.sykeptical.hyperpop.service.animation.expanded
 
 /**
- * One expanded island owns the status-bar fade. Other islands stay active.
+ * One expanded island owns the status-bar fade, whether it started as the
+ * big island or the circle. The other island stays semantically alive.
  * A disable request waits for the next native boundary so an in-flight morph
  * is not cut in half. Rotation, keyguard, detach, and the watchdog abandon
  * immediately and restore every alpha.
@@ -15,6 +16,8 @@ class ExpandedTakeoverCoordinator(
         private set
     var ownerId: Int? = null
         private set
+    var expandedFromSmallIsland: Boolean = false
+        private set
     var statusBarAlpha: Float = 1f
         private set
     var secondaryAlpha: Float = 1f
@@ -23,16 +26,20 @@ class ExpandedTakeoverCoordinator(
         private set
     var secondarySuppressed: Boolean = false
         private set
+    var yieldedIslandId: Int? = null
+        private set
     var allowsNewExpansion: Boolean = true
         private set
 
     private var lastFrameMs: Long = 0L
     private var disableRequested: Boolean = false
 
-    fun arm(ownerId: Int, nowMs: Long): Long {
+    fun arm(ownerId: Int, nowMs: Long, fromSmallIsland: Boolean = false): Long {
         if (!allowsNewExpansion) return -1L
         generation += 1L
         this.ownerId = ownerId
+        expandedFromSmallIsland = fromSmallIsland
+        yieldedIslandId = null
         phase = TakeoverPhase.EXPANDING
         lastFrameMs = nowMs
         publish(1f)
@@ -42,8 +49,9 @@ class ExpandedTakeoverCoordinator(
     fun accepts(ownerId: Int, generation: Long): Boolean =
         this.ownerId == ownerId && this.generation == generation && phase != TakeoverPhase.NATIVE
 
-    fun onSecondaryPresence(active: Boolean) {
+    fun onSecondaryPresence(active: Boolean, islandId: Int? = null) {
         secondaryActive = active
+        yieldedIslandId = if (active) islandId ?: yieldedIslandId else null
         refreshSuppression()
     }
 
@@ -51,11 +59,42 @@ class ExpandedTakeoverCoordinator(
     fun retainsExpandedGeometry(): Boolean = phase == TakeoverPhase.EXPANDED
 
     /**
-     * The secondary source stays alive. Only its container is hidden, and only
-     * while the primary is opening or fully expanded.
+     * The circle is hidden with Xiaomi's native hidden Folme state while the
+     * big island is the expanded owner. A circle that itself expands fades
+     * the remaining compact island with the status-bar alpha instead.
      */
     fun suppressesSecondaryVisual(): Boolean =
-        secondaryActive && (phase == TakeoverPhase.EXPANDING || phase == TakeoverPhase.EXPANDED)
+        !expandedFromSmallIsland &&
+            secondaryActive &&
+            (phase == TakeoverPhase.EXPANDING || phase == TakeoverPhase.EXPANDED)
+
+    /**
+     * The compact island that is not expanding fades with the status bar.
+     * Its session stays active; only the drawn alpha follows [secondaryAlpha].
+     */
+    fun fadesUnexpandedCompact(): Boolean =
+        expandedFromSmallIsland && secondaryActive && phase != TakeoverPhase.NATIVE
+
+    /**
+     * Hidden-sibling hits stay disabled through the show animation. The
+     * status-bar fade path arms them again once that sibling is visible.
+     * The native-hide path waits until the takeover is fully native.
+     */
+    fun blocksYieldedIslandTouch(): Boolean {
+        if (!secondaryActive || yieldedIslandId == null) return false
+        return when (phase) {
+            TakeoverPhase.EXPANDING, TakeoverPhase.EXPANDED -> true
+            TakeoverPhase.COLLAPSING ->
+                !expandedFromSmallIsland || secondaryAlpha < REVEAL_TOUCH_ALPHA
+            TakeoverPhase.NATIVE -> false
+        }
+    }
+
+    fun blocksTouchFor(islandId: Int): Boolean =
+        blocksYieldedIslandTouch() && yieldedIslandId == islandId && ownerId != islandId
+
+    /** A hidden sibling is restored only when its source is still present. */
+    fun shouldRestoreYieldedIsland(): Boolean = secondaryActive && yieldedIslandId != null
 
     /** Keep the secondary's pre-expansion X until the takeover is fully native again. */
     fun holdsSecondaryPosition(): Boolean = secondaryActive && phase != TakeoverPhase.NATIVE
@@ -119,6 +158,7 @@ class ExpandedTakeoverCoordinator(
     private fun settleNative() {
         phase = TakeoverPhase.NATIVE
         ownerId = null
+        expandedFromSmallIsland = false
         publish(1f)
         if (disableRequested) allowsNewExpansion = false
     }
@@ -132,5 +172,9 @@ class ExpandedTakeoverCoordinator(
 
     private fun refreshSuppression() {
         secondarySuppressed = suppressesSecondaryVisual()
+    }
+
+    private companion object {
+        const val REVEAL_TOUCH_ALPHA = 0.98f
     }
 }
