@@ -111,15 +111,34 @@ class ExpandedIslandLayoutPolicyTest {
     }
 
     @Test
-    fun centerContentStaysBelowTheCutoutWhenASideClusterLifts() {
+    fun mediaChildrenKeepTheirRelativeOrder() {
         val takeover = takeover(request(content = mixedProfile(), nativeRadiusPx = 90f))
+        assertTrue(takeover.sideLifts.isEmpty())
+        assertEquals(1f, takeover.contentScale)
+        assertTrue(takeover.bodyOffsetPx >= 0)
         assertTrue(takeover.bodyTop >= cutout.bottom + (CutoutSafeLayout.SAFETY_DP * density).toInt())
-        assertTrue(takeover.sideLifts.isNotEmpty())
-        val lift = takeover.sideLifts.first()
-        val clusterTop = takeover.bodyTop + lift.translationY
-        assertTrue(clusterTop < takeover.bodyTop)
-        val lifted = IslandRect(148, clusterTop, 248, clusterTop + 60)
-        assertFalse(lifted.intersects(cutout.inflate((CutoutSafeLayout.HORIZONTAL_PAD_DP * density).toInt())))
+        val side = mixedProfile().clusters[0].bounds
+        val center = mixedProfile().clusters[1].bounds
+        assertEquals(side.top, center.top)
+    }
+
+    @Test
+    fun visiblePillIncludesTheShoulderBesideTheCamera() {
+        val takeover = takeover()
+        assertTrue(takeover.ownsTouch(takeover.card.left + 8, takeover.card.top + 8))
+        assertTrue(takeover.ownsTouch(takeover.belowCutout.centerX, takeover.belowCutout.centerY))
+        assertFalse(takeover.ownsTouch(8, 8))
+    }
+
+    @Test
+    fun aCompactRectLeftBelowTheCutoutSeatsOnIt() {
+        val low = request(content = centerProfile()).copy(compact = IslandRect(460, 700, 740, 772))
+        val seated = ExpandedIslandLayoutPolicy.seatOnCutout(low)
+        assertTrue(seated !== low)
+        assertTrue(seated.compact.top < cutout.bottom)
+        assertTrue(ExpandedIslandLayoutPolicy.decide(seated) is ExpandedLayoutDecision.Takeover)
+        val alreadySeated = request()
+        assertTrue(ExpandedIslandLayoutPolicy.seatOnCutout(alreadySeated) === alreadySeated)
     }
 
     @Test

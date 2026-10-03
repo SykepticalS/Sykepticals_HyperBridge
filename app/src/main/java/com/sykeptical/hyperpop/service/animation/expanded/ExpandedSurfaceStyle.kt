@@ -46,6 +46,18 @@ object ExpandedSurfaceStyle {
         return min(liveClipHeight / 2f, cap.coerceAtLeast(0f))
     }
 
+    /**
+     * While HyperPop owns the drawable, the outset ring and the stroke are
+     * both gone, so the fill radius is the clip radius.
+     */
+    data class OwnedEdge(
+        val strokeWidthPx: Int = 0,
+        val outsetPx: Int = 0,
+        val cornerRadiusPx: Float,
+    )
+
+    fun ownedEdge(clipRadiusPx: Float): OwnedEdge = OwnedEdge(cornerRadiusPx = clipRadiusPx.coerceAtLeast(0f))
+
     fun morphProgress(liveHeight: Int, compactHeight: Int, cardHeight: Int): Float {
         val span = cardHeight - compactHeight
         if (span <= 1) return 1f

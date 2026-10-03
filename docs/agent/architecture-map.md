@@ -67,7 +67,7 @@ Installed from `HyperPopModule` when `packageName == IslandProtocol.SYSTEM_UI_PA
 | `xposed/hooks/MarqueeHook.kt` | Marquee |
 | `xposed/hooks/IslandTextUpdateAnimationHook.kt` | Text update animation |
 | `xposed/hooks/BetterAnimationsHook.kt` | Better animations |
-| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar |
+| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar. One pending expand waits for the native collapse of the current owner |
 | `xposed/hooks/StatusBarTakeoverHook.kt` | Status-bar fade for that takeover |
 | `xposed/mediacard/MediaCardHook.kt` | Media card orchestration + `DynamicClassLoaderHooks` |
 
@@ -210,7 +210,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | `MessagePresentationFamilyTracker` | `service/message/` |
 | `ReplyComposerHoldRegistry` | `service/` |
 | `BetterAnimationsPolicy` | `service/animation/` |
-| `ExpandedIslandLayoutPolicy`, `CutoutSafeLayout`, `ExpandedPillPolicy`, `ExpandedSurfaceStyle`, `ExpandedTakeoverCoordinator`, `TakeoverFadePolicy`, `YieldedCompactTouchPolicy` | `service/animation/expanded/` |
+| `ExpandedIslandLayoutPolicy`, `CutoutSafeLayout`, `ExpandedPillPolicy`, `ExpandedSurfaceStyle`, `ExpandedTakeoverCoordinator` (including one pending expansion), `TakeoverFadePolicy`, `YieldedCompactTouchPolicy` | `service/animation/expanded/` |
 
 ---
 

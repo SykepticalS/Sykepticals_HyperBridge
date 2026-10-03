@@ -145,6 +145,24 @@ of extrapolating from an unrelated build.
   - `getHiddenAnimState` is the small-island hidden Folme state (container alpha 0, clip inset, `CONTAINER_X` from `getSmallIslandX`). It does not remove the press flags.
 - HyperPop implication: status-bar fade has to arm for whichever content view is entering `Expanded`, including one whose previous state is `SmallIsland`, using that circle as the compact rect. While the other island is hidden, clear only its `downInBigIsland` / `downInSmallIsland` flag before `performClick`, and drop only its contribution from `getSmallBigIslandRegion`. Leave expanded-island and shade touches alone. Do not cancel the hidden source.
 
+## Expanded swipe-up, background outset, and a second expanding island
+
+### Finding
+
+- Date: 2026-10-03
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandTouchInteractor.onInterceptTouchEvent` / `onTouchEvent`; `DynamicIslandWindowView.collapse`; `DynamicIslandAnimationDelegate.swipeUpExpandedAnimation`; `DynamicIslandBackgroundView.onDraw`; `AddEventCoordinator.handleAppEvent`; `ExpandedStateHandler.handleReplacedState`; `DynamicIslandEventCoordinator.isTempHidden`.
+- Evidence source: JADX on the pulled plugin APK above.
+- Observation:
+  - Swipe-up collapse is native. `onInterceptTouchEvent` sets `downInExpanded` from `getExpandedIslandRect()` (`margin, expandedViewY, margin + width, y + height`). On `ACTION_UP`, an upward move past `swipeThreshold` calls `DynamicIslandWindowView.collapse("swipe up")`, which dispatches `DynamicIslandEvent.Collapse` unless `openAppFromIsland` is set or nothing is expanded. The drag itself is `swipeUpExpandedAnimation`, which tracks `getExpandedViewHeight()`.
+  - `DynamicIslandBackgroundView.onDraw` draws the drawable outset by `stokeWidth` on every side, outside the content clip. The expanded drawable keeps `setStroke(island_stroke, stroke_color)`.
+  - `AddEventCoordinator.handleAppEvent(AddDynamicIsland)` with `canExpanded` true calls `ExpandedStateHandler.handleReplacedState`, which makes the new view `Expanded` and passes the previous expanded view down the chain in the same call. `canExpanded` does not look at `userExpanded`. `isTempHidden` on the event coordinator takes the content view; a no-arg call does not exist.
+  - Media content is sized with `updateExpandedSize(maxWidth, maxHeight)`. Other templates, including calls, use the focus view's own height.
+- HyperPop implication: the visible pill has to stay inside `getExpandedIslandRect` or the swipe never starts. Zero the drawable stroke and `stokeWidth` together while the styler owns the island, and restore both. A second expand-required add has to wait until `collapse` finishes; replaying `handleAppEvent` lets Xiaomi place the new island. Pass the content view to `isTempHidden`.
+- Phone check, 2026-10-03, HyperPop 0.6.1-sykeptical code 36 after this pass: an expanded Spotify island on the home screen kept rewind, pause, and forward in one row with the timeline underneath, the status-bar clock hidden, and no separate black ring. An upward swipe logged `direction: UP` and `skip collapse=(false||false||true), reason=swipe up`, then the compact pill and the clock returned. A hook that returned null from `access$onInterceptTouchEvent` had been discarding that intercept.
+
 ## Entry template
 
 ### Finding

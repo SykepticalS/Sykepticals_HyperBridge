@@ -1,5 +1,20 @@
 package com.sykeptical.hyperpop.service.animation.expanded
 
+/** One island waiting to expand after the current owner finishes collapsing. */
+data class ExpansionCandidate(
+    val id: Int,
+    val key: String,
+    val token: Long,
+)
+
+sealed class EnqueueExpansion {
+    data object NotActive : EnqueueExpansion()
+    data class Queued(
+        val pending: ExpansionCandidate,
+        val displaced: ExpansionCandidate?,
+    ) : EnqueueExpansion()
+}
+
 /**
  * One expanded island owns the status-bar fade, whether it started as the
  * big island or the circle. The other island stays semantically alive.
@@ -31,8 +46,12 @@ class ExpandedTakeoverCoordinator(
     var allowsNewExpansion: Boolean = true
         private set
 
+    var pendingExpansion: ExpansionCandidate? = null
+        private set
+
     private var lastFrameMs: Long = 0L
     private var disableRequested: Boolean = false
+    private var nextToken: Long = 0L
 
     fun arm(ownerId: Int, nowMs: Long, fromSmallIsland: Boolean = false): Long {
         if (!allowsNewExpansion) return -1L
@@ -146,6 +165,35 @@ class ExpandedTakeoverCoordinator(
     fun requestEnable() {
         disableRequested = false
         allowsNewExpansion = true
+    }
+
+    /**
+     * One incoming expand waits while the current owner collapses.
+     * A newer candidate displaces the previous one; the caller shows the
+     * displaced island compact. Returns null when nothing is expanded, so
+     * the caller lets Xiaomi handle the add directly.
+     */
+    fun enqueueExpansion(id: Int, key: String): EnqueueExpansion {
+        if (phase == TakeoverPhase.NATIVE || ownerId == null || ownerId == id) return EnqueueExpansion.NotActive
+        nextToken += 1L
+        val displaced = pendingExpansion
+        val pending = ExpansionCandidate(id, key, nextToken)
+        pendingExpansion = pending
+        return EnqueueExpansion.Queued(pending, displaced)
+    }
+
+    /** Collapse finished, or the takeover was abandoned. The candidate may already be gone. */
+    fun takePendingExpansion(): ExpansionCandidate? {
+        if (phase != TakeoverPhase.NATIVE) return null
+        val ready = pendingExpansion
+        pendingExpansion = null
+        return ready
+    }
+
+    fun clearPendingExpansion(): ExpansionCandidate? {
+        val ready = pendingExpansion
+        pendingExpansion = null
+        return ready
     }
 
     fun expireIfStale(nowMs: Long): Boolean {

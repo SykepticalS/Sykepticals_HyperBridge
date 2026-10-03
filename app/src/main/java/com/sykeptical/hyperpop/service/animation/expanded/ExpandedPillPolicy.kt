@@ -54,12 +54,7 @@ object ExpandedPillPolicy {
         radius = relaxRadius(
             cardLeft, cardRight, cardTop, bottom, contentOriginY, contentLeft, radius, nativeRadiusPx, real,
         )
-        val scale = if (fits(cardLeft, cardRight, cardTop, bottom, contentOriginY, contentLeft, radius, real)) {
-            1f
-        } else {
-            boundedScale(real, density)
-        }
-        return Result(bottom, radius, scale)
+        return Result(bottom, radius, 1f)
     }
 
     /**

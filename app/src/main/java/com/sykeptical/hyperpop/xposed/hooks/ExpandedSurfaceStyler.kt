@@ -1,5 +1,6 @@
 package com.sykeptical.hyperpop.xposed.hooks
 
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.View
@@ -13,14 +14,17 @@ import java.lang.reflect.Modifier
  */
 object ExpandedSurfaceStyler {
     private const val BLUR = "miui.systemui.util.MiBlurCompat"
+    private val reflect = ReflectionLookup()
     private var active: Active? = null
+    private var activeView = java.lang.ref.WeakReference<View>(null)
 
     private class Active(
         val ownerId: Int,
+        val background: java.lang.ref.WeakReference<View>,
         val original: Drawable?,
         var copy: GradientDrawable?,
         val nativeFill: Int?,
-        val strokePadPx: Float,
+        val outsetPx: Int?,
         val black: Boolean,
         var progress: Float = 0f,
         var radiusPx: Float = 0f,
@@ -28,25 +32,36 @@ object ExpandedSurfaceStyler {
     )
 
     fun arm(view: View, black: Boolean) {
+        val previous = activeView.get()
+        if (previous != null && previous !== view) restore(previous)
         if (active?.ownerId == System.identityHashCode(view)) return
         restore(view)
         val background = backgroundView(view) ?: return
         val original = invoke(background, "getDrawable") as? Drawable
         val copy = (original as? GradientDrawable)?.constantState?.newDrawable()?.mutate() as? GradientDrawable
-        if (copy != null) invoke(background, "setDrawable", copy)
+        if (copy != null) {
+            copy.setStroke(0, Color.TRANSPARENT)
+            invoke(background, "setDrawable", copy)
+        }
+        val outset = setOutset(background, 0)
         active = Active(
             ownerId = System.identityHashCode(view),
+            background = java.lang.ref.WeakReference(background),
             original = original,
             copy = copy,
             nativeFill = copy?.color?.defaultColor,
-            strokePadPx = strokePad(view),
+            outsetPx = outset,
             black = black,
         )
+        activeView = java.lang.ref.WeakReference(view)
     }
 
     fun frame(view: View, progress: Float, radiusPx: Float) {
         val current = active ?: return
         if (current.ownerId != System.identityHashCode(view)) return
+        val background = current.background.get() ?: backgroundView(view)
+        val showing = background?.let { invoke(it, "getDrawable") as? Drawable }
+        if (showing != null && showing !== current.copy) onDrawableReplaced(view)
         current.progress = progress
         current.radiusPx = radiusPx
         if (current.black) {
@@ -59,8 +74,10 @@ object ExpandedSurfaceStyler {
             if (progress > 0.08f && !current.blurStripped) stripBlur(view, current)
             if (progress <= 0.02f && current.blurStripped) restoreBlur(view, current, teardown = false)
         }
-        current.copy?.cornerRadius = radiusPx + current.strokePadPx
-        backgroundView(view)?.invalidate()
+        val edge = ExpandedSurfaceStyle.ownedEdge(radiusPx)
+        current.copy?.setStroke(edge.strokeWidthPx, Color.TRANSPARENT)
+        current.copy?.cornerRadius = edge.cornerRadiusPx
+        background?.invalidate()
     }
 
     fun onDrawableReplaced(view: View) {
@@ -71,8 +88,9 @@ object ExpandedSurfaceStyler {
         if (drawable === current.copy) return
         val copy = (drawable as? GradientDrawable)?.constantState?.newDrawable()?.mutate() as? GradientDrawable
             ?: return
-        invoke(background, "setDrawable", copy)
+        copy.setStroke(0, Color.TRANSPARENT)
         current.copy = copy
+        invoke(background, "setDrawable", copy)
         if (current.black && (current.nativeFill != null || current.progress >= 1f)) {
             copy.setColor(
                 ExpandedSurfaceStyle.fill(
@@ -82,7 +100,7 @@ object ExpandedSurfaceStyler {
                 ),
             )
         }
-        copy.cornerRadius = current.radiusPx + current.strokePadPx
+        copy.cornerRadius = ExpandedSurfaceStyle.ownedEdge(current.radiusPx).cornerRadiusPx
     }
 
     fun onBlurReapplied(view: View) {
@@ -94,9 +112,14 @@ object ExpandedSurfaceStyler {
     fun restore(view: View) {
         val current = active ?: return
         if (current.ownerId != System.identityHashCode(view)) return
-        backgroundView(view)?.let { invoke(it, "setDrawable", current.original) }
+        val background = current.background.get() ?: backgroundView(view)
+        background?.let {
+            invoke(it, "setDrawable", current.original)
+            current.outsetPx?.let { outset -> setOutset(it, outset) }
+        }
         if (current.blurStripped) restoreBlur(view, current, teardown = true)
         active = null
+        if (activeView.get() === view) activeView = java.lang.ref.WeakReference(null)
     }
 
     fun owns(view: View): Boolean = active?.ownerId == System.identityHashCode(view)
@@ -129,27 +152,23 @@ object ExpandedSurfaceStyler {
 
     private fun backgroundView(view: View): View? = invoke(view, "getBackgroundView") as? View
 
-    private fun strokePad(view: View): Float {
-        val id = view.resources.getIdentifier("island_stroke", "dimen", view.context.packageName)
-        if (id == 0) return 0f
-        return view.resources.getDimension(id)
+    private fun setOutset(background: View, width: Int): Int? {
+        val field = reflect.field(background.javaClass, "stokeWidth") ?: return null
+        val previous = runCatching { field.getInt(background) }.getOrNull() ?: return null
+        if (previous != width) runCatching { field.setInt(background, width) }
+        return previous
     }
 
     private fun invoke(target: Any, name: String, vararg args: Any?): Any? {
-        val method = target.javaClass.methods.firstOrNull { it.name == name && it.parameterTypes.size == args.size }
-            ?: target.javaClass.declaredMethods.firstOrNull { it.name == name && it.parameterTypes.size == args.size }
-            ?: return null
-        method.isAccessible = true
-        return method.invoke(target, *args)
+        val method = reflect.method(target.javaClass, name, args.size) ?: return null
+        return runCatching { method.invoke(target, *args) }.getOrNull()
     }
 
     private fun invokeBlur(loader: ClassLoader, name: String, vararg args: Any?) {
         val type = loader.loadClass(BLUR)
         val types = listOf(type) + type.declaredClasses.toList()
         for (candidate in types) {
-            val method = candidate.declaredMethods.firstOrNull {
-                it.name == name && it.parameterTypes.size == args.size
-            } ?: continue
+            val method = reflect.method(candidate, name, args.size) ?: continue
             method.isAccessible = true
             if (Modifier.isStatic(method.modifiers)) {
                 method.invoke(null, *args)

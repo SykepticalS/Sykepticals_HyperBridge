@@ -18,8 +18,11 @@ object CutoutSafeLayout {
     const val EDGE_PAD_DP = 2f
     const val MIN_LIFT_DP = 4f
 
-    /** Set false if side-by-side lifts look detached from the rest of the card. */
-    const val SIDE_LIFTS_ENABLED = true
+    /**
+     * Per-child lifts pull rewind, forward, and time labels away from the
+     * native media layout. The card moves as one piece instead.
+     */
+    const val SIDE_LIFTS_ENABLED = false
 
     data class Result(
         val contentOriginY: Int,

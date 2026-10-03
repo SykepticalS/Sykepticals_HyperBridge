@@ -325,5 +325,59 @@ class ExpandedTakeoverCoordinatorTest {
         assertEquals(-1L, coordinator.arm(6, 30))
     }
 
+    @Test
+    fun pendingExpansionWaitsForCollapseAndIsNotRepeated() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        val generation = coordinator.arm(1, 0)
+        coordinator.onFrame(1, generation, target, compact, target, group, nowMs = 10)
+        assertTrue(coordinator.enqueueExpansion(1, "same") is EnqueueExpansion.NotActive)
+        val queued = coordinator.enqueueExpansion(2, "b")
+        assertTrue(queued is EnqueueExpansion.Queued)
+        assertEquals("b", (queued as EnqueueExpansion.Queued).pending.key)
+        assertEquals(null, queued.displaced)
+        assertEquals(null, coordinator.takePendingExpansion())
+        assertTrue(coordinator.beginCollapse(1, generation))
+        assertTrue(coordinator.onFrame(1, generation, compact, compact, target, group, nowMs = 40))
+        assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
+        assertEquals("b", coordinator.takePendingExpansion()?.key)
+        assertEquals(null, coordinator.takePendingExpansion())
+    }
+
+    @Test
+    fun aNewerCandidateReplacesThePendingOne() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        val generation = coordinator.arm(1, 0)
+        coordinator.onFrame(1, generation, target, compact, target, group, nowMs = 10)
+        coordinator.enqueueExpansion(2, "b")
+        val next = coordinator.enqueueExpansion(3, "c") as EnqueueExpansion.Queued
+        assertEquals("b", next.displaced?.key)
+        assertEquals("c", next.pending.key)
+        assertEquals(next.pending.token, coordinator.pendingExpansion?.token)
+        assertFalse(next.pending.token == next.displaced?.token)
+    }
+
+    @Test
+    fun abandonAndDisableClearThePendingExpansion() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        val generation = coordinator.arm(1, 0)
+        coordinator.enqueueExpansion(2, "b")
+        assertTrue(coordinator.abandon(1, generation))
+        assertEquals("b", coordinator.takePendingExpansion()?.key)
+        val again = coordinator.arm(4, 50)
+        coordinator.enqueueExpansion(5, "c")
+        coordinator.requestDisable()
+        assertEquals("c", coordinator.clearPendingExpansion()?.key)
+        assertEquals(null, coordinator.pendingExpansion)
+        coordinator.abandon(4, again)
+        assertEquals(null, coordinator.takePendingExpansion())
+    }
+
+    @Test
+    fun aNativeIslandDoesNotQueue() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        assertTrue(coordinator.enqueueExpansion(2, "b") is EnqueueExpansion.NotActive)
+        assertEquals(null, coordinator.pendingExpansion)
+    }
+
     private fun midway() = IslandRect(254, 36, 946, 320)
 }

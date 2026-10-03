@@ -62,6 +62,16 @@ class ExpandedPillPolicyTest {
         assertEquals(1f, result.contentScale)
     }
 
+    @Test
+    fun aLeafThatMissesTheCornerRelaxesTheRadiusInsteadOfScaling() {
+        val edge = ContentLeaf(IslandRect(0, 0, 20, 30), ContentLeafKind.INTERACTIVE)
+        val profile = shortProfile().copy(leaves = listOf(edge))
+        val result = apply(enabled = true, provisionalBottom = 720, profile = profile)
+        assertEquals(1f, result.contentScale)
+        assertTrue(result.radiusPx <= ExpandedPillPolicy.radiusCap(result.cardBottom - 36, nativeRadius, density))
+        assertTrue(result.radiusPx >= 0f)
+    }
+
     private fun apply(
         enabled: Boolean,
         provisionalBottom: Int,

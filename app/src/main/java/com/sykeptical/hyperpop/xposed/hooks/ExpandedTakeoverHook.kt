@@ -7,8 +7,10 @@ import android.graphics.Region
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import com.sykeptical.hyperpop.service.animation.expanded.EnqueueExpansion
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutDecision
@@ -29,6 +31,7 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Portrait expanded islands grow from the camera over the status bar.
@@ -54,6 +57,12 @@ object ExpandedTakeoverHook {
         "miui.systemui.dynamicisland.window.content.helpers.DynamicIslandContentViewPhoneHelper"
     private const val TOUCH =
         "miui.systemui.dynamicisland.touch.domain.interactor.DynamicIslandTouchInteractor"
+    private const val ADD =
+        "miui.systemui.dynamicisland.event.AddEventCoordinator"
+    private const val HANDOFF_REASON = "hyperpop_handoff"
+    private const val EXPAND_LOG = "HyperPopExpand"
+    private const val FAKE_VIEW =
+        "miui.systemui.dynamicisland.window.content.DynamicIslandContentFakeView"
     private const val UTILS = "miui.systemui.util.CommonUtils"
     private const val SELF_CHECK_PX = 20
     private val SECONDARY_MOTION = setOf(
@@ -79,11 +88,15 @@ object ExpandedTakeoverHook {
     private val originalHeights = Collections.synchronizedMap(WeakHashMap<View, Int>())
     private val originalTranslations = Collections.synchronizedMap(WeakHashMap<View, Float>())
     private val originalScales = Collections.synchronizedMap(WeakHashMap<View, Float>())
+    private val heldAdds = ConcurrentHashMap<Long, HeldAdd>()
+    private val compactReplayKey = ThreadLocal<String?>()
     private val lock = Any()
 
     @Volatile private var selfCheckFailed = false
     @Volatile private var loggedFailure = false
     @Volatile private var session: Session? = null
+    @Volatile private var expandRetryUntilMs = 0L
+    @Volatile private var lastExpandLogMs = 0L
     @Volatile private var parkedSecondaryX: Int? = null
     @Volatile private var parkedSecondaryId: Int? = null
     @Volatile private var yieldedSecondaryId: Int? = null
@@ -175,7 +188,14 @@ object ExpandedTakeoverHook {
             }
             hook(module, loader, updateSize) { chain ->
                 val result = chain.proceed()
-                reapplyOffset(chain.thisObject as View)
+                val view = chain.thisObject as View
+                if (synchronized(lock) { session } == null &&
+                    view.call("getState")?.javaClass?.simpleName == "Expanded"
+                ) {
+                    beginOrContinue(view)
+                } else {
+                    reapplyOffset(view)
+                }
                 result
             }
             base.noArgOrNull("onDetachedFromWindow")?.let { method ->
@@ -198,6 +218,8 @@ object ExpandedTakeoverHook {
                 }
             }
             hookYieldedTouch(module, loader)
+            hookIncomingExpansion(module, loader)
+            hookFakeExpandedOverlay(module, loader)
             deoptimizeCallers(module, base, delegate, coordinatorClass, loader)
             module.log("HyperPop: expand-over-status-bar hook installed loader=${loader.hashCode()}")
         }.onFailure {
@@ -229,13 +251,14 @@ object ExpandedTakeoverHook {
         val live = clipHeight(delegate)
         if (live <= 0f) return value
         val current = synchronized(lock) { session } ?: return value
+        val shown = shownHeight(view, live.toInt())
         val progress = ExpandedSurfaceStyle.morphProgress(
-            live.toInt(),
+            shown,
             current.compact.height,
             takeover.card.height,
         )
         val nativeCap = takeover.nativeRadiusPx.takeIf { it > 0f } ?: value
-        return ExpandedSurfaceStyle.clipRadius(live, nativeCap, takeover.radiusPx, pill = true, progress)
+        return ExpandedSurfaceStyle.clipRadius(shown.toFloat(), nativeCap, takeover.radiusPx, pill = true, progress)
     }
 
     private fun overriddenBottom(delegate: Any, native: Any?): Any? {
@@ -256,6 +279,12 @@ object ExpandedTakeoverHook {
 
     private fun onFrame(delegate: Any) {
         val view = contentView(delegate) ?: return
+        if (synchronized(lock) { session } == null &&
+            SystemClock.uptimeMillis() < expandRetryUntilMs &&
+            view.call("getState")?.javaClass?.simpleName == "Expanded"
+        ) {
+            beginOrContinue(view)
+        }
         val current = synchronized(lock) { session } ?: return
         if (!ownerIs(System.identityHashCode(view))) return
         if (blocked(view)) {
@@ -353,6 +382,7 @@ object ExpandedTakeoverHook {
                 return null
             }
             if (!HookConfig.expandOverStatusBarEnabled()) coordinator.requestDisable()
+            uncoverRealIsland(view)
             return existing.decision
         }
         if (!HookConfig.expandOverStatusBarEnabled()) {
@@ -361,6 +391,7 @@ object ExpandedTakeoverHook {
         }
         coordinator.requestEnable()
         if (blocked(view)) return null
+        uncoverRealIsland(view)
         val fromSmallIsland = view.call("getState")?.javaClass?.simpleName == "SmallIsland"
         val content = realContent(view)
         val profile = content?.let { runCatching { ExpandedContentProbe.capture(it) }.getOrNull() }
@@ -368,25 +399,35 @@ object ExpandedTakeoverHook {
             blackBackground = HookConfig.expandedBlackBackground(),
             roundedPill = HookConfig.expandedRoundedPill(),
         )
-        val request = layoutRequest(view, fromSmallIsland, profile, style) ?: return null
-        val decision = ExpandedIslandLayoutPolicy.decide(request)
-        if (decision !is ExpandedLayoutDecision.Takeover) return null
+        val request = layoutRequest(view, fromSmallIsland, profile, style) ?: return rejectExpand(view)
+        val resolved = resolveLayout(request)
+        val decision = resolved.second
+        if (decision !is ExpandedLayoutDecision.Takeover) return rejectExpand(view)
         val generation = coordinator.arm(
             id,
             SystemClock.uptimeMillis(),
             fromSmallIsland = fromSmallIsland,
         )
-        if (generation < 0) return null
-        synchronized(lock) {
+        if (generation < 0) return rejectExpand(view)
+        expandRetryUntilMs = 0L
+        Log.i(EXPAND_LOG, "arm card=${decision.card.height}x${decision.card.width}")
+        val previous = synchronized(lock) {
+            val old = session
             session = Session(
                 view,
                 generation,
                 decision,
-                request.compact,
+                resolved.first.compact,
                 fromSmallIsland,
                 profile?.nativeTopMarginPx ?: 0,
                 style,
             )
+            old
+        }
+        previous?.owner?.get()?.takeIf { it !== view }?.let { old ->
+            restoreOffsets()
+            ExpandedSurfaceStyler.restore(old)
+            ExpandedFlowMaskApplicator.clear()
         }
         applyOffset(view, decision.bodyOffsetPx)
         applyPresentation(view, decision)
@@ -420,6 +461,7 @@ object ExpandedTakeoverHook {
     }
 
     private fun restore(view: View) {
+        val pending = if (coordinator.phase == TakeoverPhase.NATIVE) coordinator.takePendingExpansion() else null
         restoreOffsets()
         ExpandedSurfaceStyler.restore(view)
         ExpandedFlowMaskApplicator.clear()
@@ -429,8 +471,9 @@ object ExpandedTakeoverHook {
         StatusBarTakeoverHook.restore()
         revealSecondary(view)
         synchronized(lock) {
-            if (coordinator.phase.name == "NATIVE") session = null
+            if (coordinator.phase == TakeoverPhase.NATIVE) session = null
         }
+        releaseHeld(pending, expand = true)
     }
 
     private fun reapplyOffset(view: View) {
@@ -438,10 +481,15 @@ object ExpandedTakeoverHook {
         if (!coordinator.accepts(System.identityHashCode(view), current.generation)) return
         if (current.decision.tightLayout) {
             val refreshed = refreshDecision(view, current)
-            if (refreshed != null && refreshed.bodyOffsetPx > current.decision.bodyOffsetPx + 2) {
+            if (refreshed != null && (
+                    refreshed.bodyOffsetPx > current.decision.bodyOffsetPx + 2 ||
+                    kotlin.math.abs(refreshed.card.height - current.decision.card.height) > 8
+                )
+            ) {
                 current.decision = refreshed
             }
         }
+        ExpandedFlowMaskApplicator.invalidateStructure()
         applyOffset(view, current.decision.bodyOffsetPx)
         applyPresentation(view, current.decision)
     }
@@ -460,7 +508,14 @@ object ExpandedTakeoverHook {
             rectOf(view.call("getBigIslandRect", java.lang.Boolean.FALSE))
         } ?: return null
         val nativeY = view.intField("expandedViewY") ?: return null
-        val nativeHeight = view.intField("expandedViewHeight") ?: return null
+        // Right after an app exit the stored height is still 0, while the
+        // maximum expanded height is already the value media will expand to.
+        // Waiting for the field leaves the first second on Xiaomi's own card.
+        val nativeHeight = view.intField("expandedViewHeight")?.takeIf { it > 0 }
+            ?: runCatching { (view.call("getExpandedViewMaxHeight") as? Number)?.toInt() }
+                .getOrNull()
+                ?.takeIf { it > 0 }
+            ?: return null
         val margin = (view.call("getExpandedViewMarginHorizontal") as? Number)?.toInt() ?: return null
         val width = (view.call("getExpandedViewWidth") as? Number)?.toInt() ?: return null
         val statusBar = (view.call("getStatusBarHeight") as? Number)?.toInt() ?: return null
@@ -504,7 +559,7 @@ object ExpandedTakeoverHook {
     }
 
     private fun tempHidden(view: View): Boolean =
-        view.call("getDynamicIslandEventCoordinator")?.call("isTempHidden") as? Boolean ?: false
+        view.call("getDynamicIslandEventCoordinator")?.call("isTempHidden", view) as? Boolean ?: false
 
     private fun cutoutRect(view: View): IslandRect? {
         val window = view.call("getDynamicIslandEventCoordinator")?.call("getWindowView") ?: return null
@@ -688,6 +743,131 @@ object ExpandedTakeoverHook {
     private fun handlerCurrent(host: Any, accessor: String): View? =
         host.call(accessor)?.call("getCurrent") as? View
 
+    private fun hookIncomingExpansion(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val add = loader.loadClass(ADD)
+            val handle = add.methodsNamed("handleAppEvent").firstOrNull { it.parameterTypes.size == 3 }
+                ?: error("handleAppEvent missing")
+            hook(module, loader, handle) { chain ->
+                if (deferIncoming(chain, handle)) null else chain.proceed()
+            }
+            val canExpand = add.methodsNamed("canExpanded").firstOrNull { it.parameterTypes.size == 3 }
+            if (canExpand != null) {
+                hook(module, loader, canExpand) { chain ->
+                    val key = chain.args.getOrNull(2) as? String
+                    if (key != null && key == compactReplayKey.get()) false else chain.proceed()
+                }
+            }
+        }.onFailure {
+            module.log("HyperPop: expansion handoff hook unavailable: ${it.message}")
+        }
+    }
+
+    private fun deferIncoming(chain: Chain, handle: Method): Boolean {
+        return runCatching { holdIncoming(chain, handle) }.getOrDefault(false)
+    }
+
+    private fun holdIncoming(chain: Chain, handle: Method): Boolean {
+        val event = chain.args.getOrNull(0) ?: return false
+        if (event.javaClass.simpleName != "AddDynamicIsland") return false
+        if (event.call("getTempShow") == true) return false
+        val content = chain.args.getOrNull(1) as? View ?: return false
+        if (!HookConfig.expandOverStatusBarEnabled() || blocked(content)) return false
+        val state = content.call("getState") ?: return false
+        if (state.call("getExpanded") != true) return false
+        val data = content.call("getCurrentIslandData") ?: return false
+        val key = data.call("getKey") as? String ?: return false
+        val focus = data.call("getView")
+        val can = chain.thisObject.call("canExpanded", true, focus, key) as? Boolean ?: false
+        if (!can) return false
+        val queued = coordinator.enqueueExpansion(System.identityHashCode(content), key)
+        if (queued !is EnqueueExpansion.Queued) return false
+        heldAdds[queued.pending.token] = HeldAdd(
+            host = chain.thisObject,
+            method = handle,
+            event = event,
+            content = java.lang.ref.WeakReference(content),
+            hidden = chain.args.getOrNull(2),
+            key = key,
+        )
+        queued.displaced?.token?.let { token ->
+            heldAdds.remove(token)?.let { displaced ->
+                mainHandler.post { invokeHeld(displaced, expand = false) }
+            }
+        }
+        if (coordinator.phase == TakeoverPhase.EXPANDING || coordinator.phase == TakeoverPhase.EXPANDED) {
+            mainHandler.post { collapseForHandoff() }
+        }
+        return true
+    }
+
+    private fun collapseForHandoff() {
+        val owner = synchronized(lock) { session }?.owner?.get()
+        val eventCoordinator = owner?.call("getDynamicIslandEventCoordinator")
+        val window = eventCoordinator?.call("getWindowView")
+        if (window == null) {
+            releaseHeld(coordinator.clearPendingExpansion(), expand = true)
+            return
+        }
+        val invoked = runCatching { window.call("collapse", HANDOFF_REASON) }.isSuccess
+        val stillExpanded = eventCoordinator.call("getUserExpanded") as? Boolean ?: true
+        if (!invoked || stillExpanded) {
+            releaseHeld(coordinator.clearPendingExpansion(), expand = true)
+        }
+    }
+
+    private fun releaseHeld(candidate: com.sykeptical.hyperpop.service.animation.expanded.ExpansionCandidate?, expand: Boolean) {
+        val held = candidate?.let { heldAdds.remove(it.token) } ?: return
+        if (expand && !incomingStillCurrent(held)) return
+        mainHandler.post { invokeHeld(held, expand) }
+    }
+
+    private fun incomingStillCurrent(held: HeldAdd): Boolean {
+        val view = held.content.get() ?: return false
+        if (!view.isAttachedToWindow) return false
+        val state = view.call("getState")?.javaClass?.simpleName ?: return false
+        if (state == "Deleted") return false
+        val key = view.call("getCurrentIslandData")?.call("getKey") as? String
+        return key == held.key
+    }
+
+    private fun invokeHeld(held: HeldAdd, expand: Boolean) {
+        val content = held.content.get() ?: return
+        runCatching {
+            if (!expand) compactReplayKey.set(held.key)
+            held.method.invoke(held.host, held.event, content, held.hidden)
+        }
+        compactReplayKey.remove()
+    }
+
+    private class HeldAdd(
+        val host: Any,
+        val method: Method,
+        val event: Any,
+        val content: java.lang.ref.WeakReference<View>,
+        val hidden: Any?,
+        val key: String,
+    )
+
+    private fun hookFakeExpandedOverlay(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val fakeClass = loader.loadClass(FAKE_VIEW)
+            fakeClass.methodsNamed("updateFakeExpandedViewState").forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val fake = chain.thisObject as? View
+                    val real = fake?.call("getRealView") as? View
+                    if (real != null && real.call("getState")?.javaClass?.simpleName == "Expanded") {
+                        uncoverRealIsland(real)
+                        beginOrContinue(real)
+                    }
+                    chain.proceed()
+                }
+            }
+        }.onFailure {
+            module.log("HyperPop: fake-expand hook unavailable: ${it.message}")
+        }
+    }
+
     private fun hookYieldedTouch(module: XposedModule, loader: ClassLoader) {
         runCatching {
             val touch = loader.loadClass(TOUCH)
@@ -698,9 +878,10 @@ object ExpandedTakeoverHook {
             )
             touch.methodsNamedIn(names).forEach { method ->
                 hook(module, loader, method) { chain ->
-                    if (method.name == "performClick") clearYieldedPress(chain.thisObject)
+                    val host = runCatching { chain.thisObject }.getOrNull()
+                    if (host != null && method.name == "performClick") clearYieldedPress(host)
                     val result = chain.proceed()
-                    if (method.name != "performClick") clearYieldedPress(chain.thisObject)
+                    if (host != null && method.name != "performClick") clearYieldedPress(host)
                     result
                 }
             }
@@ -735,11 +916,12 @@ object ExpandedTakeoverHook {
         live: IslandRect,
     ) {
         val decision = current.decision
-        val progress = ExpandedSurfaceStyle.morphProgress(live.height, current.compact.height, decision.card.height)
         val clip = clipHeight(delegate).takeIf { it > 0f } ?: live.height.toFloat()
+        val shown = shownHeight(view, maxOf(live.height, clip.toInt()))
+        val progress = ExpandedSurfaceStyle.morphProgress(shown, current.compact.height, decision.card.height)
         val nativeCap = decision.nativeRadiusPx.takeIf { it > 0f } ?: decision.radiusPx
         val radius = ExpandedSurfaceStyle.clipRadius(
-            clip,
+            shown.toFloat(),
             nativeCap,
             decision.radiusPx,
             decision.pillEnabled,
@@ -758,12 +940,23 @@ object ExpandedTakeoverHook {
         }
     }
 
+    private fun resolveLayout(
+        request: ExpandedLayoutRequest,
+    ): Pair<ExpandedLayoutRequest, ExpandedLayoutDecision> {
+        val seated = ExpandedIslandLayoutPolicy.seatOnCutout(request)
+        val seatedDecision = ExpandedIslandLayoutPolicy.decide(seated)
+        if (seatedDecision is ExpandedLayoutDecision.Takeover || seated === request) {
+            return seated to seatedDecision
+        }
+        return request to ExpandedIslandLayoutPolicy.decide(request)
+    }
+
     private fun refreshDecision(view: View, current: Session): ExpandedLayoutDecision.Takeover? {
         val content = realContent(view) ?: return null
         val probed = runCatching { ExpandedContentProbe.capture(content) }.getOrNull() ?: return null
         val profile = probed.copy(nativeTopMarginPx = current.nativeTopMargin)
         val request = layoutRequest(view, current.fromSmallIsland, profile, current.style) ?: return null
-        return ExpandedIslandLayoutPolicy.decide(request) as? ExpandedLayoutDecision.Takeover
+        return resolveLayout(request).second as? ExpandedLayoutDecision.Takeover
     }
 
     private fun applyPresentation(view: View, decision: ExpandedLayoutDecision.Takeover) {
@@ -784,6 +977,42 @@ object ExpandedTakeoverHook {
         }
     }
 
+    private fun rejectExpand(view: View): ExpandedLayoutDecision.Takeover? {
+        val name = view.call("getState")?.javaClass?.simpleName
+        val now = SystemClock.uptimeMillis()
+        if ((name == "Expanded" || name == "BigIsland" || name == "AppExpanded") &&
+            expandRetryUntilMs < now
+        ) {
+            expandRetryUntilMs = now + 1_500L
+        }
+        if (now - lastExpandLogMs > 250L) {
+            lastExpandLogMs = now
+            Log.i(
+                EXPAND_LOG,
+                "reject state=$name storedH=${view.intField("expandedViewHeight")} " +
+                    "maxH=${runCatching { (view.call("getExpandedViewMaxHeight") as? Number)?.toInt() }.getOrNull()}",
+            )
+        }
+        return null
+    }
+
+    /**
+     * The app-close overlay can still be the surface the user sees when they
+     * expand. It does not go through the takeover, so the card stays native
+     * until Xiaomi hides it. Hide it as soon as we take over the real island.
+     */
+    private fun uncoverRealIsland(view: View) {
+        runCatching {
+            val fake = view.call("getFakeView") as? View ?: return
+            if (fake.visibility != View.VISIBLE) return
+            fake.visibility = View.GONE
+            if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
+            (view.call("getBackgroundView") as? View)?.let { background ->
+                if (background.visibility != View.VISIBLE) background.visibility = View.VISIBLE
+            }
+        }
+    }
+
     private fun realContent(view: View): View? =
         view.call("getCurrentIslandData")?.call("getView") as? View
 
@@ -792,6 +1021,19 @@ object ExpandedTakeoverHook {
         val density = view.resources.displayMetrics.density
         if (id == 0) return 30f * density
         return view.resources.getDimension(id)
+    }
+
+    /**
+     * The container clip stays near the compact pill for a moment after an
+     * app exit, while the expanded view is already the full card. Driving the
+     * black fill and the pill radius from the clip keeps that card looking native.
+     */
+    private fun shownHeight(view: View, clipPx: Int): Int {
+        val expanded = (view.call("getExpandedView") as? View)?.let { child ->
+            child.height.coerceAtLeast(child.measuredHeight)
+        } ?: 0
+        val background = (view.call("getBackgroundView") as? View)?.height ?: 0
+        return maxOf(clipPx, expanded, background)
     }
 
     private fun clipHeight(delegate: Any): Float {
@@ -806,9 +1048,12 @@ object ExpandedTakeoverHook {
             val target = child as? View ?: return@forEach
             val params = target.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
             val base = originalMargins.getOrPut(target) { params.topMargin }
-            params.topMargin = base + extra
-            target.layoutParams = params
-            growAncestors(view, target, extra)
+            val desired = base + extra
+            if (params.topMargin != desired) {
+                params.topMargin = desired
+                target.layoutParams = params
+            }
+            growAncestors(view, target, extra.coerceAtLeast(0))
         }
     }
 
@@ -1042,15 +1287,15 @@ private fun Class<*>.findField(name: String): Field? {
     return null
 }
 
+private val reflect = ReflectionLookup()
+
 private fun Any.call(name: String, vararg args: Any?): Any? {
-    val method = javaClass.methodsNamed(name).firstOrNull { it.parameterTypes.size == args.size } ?: return null
-    method.isAccessible = true
+    val method = reflect.method(javaClass, name, args.size) ?: return null
     return method.invoke(this, *args)
 }
 
 private fun Any.field(name: String): Any? {
-    val found = javaClass.findField(name) ?: return null
-    found.isAccessible = true
+    val found = reflect.field(javaClass, name) ?: return null
     return found.get(if (java.lang.reflect.Modifier.isStatic(found.modifiers)) null else this)
 }
 
@@ -1059,13 +1304,11 @@ private fun Any.intField(name: String): Int? = (field(name) as? Number)?.toInt()
 private fun Any.floatField(name: String): Float? = (field(name) as? Number)?.toFloat()
 
 private fun setFloatField(target: Any, name: String, value: Float) {
-    val found = target.javaClass.findField(name) ?: return
-    found.isAccessible = true
+    val found = reflect.field(target.javaClass, name) ?: return
     found.setFloat(target, value)
 }
 
 private fun setBooleanField(target: Any, name: String, value: Boolean) {
-    val found = target.javaClass.findField(name) ?: return
-    found.isAccessible = true
+    val found = reflect.field(target.javaClass, name) ?: return
     found.setBoolean(target, value)
 }

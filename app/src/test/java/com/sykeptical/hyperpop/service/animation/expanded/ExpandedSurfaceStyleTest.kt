@@ -15,6 +15,15 @@ class ExpandedSurfaceStyleTest {
     private val nativeExpanded = IslandRect(48, 160, 1152, 560)
 
     @Test
+    fun ownedEdgeDropsTheStrokeAndTheOutset() {
+        val edge = ExpandedSurfaceStyle.ownedEdge(180f)
+        assertEquals(0, edge.strokeWidthPx)
+        assertEquals(0, edge.outsetPx)
+        assertEquals(180f, edge.cornerRadiusPx, 0.01f)
+        assertEquals(0f, ExpandedSurfaceStyle.ownedEdge(-4f).cornerRadiusPx, 0.01f)
+    }
+
+    @Test
     fun blackOffKeepsTheNativeFill() {
         assertEquals(nativeFill, ExpandedSurfaceStyle.fill(nativeFill, black = false, progress = 1f))
         assertEquals(nativeFill, ExpandedSurfaceStyle.fill(nativeFill, black = true, progress = 0f))

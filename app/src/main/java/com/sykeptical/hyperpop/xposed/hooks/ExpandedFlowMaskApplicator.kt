@@ -31,38 +31,72 @@ object ExpandedSurfaceState {
 object ExpandedFlowMaskApplicator {
     private const val FLOW_TAG = "hyperpop.media.island_expanded_media_custom_flow"
     private const val HOLDER_BACKGROUND_TAG = "hyperpop.media.island_media_holder_background"
-    private val masked = Collections.synchronizedMap(WeakHashMap<View, Boolean>())
+    private val effects = Collections.synchronizedMap(WeakHashMap<View, Applied>())
+    private var targetsRoot = java.lang.ref.WeakReference<View>(null)
+    private var targets = emptyList<java.lang.ref.WeakReference<View>>()
 
     fun apply(root: View, flow: FlowMask?, amount: Float) {
         if (flow == null || amount <= 0.01f) {
             clear()
             return
         }
-        ExpandedSurfaceState.mask = ExpandedSurfaceState.Mask(flow.blackUntilY, flow.fadeEndY, amount)
-        val seen = HashSet<View>()
-        walk(root, flow, 0, seen)
-        val stale = masked.keys.filter { it !in seen }
-        stale.forEach { view ->
-            view.setRenderEffect(null)
-            masked.remove(view)
+        val current = ExpandedSurfaceState.mask
+        if (current == null || current.blackUntilY != flow.blackUntilY ||
+            current.fadeEndY != flow.fadeEndY || current.amount != amount
+        ) {
+            ExpandedSurfaceState.mask = ExpandedSurfaceState.Mask(flow.blackUntilY, flow.fadeEndY, amount)
         }
+        if (targetsRoot.get() !== root) {
+            val found = ArrayList<View>(4)
+            walk(root, 0, found)
+            targets = found.map { java.lang.ref.WeakReference(it) }
+            targetsRoot = java.lang.ref.WeakReference(root)
+            val live = found.toSet()
+            effects.keys.filter { it !in live }.forEach { view ->
+                view.setRenderEffect(null)
+                effects.remove(view)
+            }
+        }
+        val location = IntArray(2)
+        for (reference in targets) {
+            val view = reference.get() ?: continue
+            view.getLocationInWindow(location)
+            val cached = effects[view]
+            if (cached != null && cached.blackUntilY == flow.blackUntilY &&
+                cached.fadeEndY == flow.fadeEndY && cached.locationY == location[1]
+            ) {
+                continue
+            }
+            val effect = effect(location[1], flow)
+            view.setRenderEffect(effect)
+            effects[view] = Applied(flow.blackUntilY, flow.fadeEndY, location[1], effect)
+        }
+    }
+
+    fun invalidateStructure() {
+        targetsRoot = java.lang.ref.WeakReference(null)
     }
 
     fun clear() {
         ExpandedSurfaceState.mask = null
-        masked.keys.toList().forEach { view -> view.setRenderEffect(null) }
-        masked.clear()
+        effects.keys.toList().forEach { view -> view.setRenderEffect(null) }
+        effects.clear()
+        targets = emptyList()
+        targetsRoot = java.lang.ref.WeakReference(null)
     }
 
-    private fun walk(view: View, flow: FlowMask, depth: Int, seen: MutableSet<View>) {
+    private class Applied(
+        val blackUntilY: Int,
+        val fadeEndY: Int,
+        val locationY: Int,
+        val effect: RenderEffect,
+    )
+
+    private fun walk(view: View, depth: Int, found: MutableList<View>) {
         if (depth > 8) return
-        if (isMaskTarget(view)) {
-            view.setRenderEffect(effect(view, flow))
-            masked[view] = true
-            seen += view
-        }
+        if (isMaskTarget(view)) found += view
         val group = view as? ViewGroup ?: return
-        for (index in 0 until group.childCount) walk(group.getChildAt(index), flow, depth + 1, seen)
+        for (index in 0 until group.childCount) walk(group.getChildAt(index), depth + 1, found)
     }
 
     private fun isMaskTarget(view: View): Boolean {
@@ -73,11 +107,9 @@ object ExpandedFlowMaskApplicator {
         return view.javaClass.name.contains("MusicBgView")
     }
 
-    private fun effect(view: View, flow: FlowMask): RenderEffect {
-        val location = IntArray(2)
-        view.getLocationInWindow(location)
-        val start = (flow.blackUntilY - location[1]).toFloat()
-        val end = (flow.fadeEndY - location[1]).toFloat()
+    private fun effect(locationY: Int, flow: FlowMask): RenderEffect {
+        val start = (flow.blackUntilY - locationY).toFloat()
+        val end = (flow.fadeEndY - locationY).toFloat()
         val shader = LinearGradient(
             0f,
             start,

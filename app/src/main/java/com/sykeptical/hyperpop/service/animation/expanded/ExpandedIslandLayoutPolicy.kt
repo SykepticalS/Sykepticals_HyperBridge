@@ -107,7 +107,8 @@ object ExpandedIslandLayoutPolicy {
         val lifts = placement?.sideLifts.orEmpty()
         val below = IslandRect(card.left, contentTop, card.right, card.bottom)
         val touch = buildList {
-            add(below)
+            add(card)
+            if (!below.isEmpty() && below != card) add(below)
             leading?.let(::add)
             trailing?.let(::add)
             if (profile != null) addAll(liftRects(profile, contentLeft, contentTop, lifts))
@@ -139,6 +140,26 @@ object ExpandedIslandLayoutPolicy {
     }
 
     fun collapseTarget(compact: IslandRect): IslandRect = compact
+
+    /**
+     * App-exit can leave the big-island rect below the camera for a few
+     * seconds. Seat that rect on the cutout and let [decide] run again.
+     * A compact rect that already meets the hole is unchanged.
+     */
+    fun seatOnCutout(request: ExpandedLayoutRequest): ExpandedLayoutRequest {
+        val compact = request.compact
+        val cutout = request.cutout
+        if (compact.isEmpty() || cutout.isEmpty() || compact.top < cutout.bottom) return request
+        val left = cutout.centerX - compact.width / 2
+        val top = cutout.centerY - compact.height / 2
+        return request.copy(compact = IslandRect(left, top, left + compact.width, top + compact.height))
+    }
+
+    fun decideSeated(request: ExpandedLayoutRequest): ExpandedLayoutDecision {
+        val seated = seatOnCutout(request)
+        val decision = decide(seated)
+        return if (seated === request || decision is ExpandedLayoutDecision.Takeover) decision else decide(request)
+    }
 
     private fun liftRects(
         profile: ExpandedContentProfile,
