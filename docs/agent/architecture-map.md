@@ -67,6 +67,8 @@ Installed from `HyperPopModule` when `packageName == IslandProtocol.SYSTEM_UI_PA
 | `xposed/hooks/MarqueeHook.kt` | Marquee |
 | `xposed/hooks/IslandTextUpdateAnimationHook.kt` | Text update animation |
 | `xposed/hooks/BetterAnimationsHook.kt` | Better animations |
+| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar |
+| `xposed/hooks/StatusBarTakeoverHook.kt` | Status-bar fade for that takeover |
 | `xposed/mediacard/MediaCardHook.kt` | Media card orchestration + `DynamicClassLoaderHooks` |
 
 **Bootstrap:** `SystemUiBootstrapHook.register` → `SystemUiDispatcher.register(context, module)` and connects ingress (`SystemUiNotificationIngressHook.connect` from bootstrap tail).
@@ -208,16 +210,17 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | `MessagePresentationFamilyTracker` | `service/message/` |
 | `ReplyComposerHoldRegistry` | `service/` |
 | `BetterAnimationsPolicy` | `service/animation/` |
+| `ExpandedIslandLayoutPolicy`, `ExpandedTakeoverCoordinator`, `TakeoverFadePolicy` | `service/animation/expanded/` |
 
 ---
 
 ## Settings that affect hooks
 
-**Source of truth:** `app/src/main/java/com/sykeptical/hyperpop/data/AppPreferences.kt` — allowed packages, per-app overrides, global notification types, island/media/glow/marquee/screen-recorder/better-animations settings.
+**Source of truth:** `app/src/main/java/com/sykeptical/hyperpop/data/AppPreferences.kt` — allowed packages, per-app overrides, global notification types, island/media/glow/marquee/screen-recorder/better-animations settings. Expand-over-status-bar is stored with the hook mirror, not Room.
 
-**Mirror into hook process:** `HookConfigSync.kt` — `initialize`, `updatePolicy`, `updateCallStagePolicy`, `setScreenRecorder*`, `updateBackendHealth`; keys `KEY_ENGINE_ENABLED`, `KEY_TYPE_POLICY`, `KEY_CALL_STAGE_POLICY`, `KEY_FOCUS_ENABLED`, `KEY_ALLOWED_PACKAGES`, glow/marquee/screen-recorder/`KEY_BETTER_ANIMATIONS_ENABLED`, etc.
+**Mirror into hook process:** `HookConfigSync.kt` — `initialize`, `updatePolicy`, `updateCallStagePolicy`, `setScreenRecorder*`, `updateBackendHealth`; keys `KEY_ENGINE_ENABLED`, `KEY_TYPE_POLICY`, `KEY_CALL_STAGE_POLICY`, `KEY_FOCUS_ENABLED`, `KEY_ALLOWED_PACKAGES`, glow/marquee/screen-recorder/`KEY_BETTER_ANIMATIONS_ENABLED`/`KEY_EXPAND_OVER_STATUS_BAR_ENABLED`, etc.
 
-**Hook-side read:** `HookConfig` — `focusEnabled`, `expectsReplacement`, `classify`, type policy JSON, screen recorder gates, `betterAnimationsEnabled`.
+**Hook-side read:** `HookConfig` — `focusEnabled`, `expectsReplacement`, `classify`, type policy JSON, screen recorder gates, `betterAnimationsEnabled`, `expandOverStatusBarEnabled`.
 
 **Apply semantics:** `ApplyRequirement.forSetting` — hot reload vs `RestartTarget.SYSTEM_UI` / XMSF.
 
@@ -241,7 +244,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | Protocol / ownership | `integration/xiaomi/HyperIslandProtocolExtensionsTest.kt`, `island/backend/IslandOwnershipTest.kt`, `models/IslandPresentationTest.kt` |
 | Heads-up / focus shade | `xposed/SourceHeadsUpReplacementPolicyTest.kt`, `xposed/FocusShadeBackgroundPolicyTest.kt` |
 | Channels / prefs | `service/BridgeNotificationChannelsTest.kt`, `data/AppPreferencesCacheTest.kt` (if present) |
-| Animation | `service/animation/BetterAnimationsPolicyTest.kt` |
+| Animation | `service/animation/BetterAnimationsPolicyTest.kt`, `service/animation/expanded/ExpandedIslandLayoutPolicyTest.kt`, `ExpandedTakeoverCoordinatorTest.kt`, `TakeoverFadePolicyTest.kt` |
 
 ---
 

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -173,6 +174,7 @@ fun IslandSettingsContent(
 private fun MotionSection() {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(HookConfigSync.betterAnimationsEnabled(context)) }
+    var expandOverStatusBar by remember { mutableStateOf(HookConfigSync.expandOverStatusBarEnabled(context)) }
     var pending by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(HookConfigSync.marqueeSpeed(context).toFloat()) }
 
@@ -200,6 +202,26 @@ private fun MotionSection() {
                         onCheckedChange = { next ->
                             enabled = next
                             HookConfigSync.setBetterAnimationsEnabled(context, next)
+                            pending = true
+                        },
+                    )
+                },
+            )
+        }
+    }
+    SectionLabel(stringResource(R.string.expanded_islands))
+    SettingsStack {
+        SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
+            SettingsRow(
+                icon = Icons.Default.Fullscreen,
+                title = stringResource(R.string.expand_over_status_bar),
+                subtitle = stringResource(R.string.expand_over_status_bar_desc),
+                trailing = {
+                    HpSwitch(
+                        checked = expandOverStatusBar,
+                        onCheckedChange = { next ->
+                            expandOverStatusBar = next
+                            HookConfigSync.setExpandOverStatusBarEnabled(context, next)
                             pending = true
                         },
                     )

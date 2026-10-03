@@ -902,6 +902,9 @@
     <string name="onboarding_experience_body">These can be changed later in Settings.</string>
     <string name="better_animations">Better animations</string>
     <string name="better_animations_desc">Smoother island handoffs. Applied once when setup finishes.</string>
+    <string name="expanded_islands">Expanded islands</string>
+    <string name="expand_over_status_bar">Expand over status bar</string>
+    <string name="expand_over_status_bar_desc">Expanded islands take over the status bar and grow from the camera.</string>
     <string name="onboarding_look_title">A little glow</string>
     <string name="onboarding_look_body">Choose how the island is lit. You can refine this later.</string>
     <string name="glow_off">Off</string>

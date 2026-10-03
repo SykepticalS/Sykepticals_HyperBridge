@@ -61,6 +61,8 @@ object HookConfig {
             ?: "screen_recorder"
     fun betterAnimationsEnabled(): Boolean =
         prefs?.getBoolean(HookConfigSync.KEY_BETTER_ANIMATIONS_ENABLED, false) ?: false
+    fun expandOverStatusBarEnabled(): Boolean =
+        prefs?.getBoolean(HookConfigSync.KEY_EXPAND_OVER_STATUS_BAR_ENABLED, false) ?: false
 
     /** Fast, local and fail-open prediction used before SystemUI evaluates heads-up state. */
     fun expectsReplacement(sbn: StatusBarNotification): Boolean {

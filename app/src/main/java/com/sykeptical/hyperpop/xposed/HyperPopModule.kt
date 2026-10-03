@@ -10,6 +10,8 @@ import com.sykeptical.hyperpop.xposed.hooks.IslandInlineReplyHook
 import com.sykeptical.hyperpop.xposed.hooks.IslandWindowImeHook
 import com.sykeptical.hyperpop.xposed.hooks.OuterGlowHook
 import com.sykeptical.hyperpop.xposed.hooks.BetterAnimationsHook
+import com.sykeptical.hyperpop.xposed.hooks.ExpandedTakeoverHook
+import com.sykeptical.hyperpop.xposed.hooks.StatusBarTakeoverHook
 import com.sykeptical.hyperpop.xposed.hooks.ExpandedProgressAnimationHook
 import com.sykeptical.hyperpop.xposed.hooks.MarqueeHook
 import com.sykeptical.hyperpop.xposed.hooks.ActiveIslandDismissHook
@@ -43,6 +45,8 @@ class HyperPopModule : XposedModule() {
                 MarqueeHook.install(this, param)
                 IslandTextUpdateAnimationHook.install(this, param)
                 BetterAnimationsHook.install(this, param)
+                ExpandedTakeoverHook.install(this, param)
+                StatusBarTakeoverHook.install(this, param)
                 MediaCardHook.install(this, param)
             }
             IslandProtocol.XMSF_PACKAGE -> {

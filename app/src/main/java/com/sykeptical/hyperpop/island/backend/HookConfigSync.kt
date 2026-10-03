@@ -23,6 +23,7 @@ object HookConfigSync {
     const val KEY_SCREEN_RECORDER_COUNTDOWN_ENABLED = "screen_recorder_countdown_enabled"
     const val KEY_SCREEN_RECORDER_ICON_STYLE = "screen_recorder_icon_style"
     const val KEY_BETTER_ANIMATIONS_ENABLED = "better_animations_enabled"
+    const val KEY_EXPAND_OVER_STATUS_BAR_ENABLED = "expand_over_status_bar_enabled"
     private const val LEGACY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
 
     private fun local(context: Context) = context.getSharedPreferences(
@@ -41,6 +42,10 @@ object HookConfigSync {
             .putBoolean(KEY_SINGLE_COLOR_GLOW, local(context).getBoolean(KEY_SINGLE_COLOR_GLOW, false))
             .putString(KEY_GLOW_BASE_COLOR, migratedGlowBaseColor(local(context).getString(KEY_GLOW_BASE_COLOR, "")))
             .putBoolean(KEY_SCREEN_RECORDER_REPLACE, local(context).getBoolean(KEY_SCREEN_RECORDER_REPLACE, true))
+            .putBoolean(
+                KEY_EXPAND_OVER_STATUS_BAR_ENABLED,
+                local(context).getBoolean(KEY_EXPAND_OVER_STATUS_BAR_ENABLED, false),
+            )
             .putBoolean(
                 KEY_BETTER_ANIMATIONS_ENABLED,
                 if (local(context).contains(KEY_BETTER_ANIMATIONS_ENABLED)) {
@@ -132,6 +137,14 @@ object HookConfigSync {
 
     fun setBetterAnimationsEnabled(context: Context, enabled: Boolean) {
         local(context).edit().putBoolean(KEY_BETTER_ANIMATIONS_ENABLED, enabled).apply()
+        sync(context)
+    }
+
+    fun expandOverStatusBarEnabled(context: Context): Boolean =
+        local(context).getBoolean(KEY_EXPAND_OVER_STATUS_BAR_ENABLED, false)
+
+    fun setExpandOverStatusBarEnabled(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_EXPAND_OVER_STATUS_BAR_ENABLED, enabled).apply()
         sync(context)
     }
 

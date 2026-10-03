@@ -81,6 +81,31 @@ of extrapolating from an unrelated build.
   - The connected Settings app’s brightness slider was themed blue `#5786F7`, not the miuix default `#3482FF`. Geometry still matched the dimens above.
 - HyperPop implication: settings controls should use these miuix dimens. Accent may follow the live theme; the code default remains `#3482FF` / `#277AF7`.
 
+## Expanded island geometry and status-bar relationship
+
+### Finding
+
+- Date: 2026-10-03
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Wireless serial `adb-45a36c27-5TjWL3._adb-tls-connect._tcp`.
+- SystemUI/plugin version: `com.android.systemui` `16.03.251211.r`; `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MiuiSystemUI.apk` `A423B9805823B93301A0094732274F4E5EA951F86F333C7B94D9730715576E06`; `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandWindowController` constructor; `DynamicIslandBaseContentView.calculateBigIslandY` / `updateExpandedSize` / `getExpandedViewY`; `DynamicIslandAnimationDelegate.getExpandedAnimState` / `getBigIslandAnimState` / `containerScheduleUpdate` / `bigIslandScheduleUpdate` / `smallIslandToTempHiddenAnimation` / `getCutoutAnimState`; `DynamicIslandEventCoordinator.getExpandedIslandRegion` / `updateTouchRegion`; `DynamicIslandWindowView.getCutoutRect`; `IslandStretchAnimation`; `CollapsedStatusBarFragment.onViewCreated`.
+- Evidence source: both
+  - Device, idle (no island visible): `dumpsys window` showed `DynamicIslandWindow` at `(0,0)-(1200,0)`, type `KEYGUARD_DIALOG` (2009), gravity `TOP`, `layoutInDisplayCutoutMode=always`, layer `191000`, touchable insets mode 3, empty touch region, `isOnScreen=false`. `StatusBar` is `(fill x 144)`, layer `151000`. `NotificationShade` is layer `171000`. Display cutout bounding rect is `Rect(566, 0 - 634, 144)` at 1200x2608, density 480. Expansion frames were not captured because no island was showing; the phone was not rotated.
+  - JADX on the pulled APKs above.
+- Observation:
+  - Compact, expanded, and secondary islands are children of one plugin window. Expansion does not reparent or use a SurfaceControl transform. The window sits above the status bar, so z-order does not need to change.
+  - `expandedViewY` is written only by `calculateBigIslandY`. On a phone it is `statusBarHeight + island_expanded_padding_top` when that is below the compact bottom, otherwise compact bottom plus `island_expanded_padding_top_1`. `getExpandedAnimState` sets `CONTAINER_TRANS_Y` to `expandedViewY - islandViewMarginTop`, which drops the whole content view below the status bar while the outline clip morphs.
+  - The black card is the content view's clipped drawing plus `DynamicIslandBackgroundView`, whose drawable bounds track the clip. The clip cannot extend above a translated view, so the drop has to be removed (`CONTAINER_TRANS_Y = 0`) rather than painted over.
+  - Every expansion path (`big`/`small`/`init` to expanded, `expandedChanged`, `resetToExpanded`, `resetPress`) builds its target with `getExpandedAnimState`. Collapse uses `getBigIslandAnimState`, whose `CONTAINER_TRANS_Y` is 0. Phone eases stay on the delegate (`CHANGE_EASE`, `SHOW_EASE`, `HIDDEN_EASE`).
+  - Expanded content is one Focus view added to `DynamicIslandExpandedView`'s `LightBgView` (`setContentView`). `updateExpandedSize` then assigns that view an explicit width and height. A top margin on that view shifts it inside the expanded view; a fixed expanded-view height equal to the content height would clip the shifted view, so that height has to grow by the same offset when it is an explicit pixel height.
+  - `getExpandedIslandRegion` is `(margin, expandedViewY, margin + width, y + height)`. `updateTouchRegion` unions it with the small/big region and publishes touchable insets. `FLAG_WATCH_OUTSIDE_TOUCH` (0x40000) is toggled on the same window while expanded.
+  - `DynamicIslandWindowView.getCutoutRect` is the hole Xiaomi uses (screen-centered, `cutoutY ± cutoutHeight/2`). The framework `DisplayCutout` bounding rect is the full status-bar-tall slot and is not the hole.
+  - `SmallIslandStateHandler` keeps the secondary in `SmallIsland` while the primary is `Expanded`. `smallIslandToTempHiddenAnimation` does not change that handler, but it is not visual-only: it runs the secondary delegate's Folme to `getCutoutAnimState` (container alpha 0, clip collapsed to the cutout) and sets scenario 439. Reusing it can leave the secondary stuck at the cutout.
+  - Status-bar clock and icons live in `phone_status_bar_left_container`, `system_icon_area`, and `privacy_area`, captured by `IslandStretchAnimation.initMiuiViewsOnViewCreated` on the instance whose `from == 0`. That animator writes `translationX` and, on pad, `alpha`. `setTransitionAlpha` has no callers on those containers (`IslandStretchAnimation`, `MultiSourceMinAlphaController` use `setAlpha` / `translationX`).
+  - `calculateBigIslandY` already branches on display rotation and `getHorizontal`. A later rotation re-enters that method through `setCutoutY` / `updateView`.
+- HyperPop implication: override `getExpandedViewY` / `getExpandedViewHeight` so the existing Folme target starts at `islandViewMarginTop` and grows downward. Keep compact ears with `BIG_ISLAND_ALPHA = 1`, scale 1, and area `translationX`. Fade the three status-bar containers with `transitionAlpha`. Hide the secondary with its child `transitionAlpha`, not `smallIslandToTempHiddenAnimation`. Portrait and unlocked only; any failed self-check returns the native values.
+
 ## Entry template
 
 ### Finding
