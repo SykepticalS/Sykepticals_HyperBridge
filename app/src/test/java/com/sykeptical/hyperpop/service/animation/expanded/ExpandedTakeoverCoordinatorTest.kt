@@ -89,14 +89,120 @@ class ExpandedTakeoverCoordinatorTest {
     }
 
     @Test
-    fun watchdogAbandonsASilentTakeover() {
+    fun settledExpandedIgnoresSilentWatchdog() {
         val coordinator = ExpandedTakeoverCoordinator(frameTimeoutMs = 3_000)
+        coordinator.onSecondaryPresence(true)
         val generation = coordinator.arm(1, 0)
-        coordinator.onFrame(1, generation, target, compact, target, group, nowMs = 100)
+        assertTrue(coordinator.onFrame(1, generation, target, compact, target, group, nowMs = 100))
+        assertEquals(TakeoverPhase.EXPANDED, coordinator.phase)
+        assertTrue(coordinator.retainsExpandedGeometry())
+        assertFalse(coordinator.expireIfStale(20_000))
+        assertEquals(TakeoverPhase.EXPANDED, coordinator.phase)
+        assertEquals(0f, coordinator.statusBarAlpha, 0.001f)
+        assertTrue(coordinator.suppressesSecondaryVisual())
+        assertTrue(coordinator.holdsSecondaryPosition())
+        assertTrue(coordinator.onFrame(1, generation, target, compact, target, group, nowMs = 20_100))
+        assertEquals(TakeoverPhase.EXPANDED, coordinator.phase)
+        assertEquals(0f, coordinator.statusBarAlpha, 0.001f)
+    }
+
+    @Test
+    fun stalledExpansionStillAbandonsAndRestores() {
+        val coordinator = ExpandedTakeoverCoordinator(frameTimeoutMs = 3_000)
+        coordinator.onSecondaryPresence(true)
+        val generation = coordinator.arm(1, 0)
+        coordinator.onFrame(1, generation, midway(), compact, target, group, nowMs = 100)
+        assertEquals(TakeoverPhase.EXPANDING, coordinator.phase)
         assertFalse(coordinator.expireIfStale(2_000))
         assertTrue(coordinator.expireIfStale(3_200))
         assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
         assertEquals(1f, coordinator.statusBarAlpha, 0.001f)
+        assertEquals(1f, coordinator.secondaryAlpha, 0.001f)
+        assertFalse(coordinator.secondarySuppressed)
+        assertFalse(coordinator.holdsSecondaryPosition())
+    }
+
+    @Test
+    fun expiredSecondaryIsNotResurrected() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        coordinator.onSecondaryPresence(true)
+        val generation = coordinator.arm(7, 0)
+        coordinator.onFrame(7, generation, target, compact, target, group, nowMs = 50)
+        coordinator.onSecondaryPresence(false)
+        assertFalse(coordinator.secondaryActive)
+        assertFalse(coordinator.suppressesSecondaryVisual())
+        assertFalse(coordinator.holdsSecondaryPosition())
+        assertEquals(TakeoverPhase.EXPANDED, coordinator.phase)
+        assertEquals(0f, coordinator.statusBarAlpha, 0.001f)
+        assertTrue(coordinator.beginCollapse(7, generation))
+        coordinator.onFrame(7, generation, compact, compact, target, group, nowMs = 80)
+        assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
+        assertFalse(coordinator.secondaryActive)
+        assertEquals(1f, coordinator.statusBarAlpha, 0.001f)
+    }
+
+    @Test
+    fun collapseKeepsSecondarySourceAndReleasesSuppression() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        coordinator.onSecondaryPresence(true)
+        val generation = coordinator.arm(4, 0)
+        coordinator.onFrame(4, generation, target, compact, target, group, nowMs = 10)
+        assertTrue(coordinator.beginCollapse(4, generation))
+        assertFalse(coordinator.suppressesSecondaryVisual())
+        assertTrue(coordinator.holdsSecondaryPosition())
+        assertTrue(coordinator.secondaryActive)
+        coordinator.onFrame(4, generation, compact, compact, target, group, nowMs = 20)
+        assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
+        assertTrue(coordinator.secondaryActive)
+        assertFalse(coordinator.holdsSecondaryPosition())
+        assertEquals(1f, coordinator.statusBarAlpha, 0.001f)
+    }
+
+    @Test
+    fun interruptedCollapseRestoresSecondaryAndStatusBar() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        coordinator.onSecondaryPresence(true)
+        val generation = coordinator.arm(11, 0)
+        coordinator.onFrame(11, generation, target, compact, target, group, nowMs = 10)
+        assertTrue(coordinator.beginCollapse(11, generation))
+        assertEquals(TakeoverPhase.COLLAPSING, coordinator.phase)
+        assertFalse(coordinator.suppressesSecondaryVisual())
+        assertTrue(coordinator.secondaryActive)
+        assertTrue(coordinator.abandon(11, generation))
+        assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
+        assertFalse(coordinator.secondarySuppressed)
+        assertTrue(coordinator.secondaryActive)
+        assertEquals(1f, coordinator.statusBarAlpha, 0.001f)
+        assertEquals(1f, coordinator.secondaryAlpha, 0.001f)
+    }
+
+    @Test
+    fun duplicateAbandonAndStaleCollapseDoNothing() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        val generation = coordinator.arm(3, 0)
+        assertTrue(coordinator.abandon(3, generation))
+        assertFalse(coordinator.abandon(3, generation))
+        assertFalse(coordinator.beginCollapse(3, generation))
+        assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
+        assertEquals(1f, coordinator.statusBarAlpha, 0.001f)
+    }
+
+    @Test
+    fun disableAndInterruptClearSecondarySuppression() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        coordinator.onSecondaryPresence(true)
+        val generation = coordinator.arm(6, 0)
+        coordinator.onFrame(6, generation, target, compact, target, group, nowMs = 5)
+        coordinator.requestDisable()
+        assertTrue(coordinator.suppressesSecondaryVisual())
+        assertFalse(coordinator.allowsNewExpansion)
+        assertTrue(coordinator.abandon(6, generation))
+        assertEquals(TakeoverPhase.NATIVE, coordinator.phase)
+        assertFalse(coordinator.suppressesSecondaryVisual())
+        assertFalse(coordinator.holdsSecondaryPosition())
+        assertTrue(coordinator.secondaryActive)
+        assertEquals(1f, coordinator.statusBarAlpha, 0.001f)
+        assertEquals(-1L, coordinator.arm(6, 30))
     }
 
     private fun midway() = IslandRect(254, 36, 946, 320)

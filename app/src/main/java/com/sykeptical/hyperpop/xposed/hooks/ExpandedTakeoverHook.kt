@@ -14,6 +14,7 @@ import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutDecision
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutRequest
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedTakeoverCoordinator
 import com.sykeptical.hyperpop.service.animation.expanded.IslandRect
+import com.sykeptical.hyperpop.service.animation.expanded.TakeoverPhase
 import com.sykeptical.hyperpop.xposed.HookConfig
 import com.sykeptical.hyperpop.xposed.log
 import io.github.libxposed.api.XposedInterface.Chain
@@ -29,10 +30,11 @@ import java.util.WeakHashMap
  *
  * Xiaomi still owns the Folme transition. This hook only replaces the geometry
  * that transition reads: expanded Y and height, the clip bottom (Xiaomi's
- * getter truncates height to a multiple of the compact height), ear shift, and
- * the touch region. The secondary island is faded with transitionAlpha.
- * [smallIslandToTempHiddenAnimation] is intentionally not used: it retargets
- * that island's whole animation to the cutout.
+ * getter truncates height to a multiple of the compact height), and the touch
+ * region. Compact ears keep Xiaomi's expanded end state (alpha 0, blur 1) so
+ * their fade can finish. While the primary is expanded, the secondary plays
+ * Xiaomi's hidden Folme state at its current X. Reposition and cutout
+ * transitions are skipped until collapse, and the source is not cancelled.
  */
 object ExpandedTakeoverHook {
     private const val BASE =
@@ -45,6 +47,16 @@ object ExpandedTakeoverHook {
         "miui.systemui.dynamicisland.window.content.helpers.DynamicIslandContentViewPhoneHelper"
     private const val UTILS = "miui.systemui.util.CommonUtils"
     private const val SELF_CHECK_PX = 20
+    private val SECONDARY_MOTION = setOf(
+        "smallIslandChangedAnimation",
+        "smallIslandChangedNoAnimation",
+        "smallIslandToTempHiddenAnimation",
+        "smallIslandToHiddenAnimation",
+        "smallIslandToBigIslandAnimation",
+        "bigIslandChangedAnimation",
+        "bigIslandChangedNoAnimation",
+        "bigIslandToTempHiddenAnimation",
+    )
     private val COLLAPSE_STATES = setOf("BigIsland", "SmallIsland")
     private val pluginLoaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
@@ -61,6 +73,9 @@ object ExpandedTakeoverHook {
     @Volatile private var selfCheckFailed = false
     @Volatile private var loggedFailure = false
     @Volatile private var session: Session? = null
+    @Volatile private var parkedSecondaryX: Int? = null
+    @Volatile private var parkedSecondaryId: Int? = null
+    @Volatile private var yieldedSecondaryId: Int? = null
 
     private var tabletMethod: Method? = null
     private var tabletInstance: Any? = null
@@ -85,7 +100,6 @@ object ExpandedTakeoverHook {
             val expandedBottom = delegate.noArg("getExpandedBottom")
             val animState = delegate.noArg("getExpandedAnimState")
             val schedule = delegate.noArg("containerScheduleUpdate")
-            val bigSchedule = delegate.noArg("bigIslandScheduleUpdate")
             val region = coordinatorClass.noArg("getExpandedIslandRegion")
             val setState = base.methodsNamed("setState").firstOrNull { it.parameterTypes.size == 1 }
                 ?: error("setState missing")
@@ -97,27 +111,37 @@ object ExpandedTakeoverHook {
             hook(module, loader, animState) { chain ->
                 val view = runCatching { contentView(chain.thisObject) }.getOrNull()
                 if (view != null) runCatching { beginOrContinue(view) }
-                val state = chain.proceed()
-                val takeover = view?.let { runCatching { activeDecision(it) }.getOrNull() }
-                if (takeover != null && state != null) {
-                    runCatching { patchEars(chain.thisObject, state, takeover) }
-                }
-                state
+                chain.proceed()
             }
             hook(module, loader, schedule) { chain ->
                 val result = chain.proceed()
                 onFrame(chain.thisObject)
+                pinSecondary(chain.thisObject)
                 result
             }
-            hook(module, loader, bigSchedule) { chain ->
-                val result = chain.proceed()
-                applyEarAlpha(chain.thisObject)
-                result
+            SECONDARY_MOTION.forEach { name ->
+                delegate.methodsNamed(name).filter { it.parameterTypes.isNotEmpty() }.forEach { method ->
+                    hook(module, loader, method) { chain ->
+                        val target = chain.args.getOrNull(0) as? View
+                        if (target != null && suppressSecondaryMotion(target)) return@hook null
+                        chain.proceed()
+                    }
+                }
             }
             hook(module, loader, region) { chain -> narrowedRegion(chain.thisObject, chain.proceed()) }
             hook(module, loader, setState) { chain ->
+                val view = chain.thisObject as View
+                val state = chain.args.getOrNull(0)
+                val name = state?.javaClass?.simpleName
+                if (name == "Expanded") beginOrContinue(view)
+                else if (name in COLLAPSE_STATES && ownerIs(System.identityHashCode(view))) {
+                    coordinator.beginCollapse(System.identityHashCode(view), coordinator.generation)
+                }
                 val result = chain.proceed()
-                onState(chain.thisObject as View, chain.args.getOrNull(0))
+                onState(view, state)
+                if (name in COLLAPSE_STATES && ownerIs(System.identityHashCode(view))) {
+                    revealSecondary(view)
+                }
                 result
             }
             hook(module, loader, updateSize) { chain ->
@@ -210,8 +234,7 @@ object ExpandedTakeoverHook {
             return
         }
         StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
-        applySecondary(view, coordinator.secondaryAlpha)
-        applyEarAlpha(delegate)
+        trackSecondary(view)
     }
 
     private fun narrowedRegion(eventCoordinator: Any, native: Any?): Any? {
@@ -272,12 +295,12 @@ object ExpandedTakeoverHook {
         if (decision !is ExpandedLayoutDecision.Takeover) return null
         val generation = coordinator.arm(id, SystemClock.uptimeMillis())
         if (generation < 0) return null
-        val ears = earShifts(view, decision)
         synchronized(lock) {
-            session = Session(view, generation, decision, request.compact, ears.first, ears.second)
+            session = Session(view, generation, decision, request.compact)
         }
         applyOffset(view, decision.bodyOffsetPx)
         scheduleWatchdog(view, generation)
+        yieldSecondary(view)
         return decision
     }
 
@@ -305,9 +328,11 @@ object ExpandedTakeoverHook {
 
     private fun restore(view: View) {
         restoreOffsets()
-        applySecondary(view, 1f)
-        restoreEarAlpha(view)
+        parkedSecondaryX = null
+        parkedSecondaryId = null
+        yieldedSecondaryId = null
         StatusBarTakeoverHook.restore()
+        revealSecondary(view)
         synchronized(lock) {
             if (coordinator.phase.name == "NATIVE") session = null
         }
@@ -387,68 +412,111 @@ object ExpandedTakeoverHook {
         )
     }
 
-    private fun earShifts(
-        view: View,
-        decision: ExpandedLayoutDecision.Takeover,
-    ): Pair<Float?, Float?> {
-        val left = view.call("getBigIslandAreaLeft") as? View
-        val right = view.call("getBigIslandAreaRight") as? View
-        return shiftFor(left, decision.leadingEar) to shiftFor(right, decision.trailingEar)
+    private fun suppressSecondaryMotion(view: View): Boolean {
+        val phase = coordinator.phase
+        if (phase != TakeoverPhase.EXPANDING && phase != TakeoverPhase.EXPANDED) return false
+        if (System.identityHashCode(view) == coordinator.ownerId) return false
+        coordinator.onSecondaryPresence(true)
+        if (yieldedSecondaryId != System.identityHashCode(view)) playSecondaryHide(view)
+        return true
     }
 
-    private fun shiftFor(area: View?, placed: IslandRect?): Float? {
-        if (area == null || placed == null) return null
-        val measured = viewRect(area) ?: return null
-        return area.translationX + (placed.left - measured.left)
-    }
-
-    private fun patchEars(delegate: Any, state: Any, decision: ExpandedLayoutDecision.Takeover) {
-        val current = synchronized(lock) { session } ?: return
-        val alpha = property(delegate, "BIG_ISLAND_ALPHA") ?: return
-        val scale = property(delegate, "BIG_ISLAND_SCALE") ?: return
-        val transY = property(delegate, "BIG_ISLAND_TRANS_Y") ?: return
-        val left = property(delegate, "BIG_ISLAND_AREA_LEFT_TRANS_X")
-        val right = property(delegate, "BIG_ISLAND_AREA_RIGHT_TRANS_X")
-        state.addProperty(alpha, 1f)
-        state.addProperty(scale, 1f)
-        state.addProperty(transY, 0f)
-        if (left != null) state.addProperty(left, current.leadingShift ?: 0f)
-        if (right != null) state.addProperty(right, current.trailingShift ?: 0f)
-        if (decision.leadingEar == null) current.owner.get()?.let { hideArea(it, "getBigIslandAreaLeft") }
-        if (decision.trailingEar == null) current.owner.get()?.let { hideArea(it, "getBigIslandAreaRight") }
-    }
-
-    private fun applyEarAlpha(delegate: Any) {
+    private fun pinSecondary(delegate: Any) {
+        if (!coordinator.suppressesSecondaryVisual()) return
         val view = contentView(delegate) ?: return
-        val current = synchronized(lock) { session } ?: return
-        if (!ownerIs(System.identityHashCode(view))) return
-        setAreaAlpha(view, "getBigIslandAreaLeft", if (current.leadingShift == null && current.decision.leadingEar == null) 0f else 1f)
-        setAreaAlpha(view, "getBigIslandAreaRight", if (current.trailingShift == null && current.decision.trailingEar == null) 0f else 1f)
+        if (System.identityHashCode(view) != parkedSecondaryId) return
+        val parked = parkedSecondaryX?.toFloat() ?: return
+        setFloatField(delegate, "containerX", parked)
+        view.translationX = parked
     }
 
-    private fun restoreEarAlpha(view: View) {
-        setAreaAlpha(view, "getBigIslandAreaLeft", 1f)
-        setAreaAlpha(view, "getBigIslandAreaRight", 1f)
+    private fun retarget(delegate: Any, state: Any, propertyName: String, value: Float) {
+        val target = property(delegate, propertyName) ?: return
+        state.addProperty(target, value)
     }
 
-    private fun hideArea(view: View, getter: String) = setAreaAlpha(view, getter, 0f)
-
-    private fun setAreaAlpha(view: View, getter: String, alpha: Float) {
-        (view.call(getter) as? View)?.alpha = alpha
-    }
-
-    private fun applySecondary(expanded: View, alpha: Float) {
-        val coordinatorView = expanded.call("getDynamicIslandEventCoordinator") ?: return
-        val handler = coordinatorView.call("getSmallIslandStateHandler") ?: return
-        val current = handler.call("getCurrent") as? View ?: run {
+    private fun yieldSecondary(expanded: View) {
+        parkedSecondaryX = null
+        parkedSecondaryId = null
+        yieldedSecondaryId = null
+        val secondary = secondaryView(expanded) ?: run {
             coordinator.onSecondaryPresence(false)
             return
         }
-        coordinator.onSecondaryPresence(current !== expanded)
-        if (current === expanded) return
-        val small = current.call("getSmallIslandView") as? View ?: current
-        small.transitionAlpha = alpha
-        if (alpha >= 0.99f) small.transitionAlpha = 1f
+        coordinator.onSecondaryPresence(true)
+        playSecondaryHide(secondary)
+    }
+
+    private fun trackSecondary(expanded: View) {
+        val secondary = secondaryView(expanded) ?: run {
+            coordinator.onSecondaryPresence(false)
+            return
+        }
+        coordinator.onSecondaryPresence(true)
+        if (coordinator.suppressesSecondaryVisual() &&
+            yieldedSecondaryId != System.identityHashCode(secondary)
+        ) {
+            playSecondaryHide(secondary)
+        }
+    }
+
+    private fun playSecondaryHide(secondary: View) {
+        val delegate = secondary.call("getAnimatorDelegate") ?: return
+        val id = System.identityHashCode(secondary)
+        yieldedSecondaryId = id
+        val current = delegate.floatField("containerX")
+        if (current != null) {
+            parkedSecondaryId = id
+            parkedSecondaryX = current.toInt()
+        }
+        val state = delegate.call("getHiddenAnimState") ?: return
+        parkedSecondaryX?.let { retarget(delegate, state, "CONTAINER_X", it.toFloat()) }
+        retarget(delegate, state, "CONTAINER_ALPHA", 0f)
+        if (folmeTo(delegate, state)) return
+        parkedSecondaryX?.toFloat()?.let { secondary.translationX = it }
+        secondary.alpha = 0f
+    }
+
+    private fun folmeTo(delegate: Any, state: Any): Boolean {
+        val loader = delegate.javaClass.classLoader ?: return false
+        val folmeKt = runCatching { loader.loadClass("miui.systemui.animation.FolmeKt") }.getOrNull() ?: return false
+        val getFolme = folmeKt.declaredMethods.firstOrNull { method ->
+            method.name == "getFolme" &&
+                method.parameterTypes.size == 1 &&
+                method.parameterTypes[0].isInstance(delegate)
+        } ?: return false
+        getFolme.isAccessible = true
+        val folme = runCatching { getFolme.invoke(null, delegate) }.getOrNull() ?: return false
+        val configClass = runCatching { loader.loadClass("miuix.animation.base.AnimConfig") }.getOrNull() ?: return false
+        val configs = java.lang.reflect.Array.newInstance(configClass, 0)
+        val to = folme.javaClass.methods.firstOrNull { method ->
+            method.name == "to" &&
+                method.parameterTypes.size == 2 &&
+                !method.parameterTypes[0].isArray &&
+                method.parameterTypes[1].isArray &&
+                method.parameterTypes[0].isAssignableFrom(state.javaClass)
+        } ?: return false
+        to.isAccessible = true
+        return runCatching { to.invoke(folme, state, configs) }.isSuccess
+    }
+
+    private fun revealSecondary(expanded: View) {
+        val secondary = secondaryView(expanded) ?: run {
+            coordinator.onSecondaryPresence(false)
+            return
+        }
+        coordinator.onSecondaryPresence(true)
+        if (secondary.call("getState")?.javaClass?.simpleName == "BigIsland") return
+        secondary.call("getAnimatorDelegate")?.call("smallIslandChangedAnimation", secondary)
+    }
+
+    private fun secondaryView(expanded: View): View? {
+        val coordinatorView = expanded.call("getDynamicIslandEventCoordinator") ?: return null
+        listOf("getSmallIslandStateHandler", "getBigIslandStateHandler").forEach { name ->
+            val current = coordinatorView.call(name)?.call("getCurrent") as? View ?: return@forEach
+            if (current !== expanded) return current
+        }
+        return null
     }
 
     private fun secondaryRect(): IslandRect? {
@@ -553,6 +621,14 @@ object ExpandedTakeoverHook {
             "resetToExpanded",
             "resetPress",
             "containerScheduleUpdate",
+            "smallIslandChangedAnimation",
+            "smallIslandChangedNoAnimation",
+            "smallIslandToTempHiddenAnimation",
+            "smallIslandToHiddenAnimation",
+            "smallIslandToBigIslandAnimation",
+            "bigIslandChangedAnimation",
+            "bigIslandChangedNoAnimation",
+            "bigIslandToTempHiddenAnimation",
         )
         val coordinatorNames = setOf("getExpandedIslandRegion", "updateWindowHeight", "onAnimationStart")
         listOf(base to baseNames, delegate to delegateNames, coordinatorClass to coordinatorNames)
@@ -627,8 +703,6 @@ object ExpandedTakeoverHook {
         val generation: Long,
         val decision: ExpandedLayoutDecision.Takeover,
         val compact: IslandRect,
-        val leadingShift: Float?,
-        val trailingShift: Float?,
     ) {
         val owner = java.lang.ref.WeakReference(view)
         @Volatile var selfCheckDone: Boolean = false
@@ -686,3 +760,9 @@ private fun Any.field(name: String): Any? {
 private fun Any.intField(name: String): Int? = (field(name) as? Number)?.toInt()
 
 private fun Any.floatField(name: String): Float? = (field(name) as? Number)?.toFloat()
+
+private fun setFloatField(target: Any, name: String, value: Float) {
+    val found = target.javaClass.findField(name) ?: return
+    found.isAccessible = true
+    found.setFloat(target, value)
+}

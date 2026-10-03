@@ -47,6 +47,19 @@ class ExpandedTakeoverCoordinator(
         refreshSuppression()
     }
 
+    /** Settled expanded geometry stays put when Folme stops emitting frames. */
+    fun retainsExpandedGeometry(): Boolean = phase == TakeoverPhase.EXPANDED
+
+    /**
+     * The secondary source stays alive. Only its container is hidden, and only
+     * while the primary is opening or fully expanded.
+     */
+    fun suppressesSecondaryVisual(): Boolean =
+        secondaryActive && (phase == TakeoverPhase.EXPANDING || phase == TakeoverPhase.EXPANDED)
+
+    /** Keep the secondary's pre-expansion X until the takeover is fully native again. */
+    fun holdsSecondaryPosition(): Boolean = secondaryActive && phase != TakeoverPhase.NATIVE
+
     /**
      * @return false when the frame belongs to a stale generation or another island.
      */
@@ -98,7 +111,7 @@ class ExpandedTakeoverCoordinator(
 
     fun expireIfStale(nowMs: Long): Boolean {
         val owner = ownerId ?: return false
-        if (phase == TakeoverPhase.NATIVE) return false
+        if (phase == TakeoverPhase.NATIVE || phase == TakeoverPhase.EXPANDED) return false
         if (nowMs - lastFrameMs < frameTimeoutMs) return false
         return abandon(owner, generation)
     }
@@ -118,6 +131,6 @@ class ExpandedTakeoverCoordinator(
     }
 
     private fun refreshSuppression() {
-        secondarySuppressed = secondaryActive && phase != TakeoverPhase.NATIVE && secondaryAlpha < 0.99f
+        secondarySuppressed = suppressesSecondaryVisual()
     }
 }
