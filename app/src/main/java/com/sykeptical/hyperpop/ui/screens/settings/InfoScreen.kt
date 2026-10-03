@@ -3,60 +3,32 @@ package com.sykeptical.hyperpop.ui.screens.settings
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
-import com.sykeptical.hyperpop.util.DocumentationUrls
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.SettingsSuggest
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,23 +36,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.os.LocaleListCompat
 import com.sykeptical.hyperpop.R
+import com.sykeptical.hyperpop.ui.system.HpChoiceRow
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpNavRow
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSectionTitle
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
+import com.sykeptical.hyperpop.util.DocumentationUrls
 import com.sykeptical.hyperpop.util.parseBold
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InfoScreen(
     onBack: () -> Unit,
@@ -96,7 +71,6 @@ fun InfoScreen(
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var showLanguageDialog by remember { mutableStateOf(false) }
 
@@ -110,30 +84,7 @@ fun InfoScreen(
         catch (_: Exception) { null }
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            MediumFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.settings), fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.settings), onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -141,7 +92,6 @@ fun InfoScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- HEADER ---
             Spacer(modifier = Modifier.height(16.dp))
             if (appIconBitmap != null) {
                 Image(
@@ -155,27 +105,26 @@ fun InfoScreen(
                     contentDescription = stringResource(R.string.logo_desc),
                     modifier = Modifier
                         .size(80.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape)
                         .padding(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.app_name), style = HyperPopType.title)
             Text(
                 text = stringResource(R.string.developer_credit),
-                style = MaterialTheme.typography.labelLarge,
+                style = HyperPopType.secondary,
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.version_template, appVersion),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
+                style = HyperPopType.secondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // --- ABOUT GROUP ---
             SettingsSection(
                 title = stringResource(R.string.group_about),
                 items = listOf(
@@ -190,9 +139,8 @@ fun InfoScreen(
                 )
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // --- SPECIAL THANKS ---
             SettingsSection(
                 title = stringResource(R.string.special_thanks),
                 items = listOf(
@@ -210,19 +158,18 @@ fun InfoScreen(
 
             Text(
                 text = stringResource(R.string.footer_made_with_love).parseBold(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline
+                style = HyperPopType.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
     if (showLanguageDialog) {
-        LanguageSelectorDialog(onDismiss = { showLanguageDialog = false})
+        LanguageSelectorDialog(onDismiss = { showLanguageDialog = false })
     }
 }
-
-// --- COMPONENTS ---
 
 data class SettingsItemData(
     val icon: ImageVector,
@@ -233,68 +180,20 @@ data class SettingsItemData(
 
 @Composable
 fun SettingsSection(title: String, items: List<SettingsItemData>) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items.forEachIndexed { index, item ->
-                val shape = getSettingsShape(items.size, index)
-                SettingsOptionCard(item, shape)
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = HyperPopSpace.screen)) {
+        HpSectionTitle(title)
+        HpGroup {
+            items.forEach { item ->
+                HpNavRow(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    icon = item.icon,
+                    onClick = item.onClick,
+                )
             }
         }
     }
 }
-
-@Composable
-fun SettingsOptionCard(item: SettingsItemData, shape: Shape) {
-    Card(
-        onClick = item.onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = shape,
-        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 72.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(item.icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(20.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text(item.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(
-                Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-        }
-    }
-}
-
-// --- SHAPE LOGIC ---
-
-fun getSettingsShape(groupSize: Int, index: Int): Shape {
-    if (groupSize <= 1) return RoundedCornerShape(24.dp)
-    val large = 24.dp
-    val small = 4.dp
-    return when (index) {
-        0 -> RoundedCornerShape(topStart = large, topEnd = large, bottomEnd = small, bottomStart = small)
-        groupSize - 1 -> RoundedCornerShape(topStart = small, topEnd = small, bottomEnd = large, bottomStart = large)
-        else -> RoundedCornerShape(small)
-    }
-}
-
-// --- DIALOGS ---
 
 @Composable
 fun LanguageSelectorDialog(onDismiss: () -> Unit) {
@@ -302,18 +201,18 @@ fun LanguageSelectorDialog(onDismiss: () -> Unit) {
         stringResource(R.string.system_default) to "",
         "العربية" to "ar",
         "Bahasa Indonesia" to "id",
-        "Čeština" to "cs",              // Added (Czech)
+        "Čeština" to "cs",
         "Deutsch" to "de",
         "English" to "en",
         "Español" to "es",
-        "Français" to "fr",             // Added (French)
-        "Italiano" to "it",             // Added (Italian)
-        "Magyar" to "hu",               // Added (Hungarian)
-        "日本語" to "ja",               // Added (Japanese)
+        "Français" to "fr",
+        "Italiano" to "it",
+        "Magyar" to "hu",
+        "日本語" to "ja",
         "Português (BR)" to "pt-BR",
         "Polski" to "pl",
         "Slovenčina" to "sk",
-        "繁體中文 (TW)" to "zh-TW",     // Added (Traditional Chinese)
+        "繁體中文 (TW)" to "zh-TW",
         "Korean" to "ko",
         "Русский" to "ru",
         "Türkçe" to "tr",
@@ -329,39 +228,21 @@ fun LanguageSelectorDialog(onDismiss: () -> Unit) {
         icon = { Icon(Icons.Default.Language, null, tint = MaterialTheme.colorScheme.primary) },
         title = { Text(stringResource(R.string.language)) },
         text = {
-            Column(Modifier.fillMaxWidth()) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Column(
-                    modifier = Modifier
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState())
-                        .selectableGroup()
-                ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                HpGroup {
                     languages.forEach { (name, tag) ->
-                        val isSelected = (tag == selectedTag)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .selectable(
-                                    selected = isSelected,
-                                    onClick = { selectedTag = tag },
-                                    role = Role.RadioButton
-                                )
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = isSelected, onClick = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
+                        HpChoiceRow(
+                            title = name,
+                            selected = tag == selectedTag,
+                            onClick = { selectedTag = tag },
+                        )
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         },
         confirmButton = {

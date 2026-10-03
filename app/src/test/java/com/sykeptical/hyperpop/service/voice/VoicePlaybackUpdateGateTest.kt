@@ -48,6 +48,26 @@ class VoicePlaybackUpdateGateTest {
         assertTrue(VoicePlaybackDecorationPolicy.restampCachedDecoration(hasCachedDecoration = true))
         assertFalse(VoicePlaybackDecorationPolicy.restampCachedDecoration(hasCachedDecoration = false))
         assertFalse(VoicePlaybackDecorationPolicy.rebuildIsland())
+        assertFalse(
+            VoicePlaybackDecorationPolicy.shouldPatchDisplayedProgress(
+                25, "0:10 / 0:40", 25, "0:10 / 0:40", elapsedSincePatchMs = 5_000,
+            )
+        )
+        assertFalse(
+            VoicePlaybackDecorationPolicy.shouldPatchDisplayedProgress(
+                25, "0:10 / 0:40", 26, "0:10 / 0:40", elapsedSincePatchMs = 200,
+            )
+        )
+        assertTrue(
+            VoicePlaybackDecorationPolicy.shouldPatchDisplayedProgress(
+                25, "0:10 / 0:40", 26, "0:11 / 0:40", elapsedSincePatchMs = 1_000,
+            )
+        )
+        assertTrue(
+            VoicePlaybackDecorationPolicy.shouldPatchDisplayedProgress(
+                -1, "", 1, "0:00 / 0:40", elapsedSincePatchMs = 0,
+            )
+        )
     }
 
     @Test

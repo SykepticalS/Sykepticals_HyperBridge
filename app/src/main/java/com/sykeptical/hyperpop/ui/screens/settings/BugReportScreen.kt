@@ -63,23 +63,16 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -94,7 +87,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
@@ -111,6 +103,11 @@ import com.sykeptical.hyperpop.data.AppPreferences
 import com.sykeptical.hyperpop.service.diagnostics.DiagnosticsStore
 import com.sykeptical.hyperpop.ui.components.ExpressiveGroupCard
 import com.sykeptical.hyperpop.ui.components.ExpressiveSectionTitle
+import com.sykeptical.hyperpop.ui.system.HpChoiceRow
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import com.sykeptical.hyperpop.ui.theme.HyperPopTheme
 import com.sykeptical.hyperpop.util.AppConfigScope
 import com.sykeptical.hyperpop.util.BugReportCollector
@@ -375,7 +372,6 @@ fun BugReportContent(
     onNavigateToDiagnostics: (() -> Unit)? = null
 ) {
     val uriHandler = LocalUriHandler.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // UI BottomSheet state
     var isPreviewExpanded by remember { mutableStateOf(false) }
@@ -384,40 +380,21 @@ fun BugReportContent(
     var showShareWarningDialog by remember { mutableStateOf(false) }
     var pendingShareAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.bug_report_title)) },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.bug_report_title), onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = HyperPopSpace.screen)
         ) {
             // --- SCREEN DESCRIPTION AT TOP ---
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
                 ),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
@@ -545,8 +522,9 @@ fun BugReportContent(
                     Card(
                         onClick = { showScopeBottomSheet = true },
                         shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -602,12 +580,9 @@ fun BugReportContent(
                             Card(
                                 onClick = { showAppPickerBottomSheet = true },
                                 shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (selectedEntry != null) {
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceContainerHighest
-                                    }
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                                 ),
                                 border = BorderStroke(
                                     width = 1.dp,
@@ -965,125 +940,37 @@ fun BugReportContent(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Option 1: None
-                Surface(
-                    onClick = {
-                        onAppConfigScopeChange(AppConfigScope.NONE)
-                        showScopeBottomSheet = false
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (appConfigScope == AppConfigScope.NONE)
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    else MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = appConfigScope == AppConfigScope.NONE,
-                            onClick = null
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.bug_report_app_scope_none),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = stringResource(R.string.bug_report_app_scope_none_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Option 2: All Apps
-                Surface(
-                    onClick = {
-                        onAppConfigScopeChange(AppConfigScope.ALL_SETTINGS)
-                        showScopeBottomSheet = false
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (appConfigScope == AppConfigScope.ALL_SETTINGS)
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    else MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = appConfigScope == AppConfigScope.ALL_SETTINGS,
-                            onClick = null
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.bug_report_app_scope_all),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = stringResource(R.string.bug_report_app_scope_all_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Option 3: Specific App
-                Surface(
-                    onClick = {
-                        onAppConfigScopeChange(AppConfigScope.SPECIFIC_APP)
-                        showScopeBottomSheet = false
-                        if (selectedAppPackage == null) {
-                            showAppPickerBottomSheet = true
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (appConfigScope == AppConfigScope.SPECIFIC_APP)
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    else MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = appConfigScope == AppConfigScope.SPECIFIC_APP,
-                            onClick = null
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.bug_report_app_scope_specific),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = stringResource(R.string.bug_report_app_scope_specific_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                HpGroup {
+                    HpChoiceRow(
+                        title = stringResource(R.string.bug_report_app_scope_none),
+                        subtitle = stringResource(R.string.bug_report_app_scope_none_desc),
+                        selected = appConfigScope == AppConfigScope.NONE,
+                        onClick = {
+                            onAppConfigScopeChange(AppConfigScope.NONE)
+                            showScopeBottomSheet = false
+                        },
+                    )
+                    HpChoiceRow(
+                        title = stringResource(R.string.bug_report_app_scope_all),
+                        subtitle = stringResource(R.string.bug_report_app_scope_all_desc),
+                        selected = appConfigScope == AppConfigScope.ALL_SETTINGS,
+                        onClick = {
+                            onAppConfigScopeChange(AppConfigScope.ALL_SETTINGS)
+                            showScopeBottomSheet = false
+                        },
+                    )
+                    HpChoiceRow(
+                        title = stringResource(R.string.bug_report_app_scope_specific),
+                        subtitle = stringResource(R.string.bug_report_app_scope_specific_desc),
+                        selected = appConfigScope == AppConfigScope.SPECIFIC_APP,
+                        onClick = {
+                            onAppConfigScopeChange(AppConfigScope.SPECIFIC_APP)
+                            showScopeBottomSheet = false
+                            if (selectedAppPackage == null) {
+                                showAppPickerBottomSheet = true
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -1178,73 +1065,17 @@ fun BugReportContent(
                     ) {
                         items(filteredApps, key = { it.packageName }) { app ->
                             val isSelected = selectedAppPackage == app.packageName && appConfigScope == AppConfigScope.SPECIFIC_APP
-                            Surface(
+                            val bridged = if (app.isBridged) " · ${stringResource(R.string.bug_report_bridged)}" else ""
+                            HpChoiceRow(
+                                title = app.label,
+                                subtitle = app.packageName + bridged,
+                                selected = isSelected,
                                 onClick = {
                                     onSelectedAppPackageChange(app.packageName)
                                     onAppConfigScopeChange(AppConfigScope.SPECIFIC_APP)
                                     showAppPickerBottomSheet = false
                                 },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                                else Color.Transparent,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (app.icon != null) {
-                                        Image(
-                                            bitmap = app.icon.asImageBitmap(),
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(10.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.Smartphone, null, modifier = Modifier.size(22.dp))
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(14.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = app.label,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
-                                            )
-                                            if (app.isBridged) {
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    text = stringResource(R.string.bug_report_bridged),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = app.packageName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = null
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                 }
@@ -1377,9 +1208,10 @@ private fun ToggleSettingRow(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            Switch(
+            HpSwitch(
                 checked = checked,
-                onCheckedChange = null
+                onCheckedChange = {},
+                interactive = false,
             )
         }
     }

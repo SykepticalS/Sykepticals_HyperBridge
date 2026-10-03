@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -29,14 +28,10 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.data.AppPreferences
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 import com.sykeptical.hyperpop.util.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -86,7 +84,6 @@ data class PriorityAppInfo(val name: String, val packageName: String)
  * - **Manual Sorting:** Arrows for accessibility and precision.
  * - **Accessibility:** Custom semantic actions for TalkBack users to "Move Up" or "Move Down".
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppPriorityScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -136,30 +133,20 @@ fun AppPriorityScreen(onBack: () -> Unit) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.priority_order)) },
-                navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                }
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.priority_order), onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = HyperPopSpace.screen)
                 .fillMaxSize()
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = stringResource(R.string.priority_order_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = HyperPopType.secondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 14.dp),
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -385,8 +372,9 @@ fun PriorityAppItem(
                     }
                 }
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),

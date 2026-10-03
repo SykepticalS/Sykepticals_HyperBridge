@@ -46,7 +46,7 @@ fun SettingsRootScreen(
             .padding(horizontal = HyperPopSpace.screen)
             .padding(top = 28.dp, bottom = 24.dp),
     ) {
-        Text(stringResource(R.string.tab_settings), style = HyperPopType.largeTitle)
+        Text(stringResource(R.string.tab_settings), style = HyperPopType.largeTitle, modifier = Modifier.padding(start = 14.dp))
         Spacer(Modifier.height(16.dp))
         HpGroup {
             HpNavRow(stringResource(R.string.settings_search), onClick = onSearch, icon = Icons.Default.Search)

@@ -228,6 +228,12 @@ class CallTranslator(context: Context) : BaseTranslator(context) {
                         height = 96
                     )
                 }
+                if (originalBitmap == null && (isHangUp || isAnswer)) {
+                    val fallback = if (isHangUp) R.drawable.ic_call_hang_up else R.drawable.ic_call_answer
+                    originalBitmap = ContextCompat.getDrawable(context, fallback)
+                        ?.mutate()
+                        ?.toBitmap(width = 96, height = 96)
+                }
             }
 
             var actionIcon: Icon? = null
@@ -257,7 +263,11 @@ class CallTranslator(context: Context) : BaseTranslator(context) {
 
             val hyperAction = io.github.d4viddf.hyperisland_kit.HyperAction(
                 key = uniqueKey,
-                title = action.title?.toString() ?: "",
+                title = CallActionIconSizingPolicy.islandActionTitle(
+                    role,
+                    action.title?.toString().orEmpty(),
+                    hasIcon = actionIcon != null,
+                ),
                 icon = actionIcon,
                 pendingIntent = action.actionIntent,
                 actionIntentType = 1,

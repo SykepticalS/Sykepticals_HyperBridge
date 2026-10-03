@@ -10,6 +10,7 @@ class MarqueeMotionTest {
             assertTrue(MarqueeMotion.preservesMotionAcrossUpdates(it))
         }
         assertTrue(!MarqueeMotion.preservesMotionAcrossUpdates("MESSAGE"))
+        assertTrue(!MarqueeMotion.preservesMotionAcrossUpdates("MEDIA"))
         assertTrue(!MarqueeMotion.preservesMotionAcrossUpdates(null))
     }
 

@@ -16,28 +16,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
@@ -50,18 +44,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperpop.HyperPopApplication
 import com.sykeptical.hyperpop.island.backend.IslandProtocol
 import com.sykeptical.hyperpop.root.RootShellService
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSectionTitle
+import com.sykeptical.hyperpop.ui.system.HpSegmented
+import com.sykeptical.hyperpop.ui.system.HpSlider
+import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import com.sykeptical.hyperpop.xposed.mediacard.MediaCardConstants as C
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private data class Choice(val value: Int, val label: String)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaCardSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -147,29 +145,25 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
         )
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text("Media") },
-                navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    FilledTonalIconButton(onClick = { confirmRestart = true }) {
-                        Icon(Icons.Rounded.RestartAlt, "Restart SystemUI")
-                    }
-                },
-            )
+    HpScaffold(
+        title = "Media",
+        onBack = onBack,
+        actions = {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clickable { confirmRestart = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.RestartAlt, "Restart SystemUI")
+            }
         },
     ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
         Column(
             Modifier
-                .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = HyperPopSpace.screen, vertical = 8.dp),
         ) {
             CompactIslandSettings()
             SectionTitle("Media cards")
@@ -185,18 +179,11 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
                 return@Column
             }
             Spacer(Modifier.height(8.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = section == 0,
-                    onClick = { section = 0 },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text("Notification") }
-                SegmentedButton(
-                    selected = section == 1,
-                    onClick = { section = 1 },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text("Island") }
-            }
+            HpSegmented(
+                options = listOf("Notification", "Island"),
+                selected = section,
+                onSelect = { section = it },
+            )
             Spacer(Modifier.height(12.dp))
             if (section == 1) {
                 IslandExpandedMediaSettings()
@@ -265,6 +252,8 @@ fun MediaCardSettingsScreen(onBack: () -> Unit) {
             }
             TogglePref("Keep media card expanded in full AOD", keepAodExpanded) { keepAodExpanded = it; saveBool(C.KEY_HOOK_AOD_DISABLE_MEDIA_CARD_COLLAPSING, it) }
             Spacer(Modifier.height(24.dp))
+        }
+            SnackbarHost(snackbarHostState, Modifier.align(Alignment.BottomCenter))
         }
     }
 }
@@ -342,7 +331,6 @@ private fun CompactIslandSettings() {
             value = scrollSpeed,
             min = C.MIN_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
             max = C.MAX_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
-            steps = 0,
             format = { "$it px/s" },
             onPreview = { scrollSpeed = it },
             onCommit = {
@@ -511,7 +499,7 @@ private fun Show(visible: Boolean, content: @Composable () -> Unit) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp))
+    HpSectionTitle(text)
 }
 
 @Composable
@@ -537,7 +525,7 @@ private fun TogglePref(
                 )
             }
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        HpSwitch(checked = checked, onCheckedChange = onChange)
     }
 }
 
@@ -564,22 +552,29 @@ private fun SliderPref(
     max: Int,
     onPreview: (Int) -> Unit = {},
     onCommit: (Int) -> Unit,
-    steps: Int = (max - min - 1).coerceAtLeast(0),
     format: (Int) -> String = { it.toString() },
 ) {
     var slider by remember { mutableFloatStateOf(value.toFloat()) }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+    ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text("$title: ${format(slider.roundToInt())}")
-            Slider(
+            HpSlider(
                 value = slider,
                 onValueChange = {
                     slider = it
                     onPreview(it.roundToInt())
                 },
-                onValueChangeFinished = { onCommit(slider.roundToInt()) },
+                onValueChangeFinished = {
+                    val snapped = slider.roundToInt().coerceIn(min, max)
+                    slider = snapped.toFloat()
+                    onCommit(snapped)
+                },
                 valueRange = min.toFloat()..max.toFloat(),
-                steps = steps,
             )
         }
     }
@@ -587,7 +582,12 @@ private fun SliderPref(
 
 @Composable
 private fun PreferenceCard(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).then(modifier)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).then(modifier),
+    ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }

@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Apps
@@ -29,15 +28,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -60,15 +52,16 @@ import com.sykeptical.hyperpop.data.AppPreferences
 import com.sykeptical.hyperpop.ui.AppInfo
 import com.sykeptical.hyperpop.ui.AppListViewModel
 import com.sykeptical.hyperpop.ui.components.BlocklistEditor
-import com.sykeptical.hyperpop.ui.components.ExpressiveGroupCard
-import com.sykeptical.hyperpop.ui.components.ExpressiveSectionTitle
-import com.sykeptical.hyperpop.ui.components.ExpressiveSettingsItem
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpNavRow
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSectionTitle
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import kotlinx.coroutines.launch
 
 /**
  * Main Screen: Global Rules + Entry point to App List
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlobalBlocklistScreen(
     onBack: () -> Unit,
@@ -77,49 +70,19 @@ fun GlobalBlocklistScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferences = remember { AppPreferences(context) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
     val globalBlockedTerms by preferences.globalBlockedTermsFlow.collectAsState(initial = emptySet())
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.blocked_terms)) },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.blocked_terms), onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = HyperPopSpace.screen)
         ) {
-            // 1. GLOBAL RULES
-            ExpressiveSectionTitle(stringResource(R.string.global_rules))
-
-            // GLOBAL EDITOR CARD (Custom padding inside card for editor)
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(24.dp), // Expressive
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(modifier = Modifier.padding(16.dp)) {
+            HpSectionTitle(stringResource(R.string.global_rules), first = true)
+            HpGroup {
+                Box(modifier = Modifier.padding(HyperPopSpace.rowHorizontal)) {
                     BlocklistEditor(
                         terms = globalBlockedTerms,
                         onUpdate = { scope.launch { preferences.setGlobalBlockedTerms(it) } }
@@ -127,18 +90,13 @@ fun GlobalBlocklistScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-
-            // 2. APP RULES
-            ExpressiveSectionTitle(stringResource(R.string.app_specific_rules))
-
-            // NAVIGATION ENTRY CARD (Reusing Expressive Component)
-            ExpressiveGroupCard {
-                ExpressiveSettingsItem(
-                    icon = Icons.Default.Apps,
+            HpSectionTitle(stringResource(R.string.app_specific_rules))
+            HpGroup {
+                HpNavRow(
                     title = stringResource(R.string.app_specific_rules),
                     subtitle = stringResource(R.string.manage_app_rules_desc),
-                    onClick = onNavigateToAppList
+                    icon = Icons.Default.Apps,
+                    onClick = onNavigateToAppList,
                 )
             }
 
@@ -150,7 +108,6 @@ fun GlobalBlocklistScreen(
 /**
  * Secondary Screen: List of Apps to configure
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlocklistAppListScreen(
     onBack: () -> Unit,
@@ -158,35 +115,14 @@ fun BlocklistAppListScreen(
 ) {
     val activeApps by viewModel.activeAppsState.collectAsState()
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.app_specific_rules)) },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.app_specific_rules), onBack = onBack) { padding ->
         LazyColumn(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp) // Increased spacing for expressive cards
+            contentPadding = PaddingValues(horizontal = HyperPopSpace.screen, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(activeApps, key = { it.packageName }) { app ->
                 AppBlockItem(app = app, viewModel = viewModel) { selectedApp = app }
@@ -224,7 +160,7 @@ fun AppBlockItem(
     // Expressive Card Item
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp), // Expressive
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

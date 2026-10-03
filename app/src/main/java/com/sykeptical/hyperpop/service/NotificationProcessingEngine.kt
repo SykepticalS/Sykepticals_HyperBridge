@@ -36,6 +36,9 @@ import com.sykeptical.hyperpop.service.translators.IslandFloatingPresentationPol
 import com.sykeptical.hyperpop.service.translators.StandardTranslator
 import com.sykeptical.hyperpop.service.translators.TimerTranslator
 import com.sykeptical.hyperpop.service.translators.VoiceMessageTranslator
+import com.sykeptical.hyperpop.service.voice.MediaBackedVoiceClassifier
+import com.sykeptical.hyperpop.service.voice.MediaBackedVoiceSignals
+import com.sykeptical.hyperpop.service.voice.VoiceFocusProgressPatch
 import com.sykeptical.hyperpop.service.voice.VoicePlaybackDecorationPolicy
 import com.sykeptical.hyperpop.service.voice.VoicePlaybackDetector
 import com.sykeptical.hyperpop.service.voice.VoicePlaybackSignals
@@ -184,8 +187,17 @@ class NotificationProcessingEngine private constructor(
     private val messageResolver = MessageNotificationResolver()
     private val messageFamilyTracker = MessagePresentationFamilyTracker()
     private val voicePlaybackUpdateGate = VoicePlaybackUpdateGate()
+    private data class CachedVoiceFocus(
+        val decoration: Bundle,
+        val percent: Int,
+        val clock: String,
+        val publishedProgress: Int,
+        val publishedMax: Int,
+        val publishedAtElapsedMs: Long,
+    )
+
     /** Last source-focus decoration for a voice island, keyed by its logical id. */
-    private val voiceFocusDecorations = ConcurrentHashMap<String, Bundle>()
+    private val voiceFocusDecorations = ConcurrentHashMap<String, CachedVoiceFocus>()
     private val expiredIslands = ExpiredIslandRegistry()
     private val timeoutJobs = ConcurrentHashMap<String, Job>()
     private val removalJobs = ConcurrentHashMap<String, Job>()
@@ -1038,11 +1050,7 @@ class NotificationProcessingEngine private constructor(
                     if (extras.containsKey("miui.focus.param") || extras.containsKey("miui.system.focus.param")) {
                         isNative = true
                     }
-                    val template = extras.getString(Notification.EXTRA_TEMPLATE)
-                    if (template == "androidx.media.app.NotificationCompat\$MediaStyle" ||
-                        template == "android.app.Notification\$MediaStyle") {
-                        isNative = true
-                    }
+                    if (countsAsNativeMediaIsland(it)) isNative = true
                 }
                 if (isNative) {
                     if (nativeIslands.add(it.key)) updateIslandDiagnostics()
@@ -1096,10 +1104,12 @@ class NotificationProcessingEngine private constructor(
             DiagnosticsStore.record("CALLBACK", "received", sbn.packageName)
         }
         val sourceSlot = sourceSlotIdentity(sbn)
-        if (!recovery && shouldThrottleVoicePlaybackUpdate(sbn, sourceSlot)) {
-            restampCachedVoiceFocus(sbn)
-            markSourceHeadsUpSuppressed(sbn)
-            return
+        if (!recovery) {
+            throttledVoicePlaybackSample(sbn, sourceSlot)?.let { sample ->
+                restampCachedVoiceFocus(sbn, sample)
+                markSourceHeadsUpSuppressed(sbn)
+                return
+            }
         }
         val callbackObservedAt = System.currentTimeMillis()
         val rawQuality = sourceCandidateQuality(sbn)
@@ -1288,6 +1298,9 @@ class NotificationProcessingEngine private constructor(
                     notification.tickerText?.toString(),
                     *textLines.map { it?.toString() }.toTypedArray(),
                 ),
+                conversationTitle = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
+                    ?: extractMessagingConversationTitle(notification)
+                    ?: rawTitle?.toString(),
             ),
         )
     }
@@ -2485,7 +2498,9 @@ class NotificationProcessingEngine private constructor(
             },
             isOngoingEvent = (n.flags and Notification.FLAG_ONGOING_EVENT) != 0,
             isForegroundService = (n.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0,
-            isVideoCall = extras.getBoolean(Notification.EXTRA_CALL_IS_VIDEO, false)
+            isVideoCall = extras.getBoolean(Notification.EXTRA_CALL_IS_VIDEO, false),
+            title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+            text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
         )
     }
 
@@ -2571,8 +2586,10 @@ class NotificationProcessingEngine private constructor(
         val isCall = callClassifier.classify(buildCallSignals(sbn)).isCall
         val isNav = n.category == Notification.CATEGORY_NAVIGATION || sbn.packageName.let { it.contains("maps") || it.contains("waze") }
         val isTimer = (extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) || n.category == Notification.CATEGORY_ALARM) && n.`when` > 0
-        val isMedia = template.contains("MediaStyle") || n.category == Notification.CATEGORY_TRANSPORT
-        val isMessage = n.category == Notification.CATEGORY_MESSAGE || template == "android.app.Notification.MessagingStyle"
+        val mediaTransport = template.contains("MediaStyle") || n.category == Notification.CATEGORY_TRANSPORT
+        val mediaBackedVoice = MediaBackedVoiceClassifier.isVoiceMessage(mediaBackedVoiceSignals(sbn))
+        val isMedia = mediaTransport && !mediaBackedVoice
+        val isMessage = n.category == Notification.CATEGORY_MESSAGE || template.contains("MessagingStyle")
         
         val title = resolveTitle(sbn)
         val text = resolveText(extras)
@@ -2582,7 +2599,7 @@ class NotificationProcessingEngine private constructor(
         val isDownload = isDownloadNotification(sbn, title, text) || continuesDownload
         val hasProgress = hasProgressNotification(sbn, title, text) || continuesDownload
         val signals = voicePlaybackSignals(sbn, title, text)
-        val isVoice = VoicePlaybackDetector.isVoicePlayback(signals)
+        val isVoice = mediaBackedVoice || VoicePlaybackDetector.isVoicePlayback(signals)
         val isScreenRecording = ScreenRecordingClassifier.isScreenRecording(
             ScreenRecordingSignals(
                 packageName = sbn.packageName,
@@ -2850,7 +2867,14 @@ class NotificationProcessingEngine private constructor(
             return false
         }
         if (semanticType == NotificationType.VOICE_MESSAGE) {
-            voiceFocusDecorations[focusIdentity] = Bundle(decoration)
+            voiceFocusDecorations[focusIdentity] = CachedVoiceFocus(
+                decoration = Bundle(decoration),
+                percent = -1,
+                clock = "",
+                publishedProgress = 0,
+                publishedMax = 0,
+                publishedAtElapsedMs = 0L,
+            )
         }
         sbn.notification.extras.putBundle(IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION, decoration)
         return true
@@ -2964,6 +2988,29 @@ class NotificationProcessingEngine private constructor(
         val title = (resolvedContent?.title ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())?.trim() ?: ""
         val text = (resolvedContent?.text ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())?.trim() ?: ""
         return VoicePlaybackDetector.isVoicePlaybackShell(voicePlaybackSignals(sbn, title, text))
+    }
+
+    private fun countsAsNativeMediaIsland(sbn: StatusBarNotification): Boolean {
+        val template = sbn.notification.extras?.getString(Notification.EXTRA_TEMPLATE)
+        return MediaBackedVoiceClassifier.countsAsNativeMediaTemplate(
+            template = template,
+            mediaBackedVoice = MediaBackedVoiceClassifier.isVoiceMessage(mediaBackedVoiceSignals(sbn)),
+        )
+    }
+
+    private fun mediaBackedVoiceSignals(sbn: StatusBarNotification): MediaBackedVoiceSignals {
+        val notification = sbn.notification
+        val extras = notification.extras
+        val template = extras?.getString(Notification.EXTRA_TEMPLATE).orEmpty()
+        return MediaBackedVoiceSignals(
+            isMediaTransport = template.contains("MediaStyle") ||
+                notification.category == Notification.CATEGORY_TRANSPORT,
+            title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+            text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
+            subText = extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty(),
+            ticker = notification.tickerText?.toString().orEmpty(),
+            actionLabels = notification.actions?.map { it.title?.toString().orEmpty() }.orEmpty(),
+        )
     }
 
     private fun voicePlaybackSignals(
@@ -3122,11 +3169,7 @@ class NotificationProcessingEngine private constructor(
                             if (extras.containsKey("miui.focus.param") || extras.containsKey("miui.system.focus.param")) {
                                 isNative = true
                             }
-                            val template = extras.getString(Notification.EXTRA_TEMPLATE)
-                            if (template == "androidx.media.app.NotificationCompat\$MediaStyle" ||
-                                template == "android.app.Notification\$MediaStyle") {
-                                isNative = true
-                            }
+                            if (countsAsNativeMediaIsland(sbn)) isNative = true
                         }
                         if (isNative) {
                             if (nativeIslands.add(sbn.key)) nativeChanged = true
@@ -3261,18 +3304,19 @@ class NotificationProcessingEngine private constructor(
             extras.containsKey(Notification.EXTRA_PROGRESS)
     }
 
-    private fun shouldThrottleVoicePlaybackUpdate(
+    /** Progress-only voice ticks. Null means the notification still needs a full render. */
+    private fun throttledVoicePlaybackSample(
         sbn: StatusBarNotification,
         sourceSlot: String,
-    ): Boolean {
-        val logicalKey = sourceToLogicalKeys[sbn.key] ?: return false
+    ): VoicePlaybackUpdateSample? {
+        val logicalKey = sourceToLogicalKeys[sbn.key] ?: return null
         val activeType = activeIslands[logicalKey]?.type
         if (activeType != NotificationType.VOICE_MESSAGE) {
             voicePlaybackUpdateGate.remove(sourceSlot)
             if (VoicePlaybackDecorationPolicy.evictCachedDecoration(activeType)) {
                 voiceFocusDecorations.remove(logicalKey)
             }
-            return false
+            return null
         }
         val extras = sbn.notification.extras
         val extrasMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
@@ -3295,21 +3339,86 @@ class NotificationProcessingEngine private constructor(
             progressMax = if (extrasMax > 0) extrasMax else remote?.progressMax ?: 0,
             structureFingerprint = structureFingerprint,
         )
-        return !voicePlaybackUpdateGate.shouldRender(sourceSlot, sample)
+        if (voicePlaybackUpdateGate.shouldRender(sourceSlot, sample)) return null
+        return sample
     }
 
     /**
      * Copies the decoration from the last real voice post onto this playback tick.
-     * The tick itself does not translate, walk RemoteViews, or post a new island.
+     * A changed percent or clock is written into that payload. The tick does not
+     * translate, walk RemoteViews, or post a new island.
      */
-    private fun restampCachedVoiceFocus(sbn: StatusBarNotification) {
+    private fun restampCachedVoiceFocus(
+        sbn: StatusBarNotification,
+        sample: VoicePlaybackUpdateSample,
+    ) {
         val logicalKey = sourceToLogicalKeys[sbn.key] ?: return
         val cached = voiceFocusDecorations[logicalKey] ?: return
+        val percent = VoicePlaybackDetector.percent(sample.progress, sample.progressMax)
+        val clock = VoicePlaybackDetector.playbackClock(sample.progress, sample.progressMax)
+        val now = android.os.SystemClock.elapsedRealtime()
+        val elapsed = if (cached.publishedAtElapsedMs <= 0L) {
+            Long.MAX_VALUE
+        } else {
+            now - cached.publishedAtElapsedMs
+        }
+        val patch = VoicePlaybackDecorationPolicy.shouldPatchDisplayedProgress(
+            cachedPercent = cached.percent,
+            cachedClock = cached.clock,
+            percent = percent,
+            clock = clock,
+            elapsedSincePatchMs = elapsed,
+        )
+        val decoration = if (patch) {
+            val updated = patchVoiceFocusProgress(cached.decoration, logicalKey, percent, clock)
+            voiceFocusDecorations[logicalKey] = CachedVoiceFocus(
+                decoration = updated,
+                percent = percent,
+                clock = clock,
+                publishedProgress = sample.progress,
+                publishedMax = sample.progressMax,
+                publishedAtElapsedMs = now,
+            )
+            updated
+        } else {
+            holdPublishedVoiceProgress(sbn, cached)
+            cached.decoration
+        }
         if (!VoicePlaybackDecorationPolicy.restampCachedDecoration(hasCachedDecoration = true)) return
         sbn.notification.extras.putBundle(
             IslandProtocol.EXTRA_SOURCE_FOCUS_DECORATION,
-            Bundle(cached),
+            Bundle(decoration),
         )
+    }
+
+    /**
+     * Instagram keeps writing a new millisecond position into the notification.
+     * SystemUI snapshots that value. Hold the last published position until the
+     * next Focus refresh so those intermediate writes do not rebuild the card.
+     */
+    private fun holdPublishedVoiceProgress(
+        sbn: StatusBarNotification,
+        cached: CachedVoiceFocus,
+    ) {
+        if (cached.publishedMax <= 0) return
+        val extras = sbn.notification.extras
+        if (extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) <= 0) return
+        extras.putInt(Notification.EXTRA_PROGRESS, cached.publishedProgress)
+        extras.putInt(Notification.EXTRA_PROGRESS_MAX, cached.publishedMax)
+    }
+
+    private fun patchVoiceFocusProgress(
+        source: Bundle,
+        logicalKey: String,
+        percent: Int,
+        clock: String,
+    ): Bundle {
+        val copy = Bundle(source)
+        val focus = copy.getString("miui.focus.param") ?: return copy
+        val patched = VoiceFocusProgressPatch.apply(focus, percent, clock)
+        if (patched == focus) return copy
+        copy.putString("miui.focus.param", FocusShadeUpdate.stampForSource(patched, logicalKey))
+        return copy
     }
 
     private fun isCallSource(sbn: StatusBarNotification): Boolean {

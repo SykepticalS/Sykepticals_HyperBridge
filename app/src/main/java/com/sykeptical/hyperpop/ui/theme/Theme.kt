@@ -23,7 +23,7 @@ import com.sykeptical.hyperpop.ui.system.hyperPopReducedMotion
 import com.sykeptical.hyperpop.ui.system.hyperPopTypography
 
 private val DarkColors = darkColorScheme(
-    primary = HyperPopColor.accent,
+    primary = HyperPopColor.accentDark,
     onPrimary = HyperPopColor.onAccent,
     secondary = HyperPopColor.darkSecondary,
     background = HyperPopColor.darkBackground,
@@ -66,6 +66,7 @@ private val HyperPopShapes = Shapes(
     medium = RoundedCornerShape(HyperPopSize.radius),
     large = RoundedCornerShape(HyperPopSize.radius),
     extraLarge = RoundedCornerShape(HyperPopSize.sheetRadius),
+    // miuix_theme_radius_common / big, from MiuiSystemUI.
 )
 
 @Composable

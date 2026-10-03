@@ -64,7 +64,9 @@ data class CallNotificationSignals(
     val actions: List<CallActionSignal>,
     val isOngoingEvent: Boolean = false,
     val isForegroundService: Boolean = false,
-    val isVideoCall: Boolean = false
+    val isVideoCall: Boolean = false,
+    val title: String = "",
+    val text: String = ""
 )
 
 data class CallClassification(
@@ -124,9 +126,11 @@ class CallNotificationClassifier(
         val isMetadataCall = template == CALL_STYLE_TEMPLATE ||
                 callType != CALL_TYPE_UNKNOWN ||
                 (signals.category == CATEGORY_CALL && hasLiveCallEvidence)
+        val unstyledOngoingCall = isUnstyledOngoingCall(signals, hasAnswer, hasDeclineOrHangUp)
         val isActionCall = (hasSemanticCallAction && signals.isOngoingEvent) ||
                 (hasAnswer && hasDeclineOrHangUp) ||
-                (hasValidChronometer && hasDeclineOrHangUp)
+                (hasValidChronometer && hasDeclineOrHangUp) ||
+                unstyledOngoingCall
 
         if (!isMetadataCall && !isActionCall) {
             val reason = if (signals.category == CATEGORY_CALL) {
@@ -157,6 +161,7 @@ class CallNotificationClassifier(
 
         val reason = when {
             callType == CALL_TYPE_ONGOING -> "ongoing-presentation-not-connection"
+            unstyledOngoingCall -> "unstyled-ongoing-call"
             callType != CALL_TYPE_UNKNOWN -> "call-type-"
             signals.category == CATEGORY_CALL -> "category-call"
             template == CALL_STYLE_TEMPLATE -> "call-style"
@@ -204,6 +209,23 @@ class CallNotificationClassifier(
         }
     }
 
+    /**
+     * Some VoIP apps keep the connected call as a foreground notification with an end-call
+     * action and an ongoing-call title, without CallStyle, [CATEGORY_CALL], or a chronometer.
+     * An End button alone is not enough: the visible title has to name an ongoing call.
+     */
+    private fun isUnstyledOngoingCall(
+        signals: CallNotificationSignals,
+        hasAnswer: Boolean,
+        hasHangUp: Boolean,
+    ): Boolean {
+        if (!signals.isOngoingEvent || !hasHangUp || hasAnswer) return false
+        val haystack = "${signals.title} ${signals.text}".lowercase()
+        if (ongoingCallPhrases.any { phrase -> haystack.contains(phrase) }) return true
+        // "Ongoing Telegram call" puts the app name between the two words.
+        return haystack.contains("ongoing") && haystack.contains("call")
+    }
+
     private fun matchesActionKeyword(normalizedTitle: String, keyword: String): Boolean {
         val normalizedKeyword = keyword.trim().lowercase()
         if (normalizedKeyword.isEmpty()) return false
@@ -218,6 +240,10 @@ class CallNotificationClassifier(
         const val CALL_TYPE_INCOMING = 1
         const val CALL_TYPE_ONGOING = 2
         const val CALL_TYPE_SCREENING = 3
+        private val ongoingCallPhrases = listOf(
+            "ongoing voice chat",
+            "ongoing video chat",
+        )
         const val SEMANTIC_ACTION_MUTE = 6
         const val SEMANTIC_ACTION_UNMUTE = 7
         const val SEMANTIC_ACTION_CALL = 10

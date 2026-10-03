@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,9 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -61,7 +61,9 @@ import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.models.GlowMode
 import com.sykeptical.hyperpop.models.IslandConfig
+import com.sykeptical.hyperpop.ui.system.HpSlider
 import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 import com.sykeptical.hyperpop.models.IslandSceneBehavior
 import com.sykeptical.hyperpop.models.IslandTextContent
 import com.sykeptical.hyperpop.models.MarqueeDismissMode
@@ -360,14 +362,13 @@ private fun DiscreteTimeoutSlider(
 
     val displaySeconds = steps[sliderIndex.roundToInt().coerceIn(0, steps.lastIndex)]
 
-    Column(modifier = Modifier.padding(start = 56.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
         Text(
             text = valueLabel(displaySeconds),
-            style = MaterialTheme.typography.titleMedium,
+            style = HyperPopType.numeric,
             color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold
         )
-        Slider(
+        HpSlider(
             value = sliderIndex,
             onValueChange = { index ->
                 dragging = true
@@ -375,16 +376,16 @@ private fun DiscreteTimeoutSlider(
             },
             onValueChangeFinished = {
                 dragging = false
-                val selectedSeconds = steps[sliderIndex.roundToInt().coerceIn(0, steps.lastIndex)]
-                onCommit(selectedSeconds)
+                val snapped = sliderIndex.roundToInt().coerceIn(0, steps.lastIndex)
+                sliderIndex = snapped.toFloat()
+                onCommit(steps[snapped])
             },
             valueRange = 0f..(steps.size - 1).toFloat(),
-            steps = (steps.size - 2).coerceAtLeast(0)
         )
         Text(
             text = description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = HyperPopType.settingDescription,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -396,13 +397,12 @@ private fun stepIndex(steps: List<Int>, currentSeconds: Int): Float =
 fun SectionLabel(title: String, first: Boolean = false) {
     Text(
         text = title,
-        style = MaterialTheme.typography.titleMedium,
+        style = HyperPopType.section,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontWeight = FontWeight.Normal,
         modifier = Modifier.padding(
-            start = 16.dp,
+            start = 14.dp,
             end = 16.dp,
-            top = if (first) 4.dp else 20.dp,
+            top = if (first) 4.dp else 16.dp,
             bottom = 8.dp
         )
     )
@@ -417,15 +417,39 @@ private fun groupedShape(groupSize: Int, index: Int): Shape =
     getExpressiveShape(groupSize, index, ShapeStyle.Large)
 
 @Composable
+private fun GroupSurface(
+    shape: Shape,
+    enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(enabled = enabled, onClick = onClick)
+                } else {
+                    Modifier
+                }
+            ),
+        content = { content() },
+    )
+}
+
+@Composable
 fun SettingsCard(
     shape: Shape,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = shape,
-        modifier = Modifier.fillMaxWidth(),
-        content = content
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+        content = content,
     )
 }
 
@@ -443,7 +467,7 @@ fun SettingsRow(
         modifier = modifier
             .fillMaxWidth()
             .alpha(if (enabled) 1f else 0.5f)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SettingsIcon(icon)
@@ -451,13 +475,12 @@ fun SettingsRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
+                style = HyperPopType.settingLabel,
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = HyperPopType.settingDescription,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (value != null) {
@@ -499,12 +522,7 @@ fun <T : Enum<T>> EnumSettingCard(
     label: (T) -> String = { prettyEnumLabel(it) },
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Card(
-        onClick = { expanded = true },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = shape,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    GroupSurface(shape = shape, onClick = { expanded = true }) {
         Box {
             SettingsRow(
                 icon = icon ?: Icons.AutoMirrored.Filled.Notes,
@@ -579,12 +597,7 @@ private fun InheritedBooleanSettingCard(
         displayValue -> "On"
         else -> "Off"
     }
-    Card(
-        onClick = { expanded = true },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = shape,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    GroupSurface(shape = shape, onClick = { expanded = true }) {
         Box {
             SettingsRow(
                 icon = icon ?: Icons.AutoMirrored.Filled.Notes,
@@ -637,12 +650,7 @@ private fun <T : Enum<T>> InheritedEnumSettingCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val shown = if (allowInherit && rawValue == null) "Use global" else label(displayValue)
-    Card(
-        onClick = { expanded = true },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = shape,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    GroupSurface(shape = shape, onClick = { expanded = true }) {
         Box {
             SettingsRow(
                 icon = icon ?: Icons.AutoMirrored.Filled.Notes,
@@ -713,12 +721,10 @@ fun SettingsToggleCard(
     shape: Shape,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Card(
-        onClick = { if (enabled) onCheckedChange(!checked) },
-        enabled = enabled,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    GroupSurface(
         shape = shape,
-        modifier = Modifier.fillMaxWidth()
+        enabled = enabled,
+        onClick = { if (enabled) onCheckedChange(!checked) },
     ) {
         SettingsRow(
             icon = icon,

@@ -75,6 +75,37 @@ class CallNotificationClassifierTest {
     }
 
     @Test
+    fun telegramOngoingCallWithoutCallStyleIsACallAndNotConnected() {
+        val result = classifier.classify(
+            baseSignals(
+                actions = listOf(action("End call")),
+                isOngoing = true,
+                title = "Ongoing Telegram call",
+                text = "Ada",
+            )
+        )
+
+        assertTrue(result.isCall)
+        assertEquals(CallState.OUTGOING_CALLING, result.state)
+        assertEquals(CallActiveEvidence.NONE, result.activeEvidence)
+        assertEquals("unstyled-ongoing-call", result.reason)
+    }
+
+    @Test
+    fun ongoingEndActionWithoutCallTitleIsNotACall() {
+        val result = classifier.classify(
+            baseSignals(
+                actions = listOf(action("End")),
+                isOngoing = true,
+                title = "Downloading",
+                text = "file.apk",
+            )
+        )
+
+        assertFalse(result.isCall)
+    }
+
+    @Test
     fun malformedStandardNotificationIsNotCall() {
         val result = classifier.classify(baseSignals())
 
@@ -298,7 +329,10 @@ class CallNotificationClassifierTest {
         showsChronometer: Boolean = false,
         whenTime: Long = 0L,
         actions: List<CallActionSignal> = emptyList(),
-        isVideo: Boolean = false
+        isVideo: Boolean = false,
+        isOngoing: Boolean = false,
+        title: String = "",
+        text: String = "",
     ) = CallNotificationSignals(
         category = category,
         template = template,
@@ -306,6 +340,9 @@ class CallNotificationClassifierTest {
         showsChronometer = showsChronometer,
         whenTime = whenTime,
         actions = actions,
-        isVideoCall = isVideo
+        isOngoingEvent = isOngoing,
+        isVideoCall = isVideo,
+        title = title,
+        text = text,
     )
 }

@@ -60,6 +60,27 @@ object VoicePlaybackDecorationPolicy {
     fun rebuildIsland(): Boolean = false
 
     /**
+     * Instagram rewrites playback position many times a second. Refreshing the Focus
+     * card on each of those ticks stalls SystemUI. The first sample publishes immediately.
+     * Later samples wait until the displayed progress has changed and at least
+     * [FOCUS_PROGRESS_REFRESH_MS] has passed.
+     */
+    fun shouldPatchDisplayedProgress(
+        cachedPercent: Int,
+        cachedClock: String,
+        percent: Int,
+        clock: String,
+        elapsedSincePatchMs: Long,
+        minimumIntervalMs: Long = FOCUS_PROGRESS_REFRESH_MS,
+    ): Boolean {
+        if (cachedPercent == percent && cachedClock == clock) return false
+        if (cachedPercent < 0) return true
+        return elapsedSincePatchMs >= minimumIntervalMs
+    }
+
+    const val FOCUS_PROGRESS_REFRESH_MS = 1_000L
+
+    /**
      * A missing island is not proof the voice decoration is stale. The first post
      * caches it before the island record is visible to the next progress tick.
      */

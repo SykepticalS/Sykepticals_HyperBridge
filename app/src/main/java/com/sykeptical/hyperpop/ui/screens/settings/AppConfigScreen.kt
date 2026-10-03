@@ -33,7 +33,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Android
@@ -47,21 +46,14 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -76,7 +68,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -98,6 +89,10 @@ import com.sykeptical.hyperpop.models.NotificationType
 import com.sykeptical.hyperpop.ui.AppInfo
 import com.sykeptical.hyperpop.ui.AppListViewModel
 import com.sykeptical.hyperpop.ui.components.IslandSettingsControl
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 import com.sykeptical.hyperpop.ui.theme.HyperPopTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -114,7 +109,6 @@ enum class AppConfigSubscreen {
     CUSTOM_TRANSLATORS
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppConfigScreen(
     packageName: String,
@@ -198,7 +192,6 @@ fun AppConfigScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppConfigContent(
     appName: String,
@@ -255,50 +248,25 @@ fun AppConfigContent(
             // =========================================================================
             // MAIN OVERVIEW SCREEN
             // =========================================================================
-            val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-            Scaffold(
-                modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-                topBar = {
-                    LargeTopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.app_config_title),
-                                    maxLines = 1,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = stringResource(R.string.app_config_subtitle),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            FilledTonalIconButton(
-                                onClick = onBack,
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = stringResource(R.string.back)
-                                )
-                            }
-                        },
-                        scrollBehavior = scrollBehavior
-                    )
-                }
+            HpScaffold(
+                title = stringResource(R.string.app_config_title),
+                onBack = onBack,
             ) { padding ->
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(horizontal = HyperPopSpace.screen, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.app_config_subtitle),
+                            style = HyperPopType.secondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 4.dp),
+                        )
+                    }
                     // Header Overview Card
                     item {
                         AppHeaderCard(
@@ -322,29 +290,27 @@ fun AppConfigContent(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            group1Items.forEachIndexed { index, route ->
-                                val shape = expressiveCardShape(group1Items.size, index, large = true)
-
+                            group1Items.forEach { route ->
                                 when (route) {
                                     AppConfigSubscreen.NOTIFICATION_TYPES -> AppConfigOptionCard(
                                         title = stringResource(R.string.active_notifications_title),
                                         subtitle = activeTypesSubtitle,
                                         icon = Icons.Default.Notifications,
-                                        shape = shape,
+                                        shape = RoundedCornerShape(16.dp),
                                         onClick = { onNavigateSubscreen(AppConfigSubscreen.NOTIFICATION_TYPES) }
                                     )
                                     AppConfigSubscreen.ISLAND_BEHAVIOR -> AppConfigOptionCard(
                                         title = stringResource(R.string.island_behavior_title),
                                         subtitle = behaviorSubtitle,
                                         icon = Icons.Outlined.DisplaySettings,
-                                        shape = shape,
+                                        shape = RoundedCornerShape(16.dp),
                                         onClick = { onNavigateSubscreen(AppConfigSubscreen.ISLAND_BEHAVIOR) }
                                     )
                                     AppConfigSubscreen.BLOCKED_TERMS -> AppConfigOptionCard(
                                         title = stringResource(R.string.blocked_terms),
                                         subtitle = blockedSubtitle,
                                         icon = Icons.Default.Block,
-                                        shape = shape,
+                                        shape = RoundedCornerShape(16.dp),
                                         onClick = { onNavigateSubscreen(AppConfigSubscreen.BLOCKED_TERMS) }
                                     )
                                     else -> {}
@@ -360,7 +326,7 @@ fun AppConfigContent(
                             subtitle = stringResource(R.string.custom_translators_desc),
                             badge = stringResource(R.string.custom_translators_badge),
                             icon = Icons.Default.Extension,
-                            shape = RoundedCornerShape(24.dp),
+                            shape = RoundedCornerShape(16.dp),
                             onClick = { onNavigateSubscreen(AppConfigSubscreen.CUSTOM_TRANSLATORS) }
                         )
                     }
@@ -446,7 +412,6 @@ fun AppConfigContent(
 // REUSABLE SUBSCREEN CONTAINER
 // ------------------------------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubscreenScaffold(
     title: String,
@@ -456,56 +421,34 @@ fun SubscreenScaffold(
     floatingActionButton: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = appName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
-                        )
-                    }
-                },
-                actions = { actions() },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        floatingActionButton = floatingActionButton
+    HpScaffold(
+        title = title,
+        onBack = onBack,
+        actions = { actions() },
     ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = HyperPopSpace.screen, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                Text(
+                    text = appName,
+                    style = HyperPopType.secondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp),
+                )
+            }
             item {
                 content()
             }
             item {
                 Spacer(Modifier.height(80.dp))
+            }
+        }
+            Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+                floatingActionButton()
             }
         }
     }
@@ -529,6 +472,7 @@ fun AppConfigOptionCard(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 88.dp)
@@ -602,8 +546,9 @@ fun AppHeaderCard(
     onToggleBridged: (Boolean) -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
-        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(20.dp)) {
@@ -664,7 +609,7 @@ fun AppHeaderCard(
                     }
                 }
 
-                Switch(
+                HpSwitch(
                     checked = isBridged,
                     onCheckedChange = onToggleBridged,
                     modifier = Modifier.semantics {
@@ -703,8 +648,9 @@ fun AppNotificationTypesContent(
             else stringResource(R.string.cd_enable_type, typeLabel)
 
             Card(
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
@@ -731,7 +677,7 @@ fun AppNotificationTypesContent(
                             }
                         }
 
-                        Switch(
+                        HpSwitch(
                             checked = isChecked,
                             onCheckedChange = { onToggleType(type, it) },
                             modifier = Modifier.semantics { contentDescription = switchDesc }
@@ -804,7 +750,7 @@ fun AppNotificationTypesContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
+                    HpSwitch(
                         checked = voiceCompactDuration,
                         onCheckedChange = onToggleVoiceDuration
                     )
@@ -837,7 +783,8 @@ fun AppBehaviorContent(
         // "Use Global Defaults" toggle as the FIRST option in its own separate container Card
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -870,7 +817,7 @@ fun AppBehaviorContent(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(
+                HpSwitch(
                     checked = isUsingGlobal,
                     onCheckedChange = { useGlobal ->
                         if (useGlobal) {
@@ -917,7 +864,8 @@ fun AppConfigBlockedTermsContent(
         // Container 1: Input Box Card
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -973,7 +921,8 @@ fun AppConfigBlockedTermsContent(
         if (termsList.isEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
@@ -1010,11 +959,11 @@ fun AppConfigBlockedTermsContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                termsList.forEachIndexed { index, term ->
-                    val shape = expressiveCardShape(termsList.size, index, large = false)
+                termsList.forEachIndexed { _, term ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                        shape = shape,
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1077,7 +1026,8 @@ fun FutureFeaturePlaceholderCard(
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(20.dp)) {
@@ -1235,15 +1185,4 @@ private fun SampleAppConfigContent(currentSubscreen: AppConfigSubscreen?) {
         onUpdateBlockedTerms = {},
         onNavConfigClick = {}
     )
-}
-
-private fun expressiveCardShape(groupSize: Int, index: Int, large: Boolean): Shape {
-    val outer = if (large) 24.dp else 15.dp
-    val inner = if (large) 4.dp else 5.dp
-    if (groupSize <= 1) return RoundedCornerShape(outer)
-    return when (index) {
-        0 -> RoundedCornerShape(topStart = outer, topEnd = outer, bottomEnd = inner, bottomStart = inner)
-        groupSize - 1 -> RoundedCornerShape(topStart = inner, topEnd = inner, bottomEnd = outer, bottomStart = outer)
-        else -> RoundedCornerShape(inner)
-    }
 }

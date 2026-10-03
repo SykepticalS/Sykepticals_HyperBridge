@@ -58,6 +58,46 @@ class OutgoingReplyEchoDetectorTest {
     }
 
     @Test
+    fun contactNamedMeIsAnInboundMessage() {
+        assertFalse(
+            OutgoingReplyEchoDetector.isOutgoingEcho(
+                messages = listOf(MessageContentCandidate("Me", "Helo")),
+                selfName = "You",
+                title = "Me",
+                text = "Helo",
+                conversationTitle = "Me",
+            )
+        )
+    }
+
+    @Test
+    fun prefixedContactNamedMeIsAnInboundMessage() {
+        assertFalse(
+            OutgoingReplyEchoDetector.isOutgoingEcho(
+                messages = listOf(MessageContentCandidate("Me", "Helo")),
+                selfName = "You",
+                title = "Me",
+                text = "Me: Helo",
+                extras = listOf("Me: Helo"),
+                conversationTitle = "Me",
+            )
+        )
+    }
+
+    @Test
+    fun missedCallLineWithEmptySenderIsNotAnEcho() {
+        assertFalse(
+            OutgoingReplyEchoDetector.isOutgoingEcho(
+                messages = listOf(MessageContentCandidate("", "Missed Call")),
+                selfName = "",
+                title = "",
+                text = "Missed Call",
+                conversationTitle = "",
+            )
+        )
+    }
+
+    @Test
     fun remoteInputHistoryMatchIsEcho() {
         assertTrue(
             OutgoingReplyEchoDetector.isOutgoingEcho(

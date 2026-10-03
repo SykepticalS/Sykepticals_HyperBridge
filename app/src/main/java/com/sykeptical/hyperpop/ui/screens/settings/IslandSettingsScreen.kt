@@ -1,6 +1,7 @@
 package com.sykeptical.hyperpop.ui.screens.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -55,7 +57,13 @@ import com.sykeptical.hyperpop.ui.components.SettingsToggleCard
 import com.sykeptical.hyperpop.ui.components.ShapeStyle
 import com.sykeptical.hyperpop.ui.components.getExpressiveShape
 import com.sykeptical.hyperpop.ui.system.HpApplyBanner
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSlider
 import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
+import com.sykeptical.hyperpop.ui.system.IslandDemo
+import com.sykeptical.hyperpop.ui.system.IslandDemoKind
 import com.sykeptical.hyperpop.ui.theme.HyperPopTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -112,26 +120,21 @@ fun IslandSettingsContent(
         "scenes" -> setOf(IslandControlGroup.Scenes)
         else -> emptySet()
     }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text(title, style = MaterialTheme.typography.headlineMedium) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = title, onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = HyperPopSpace.screen, vertical = 8.dp)
         ) {
+            if (section == "timing") {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IslandDemo(IslandDemoKind.Message)
+                }
+            }
             if (groups.isNotEmpty()) {
                 IslandSettingsControl(
                     config = globalConfig,
@@ -212,7 +215,7 @@ private fun MotionSection() {
                 title = "Scrolling speed",
                 subtitle = "${speed.toInt()} px/sec"
             )
-            Slider(
+            HpSlider(
                 value = speed,
                 onValueChange = { speed = it },
                 onValueChangeFinished = {
@@ -281,7 +284,7 @@ private fun VisualTuningSection(includeSpeed: Boolean) {
                     title = "Scrolling speed",
                     subtitle = "${speed.toInt()} px/sec"
                 )
-                Slider(
+                HpSlider(
                     value = speed,
                     onValueChange = { speed = it },
                     onValueChangeFinished = { persist() },
@@ -298,7 +301,7 @@ private fun VisualTuningSection(includeSpeed: Boolean) {
                     title = "Glow range",
                     subtitle = "${range.toInt()}%"
                 )
-                Slider(
+                HpSlider(
                     value = range,
                     onValueChange = { range = it },
                     onValueChangeFinished = { persist() },

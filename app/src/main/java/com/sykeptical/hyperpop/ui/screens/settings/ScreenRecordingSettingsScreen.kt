@@ -24,28 +24,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,8 +51,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -73,8 +64,16 @@ import com.sykeptical.hyperpop.models.ScreenRecordingRightDesign
 import com.sykeptical.hyperpop.service.recording.ScreenRecordingClassifier
 import com.sykeptical.hyperpop.ui.components.formatSeconds
 import com.sykeptical.hyperpop.ui.components.timeoutSteps
+import com.sykeptical.hyperpop.ui.system.HpChoiceRow
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSectionTitle
+import com.sykeptical.hyperpop.ui.system.HpSlider
+import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import com.sykeptical.hyperpop.ui.theme.HyperPopTheme
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun ScreenRecordingSettingsScreen(
@@ -155,7 +154,6 @@ fun ScreenRecordingSettingsScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenRecordingSettingsContent(
     leftDesign: ScreenRecordingLeftDesign,
@@ -175,47 +173,29 @@ fun ScreenRecordingSettingsContent(
     var showLeftSheet by remember { mutableStateOf(false) }
     var showRightSheet by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.screen_recording_customization_title)) },
-                navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                }
-            )
-        }
+    HpScaffold(
+        title = stringResource(R.string.screen_recording_customization_title),
+        onBack = onBack,
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(horizontal = HyperPopSpace.screen)
         ) {
-            Text(
-                stringResource(R.string.preview),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            HpSectionTitle(stringResource(R.string.preview), first = true)
 
             ScreenRecordingIslandPreview(left = leftDesign, right = rightDesign)
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Text(
-                stringResource(R.string.group_configuration),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.semantics { heading() }
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            HpSectionTitle(stringResource(R.string.group_configuration))
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(vertical = 4.dp)) {
@@ -238,7 +218,7 @@ fun ScreenRecordingSettingsContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Switch(checked = tapToStart, onCheckedChange = onTapToStartChange)
+                        HpSwitch(checked = tapToStart, onCheckedChange = onTapToStartChange)
                     }
                     Column {
                             HorizontalDivider(
@@ -297,7 +277,7 @@ fun ScreenRecordingSettingsContent(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Switch(checked = countdownEnabled, onCheckedChange = onCountdownEnabledChange)
+                                HpSwitch(checked = countdownEnabled, onCheckedChange = onCountdownEnabledChange)
                             }
                     }
                 }
@@ -306,7 +286,8 @@ fun ScreenRecordingSettingsContent(
             Spacer(modifier = Modifier.height(24.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(vertical = 4.dp)) {
@@ -386,7 +367,8 @@ fun ScreenRecordingSettingsContent(
             val isTimeoutEnabled = savedTimeout > 0
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
@@ -405,7 +387,7 @@ fun ScreenRecordingSettingsContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Switch(
+                        HpSwitch(
                             checked = isTimeoutEnabled,
                             onCheckedChange = { enabled ->
                                 onSavedTimeoutChange(if (enabled) 4 else 0)
@@ -427,15 +409,17 @@ fun ScreenRecordingSettingsContent(
                                 fontWeight = FontWeight.Bold
                             )
 
-                            val currentIndex = timeoutSteps.indexOf(savedTimeout).coerceAtLeast(0).toFloat()
-                            Slider(
-                                value = currentIndex,
-                                onValueChange = { index ->
-                                    val selectedSeconds = timeoutSteps[index.toInt()]
-                                    onSavedTimeoutChange(selectedSeconds)
+                            val currentIndex = timeoutSteps.indexOf(savedTimeout).coerceAtLeast(0)
+                            var slider by remember(savedTimeout) { mutableFloatStateOf(currentIndex.toFloat()) }
+                            HpSlider(
+                                value = slider,
+                                onValueChange = { slider = it },
+                                onValueChangeFinished = {
+                                    val index = slider.roundToInt().coerceIn(0, timeoutSteps.lastIndex)
+                                    slider = index.toFloat()
+                                    onSavedTimeoutChange(timeoutSteps[index])
                                 },
-                                valueRange = 0f..(timeoutSteps.size - 1).toFloat(),
-                                steps = timeoutSteps.size - 2
+                                valueRange = 0f..timeoutSteps.lastIndex.toFloat(),
                             )
                         }
                     }
@@ -492,8 +476,9 @@ private fun ScreenRecordingIslandPreview(
     right: ScreenRecordingRightDesign
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
@@ -680,41 +665,16 @@ private fun <T> ScreenRecordingOptionBottomSheet(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            options.forEach { option ->
-                val isSelected = option == selected
-                Surface(
-                    onClick = {
-                        onSelect(option)
-                        onDismiss()
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    } else {
-                        Color.Transparent
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = labelFor(option),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = null
-                        )
-                    }
+            HpGroup {
+                options.forEach { option ->
+                    HpChoiceRow(
+                        title = labelFor(option),
+                        selected = option == selected,
+                        onClick = {
+                            onSelect(option)
+                            onDismiss()
+                        },
+                    )
                 }
             }
         }

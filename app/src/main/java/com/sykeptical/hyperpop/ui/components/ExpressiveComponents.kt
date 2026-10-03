@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,55 +23,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpSectionTitle
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 
-/**
- * A Material 3 Expressive Card container for settings groups.
- * Features rounded corners (24dp) and Surface Container colors.
- */
 @Composable
 fun ExpressiveGroupCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        // Expressive Design uses larger corner radii (24dp - 28dp)
-        shape = RoundedCornerShape(16.dp),
-        // Use 'surfaceContainer' for a distinct but subtle background separation
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Flat design
-    ) {
+    HpGroup(modifier) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp), // Vertical padding for list items
-            content = content
+            modifier = Modifier.padding(vertical = 8.dp),
+            content = content,
         )
     }
 }
 
-/**
- * A standardized Section Title for settings.
- */
 @Composable
 fun ExpressiveSectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, bottom = 12.dp, top = 24.dp)
-            .semantics { heading() }
-    )
+    HpSectionTitle(text)
 }
 
-/**
- * An Expressive Settings Item with larger touch targets and icons.
- */
 @Composable
 fun ExpressiveSettingsItem(
     icon: ImageVector,
@@ -82,44 +54,42 @@ fun ExpressiveSettingsItem(
     subtitle: String? = null,
     onClick: () -> Unit,
     showChevron: Boolean = true,
-    iconTint: Color = MaterialTheme.colorScheme.primary
+    iconTint: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp), // Increased padding for "Expressive" feel
+            .padding(horizontal = HyperPopSpace.rowHorizontal, vertical = HyperPopSpace.rowVertical),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Icon Container
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .background(iconTint.copy(alpha = 0.1f), CircleShape), // Subtle colored background behind icon
+                .size(32.dp)
+                .background(iconTint.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(14.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = HyperPopType.settingLabel,
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (subtitle != null) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = HyperPopType.settingDescription,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -127,10 +97,9 @@ fun ExpressiveSettingsItem(
 
         if (showChevron) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(20.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

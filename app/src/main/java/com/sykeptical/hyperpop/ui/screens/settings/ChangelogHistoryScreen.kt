@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.*
@@ -20,11 +19,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperpop.R
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import com.sykeptical.hyperpop.util.DocumentationUrls
 
 data class VersionLog(val version: String, val titleRes: Int, val isLatest: Boolean = false)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChangelogHistoryScreen(onBack: () -> Unit) {
     val uriHandler = LocalUriHandler.current
@@ -46,33 +46,16 @@ fun ChangelogHistoryScreen(onBack: () -> Unit) {
         VersionLog("0.1.0", R.string.title_0_1_0)
     )
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.version_history), fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.version_history), onBack = onBack) { padding ->
         LazyColumn(
-            modifier = Modifier.padding(padding).padding(16.dp),
+            modifier = Modifier.padding(padding).padding(horizontal = HyperPopSpace.screen),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Row(
@@ -109,14 +92,15 @@ fun ChangelogHistoryScreen(onBack: () -> Unit) {
 
 @Composable
 fun ChangelogItem(log: VersionLog, onClick: () -> Unit) {
-    val cardColor = if (log.isLatest) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
-    val contentColor = if (log.isLatest) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    val cardColor = MaterialTheme.colorScheme.surfaceContainer
+    val contentColor = MaterialTheme.colorScheme.onSurface
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Row(

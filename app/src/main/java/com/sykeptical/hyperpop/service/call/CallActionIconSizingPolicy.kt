@@ -13,4 +13,13 @@ object CallActionIconSizingPolicy {
     fun answerRejectPaddingPercent(configuredPaddingPercent: Int): Int =
         (classicPaddingPercent(configuredPaddingPercent) + ANSWER_REJECT_EXTRA_PADDING_PERCENT)
             .coerceAtMost(18)
+
+    /**
+     * Answer and hang-up are icon buttons. A source title such as "End call" makes HyperOS
+     * stretch the control into a text action.
+     */
+    fun islandActionTitle(role: CallActionRole, sourceTitle: String, hasIcon: Boolean): String {
+        val iconOnly = hasIcon && (role == CallActionRole.ANSWER || role == CallActionRole.DECLINE_OR_HANG_UP)
+        return if (iconOnly) "" else sourceTitle
+    }
 }

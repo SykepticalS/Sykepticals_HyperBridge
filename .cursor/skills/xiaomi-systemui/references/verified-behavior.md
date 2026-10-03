@@ -64,6 +64,23 @@ of extrapolating from an unrelated build.
   - `com.xiaomi.xmsf` and `com.miui.screenrecorder` were not pulled or loaded. Their `pm path` results were not used as class-ownership evidence.
 - HyperPop implication: the Dynamic Island window, animation, glow, and focus classes HyperPop loads under `miui.systemui.dynamicisland` and `miui.systemui.notification.focus` are in `MIUISystemUIPlugin.apk`. `DynamicIslandController` and the `mediaisland` classes HyperPop loads are in `MiuiSystemUI.apk`.
 
+## Settings visual metrics in MiuiSystemUI
+
+### Finding
+
+- Date: 2026-10-02
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same wireless serial as the identity entry above.
+- SystemUI/plugin version: `com.android.systemui` versionName `16.03.251211.r` (see identity entry).
+- APK SHA-256: `MiuiSystemUI.apk` `A423B9805823B93301A0094732274F4E5EA951F86F333C7B94D9730715576E06`
+- Class/method/event: `miuix.slidingwidget.widget.SlidingButtonHelper.initResource`, `miuix.androidbasewidget.widget.SeekBar.onDraw`, and the `miuix_appcompat_sliding_button_*`, `miuix_appcompat_seekbar_height`, `miuix_preference_item_*`, `miuix_appcompat_action_bar_title_horizontal_padding`, `miuix_theme_radius_common`, `miuix_font_size_title1` resources.
+- Evidence source: JADX on the pulled `MiuiSystemUI.apk`, plus `aapt dump --values resources` for the dimen/color payloads. Display Settings on the phone was also measured: card corner matches 16dp, seek track height matches 28dp, switch width matches 49dp.
+- Observation:
+  - Sliding button computed size is width 49dp and height 32dp (28dp bar plus 2dp frame padding on each side). Thumb is 20dp, inset 4dp. Frame corner radius is 36dp. Default on-color is `#3482FF` light / `#277AF7` dark (`miuix_color_blue_*_primary_default`). Off track is `miuix_color_white_level7` (`#33FFFFFF`) in dark and `miuix_color_black_level7` (`#1A000000`) in light.
+  - Seek bar progress height is `miuix_appcompat_seekbar_height` = 28dp. Custom track corner is 14dp.
+  - Preference row minimum height is 56dp. Horizontal content padding is 16dp. Vertical item padding is 14dp. Page horizontal padding token `miuix_theme_padding_horizontal_common` is 12dp. Expanded title inset `miuix_appcompat_action_bar_title_horizontal_padding` is 26dp. Expanded title size `miuix_font_size_title1` is 32sp. Group corner `miuix_theme_radius_common` is 16dp.
+  - The connected Settings app’s brightness slider was themed blue `#5786F7`, not the miuix default `#3482FF`. Geometry still matched the dimens above.
+- HyperPop implication: settings controls should use these miuix dimens. Accent may follow the live theme; the code default remains `#3482FF` / `#277AF7`.
+
 ## Entry template
 
 ### Finding

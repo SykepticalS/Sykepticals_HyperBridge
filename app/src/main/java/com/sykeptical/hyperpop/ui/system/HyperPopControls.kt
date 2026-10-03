@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,34 +28,35 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sykeptical.hyperpop.R
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HpScaffold(
     title: String,
@@ -63,28 +65,53 @@ fun HpScaffold(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            LargeTopAppBar(
-                title = { Text(title, style = HyperPopType.largeTitle) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .statusBarsPadding(),
+            ) {
+                if (onBack != null) {
+                    Row(
+                        Modifier.fillMaxWidth().height(48.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .padding(start = 4.dp)
+                                .size(48.dp)
+                                .clickable(onClick = onBack),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                                tint = MaterialTheme.colorScheme.onBackground,
+                            )
                         }
+                        Spacer(Modifier.weight(1f))
+                        actions()
                     }
-                },
-                actions = actions,
-                scrollBehavior = scroll,
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                ),
-            )
+                }
+                Text(
+                    text = title,
+                    style = HyperPopType.largeTitle,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(
+                        start = HyperPopSpace.titleInset,
+                        end = HyperPopSpace.titleInset,
+                        top = 4.dp,
+                        bottom = 10.dp,
+                    ),
+                )
+            }
         },
         content = content,
     )
@@ -99,7 +126,7 @@ fun HpSectionTitle(text: String, first: Boolean = false) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = 16.dp,
+                start = 14.dp,
                 end = 16.dp,
                 top = if (first) 4.dp else HyperPopSpace.sectionTop,
                 bottom = HyperPopSpace.sectionBottom,
@@ -168,7 +195,7 @@ fun HpSwitch(
         animationSpec = tween(duration),
         label = "switchTrack",
     )
-    val travel = HyperPopSize.switchWidth - HyperPopSize.switchThumb - 6.dp
+    val travel = HyperPopSize.switchWidth - HyperPopSize.switchThumb - (HyperPopSize.switchThumbInset * 2)
     val offset by animateDpAsState(
         targetValue = if (checked) travel else 0.dp,
         animationSpec = tween(duration),
@@ -178,20 +205,27 @@ fun HpSwitch(
         modifier = modifier
             .width(HyperPopSize.switchWidth)
             .height(HyperPopSize.switchHeight)
+            .alpha(if (enabled) 1f else 0.38f)
             .clip(CircleShape)
             .background(track)
-        .then(
-            if (interactive) {
-                Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
-            } else {
-                Modifier
-            }
-        ),
+            .then(
+                if (interactive) {
+                    Modifier.toggleable(
+                        value = checked,
+                        enabled = enabled,
+                        role = Role.Switch,
+                        onValueChange = onCheckedChange,
+                    )
+                } else {
+                    Modifier
+                }
+            ),
+        contentAlignment = Alignment.CenterStart,
     ) {
         Box(
             modifier = Modifier
-                .padding(start = 3.dp, top = 3.dp)
-                .padding(start = offset)
+                .padding(start = HyperPopSize.switchThumbInset)
+                .offset(x = offset)
                 .size(HyperPopSize.switchThumb)
                 .clip(CircleShape)
                 .background(Color.White),
@@ -199,7 +233,6 @@ fun HpSwitch(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HpSlider(
     value: Float,
@@ -209,38 +242,59 @@ fun HpSlider(
     onValueChangeFinished: (() -> Unit)? = null,
     enabled: Boolean = true,
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    Slider(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        enabled = enabled,
-        valueRange = valueRange,
-        onValueChangeFinished = onValueChangeFinished,
-        interactionSource = interaction,
-        thumb = {
-            SliderDefaults.Thumb(
-                interactionSource = interaction,
-                colors = SliderDefaults.colors(thumbColor = Color.White),
-                thumbSize = DpSize(HyperPopSize.sliderThumb, HyperPopSize.sliderThumb),
-                enabled = enabled,
-            )
-        },
-        track = { state ->
-            SliderDefaults.Track(
-                sliderState = state,
-                modifier = Modifier.height(HyperPopSize.sliderHeight),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = if (hyperPopIsDark()) HyperPopColor.darkTrack else HyperPopColor.lightTrack,
-                ),
-                enabled = enabled,
-                thumbTrackGapSize = 0.dp,
-                trackInsideCornerSize = HyperPopSize.sliderHeight / 2,
-            )
-        },
-    )
+    val span = (valueRange.endInclusive - valueRange.start).coerceAtLeast(0.0001f)
+    val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
+    val active = hyperPopAccent()
+    val inactive = if (hyperPopIsDark()) HyperPopColor.darkTrack else HyperPopColor.lightTrack
+    fun emit(raw: Float) {
+        onValueChange(valueRange.start + raw.coerceIn(0f, 1f) * span)
+    }
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .alpha(if (enabled) 1f else 0.38f)
+            .pointerInput(enabled, valueRange) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { position ->
+                    emit(position.x / size.width)
+                    onValueChangeFinished?.invoke()
+                }
+            }
+            .pointerInput(enabled, valueRange) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragEnd = { onValueChangeFinished?.invoke() },
+                    onHorizontalDrag = { change, _ ->
+                        emit(change.position.x / size.width)
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val travel = maxWidth - HyperPopSize.sliderThumb
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(HyperPopSize.sliderHeight)
+                .clip(CircleShape)
+                .background(inactive),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceAtLeast(0.001f))
+                .height(HyperPopSize.sliderHeight)
+                .clip(CircleShape)
+                .background(active),
+        )
+        Box(
+            Modifier
+                .offset(x = travel * fraction)
+                .size(HyperPopSize.sliderThumb)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+    }
 }
 
 @Composable

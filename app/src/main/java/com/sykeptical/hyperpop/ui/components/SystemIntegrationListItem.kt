@@ -18,7 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import com.sykeptical.hyperpop.ui.system.HpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -107,10 +107,11 @@ fun SystemIntegrationListItem(
                 Icon(Icons.Default.Settings, stringResource(R.string.settings_action), tint = MaterialTheme.colorScheme.primary)
             }
         }
-        Switch(
+        HpSwitch(
             checked = integration.enabled,
             onCheckedChange = onToggle,
-            enabled = integration.available
+            enabled = integration.available,
+            interactive = true,
         )
     }
 }

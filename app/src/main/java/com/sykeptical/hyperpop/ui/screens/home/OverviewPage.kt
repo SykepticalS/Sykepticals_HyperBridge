@@ -53,7 +53,7 @@ fun OverviewPage(
             .padding(horizontal = HyperPopSpace.screen)
             .padding(top = 28.dp, bottom = 24.dp),
     ) {
-        Text(stringResource(R.string.app_name), style = HyperPopType.largeTitle)
+        Text(stringResource(R.string.app_name), style = HyperPopType.largeTitle, modifier = Modifier.padding(start = 14.dp))
         Spacer(Modifier.height(20.dp))
         CyclingIslandDemo()
         Spacer(Modifier.height(20.dp))

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -54,6 +55,8 @@ import com.sykeptical.hyperpop.ui.components.AppListItem
 import com.sykeptical.hyperpop.ui.components.EmptyState
 import com.sykeptical.hyperpop.ui.components.SystemIntegrationListItem
 import com.sykeptical.hyperpop.ui.system.HpSegmented
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -80,31 +83,17 @@ fun LibraryPage(
     val isRefreshing = isLoading && apps.isNotEmpty()
     val pullState = rememberPullToRefreshState()
 
-    Scaffold(
-        // [FIX] Only respect Status Bars here.
-        contentWindowInsets = WindowInsets.statusBars,
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.tab_apps), style = MaterialTheme.typography.headlineMedium) },
-                actions = {
-                    if (showSettingsAction) Surface(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .padding(end = 8.dp)
-                        .clip(CircleShape) // Ensure ripple is circular
-                        .clickable(onClick = onSettingsClick), // [NEW] Added Clickable here
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Settings, stringResource(R.string.settings), modifier = Modifier.size(20.dp))
-                    }
-                }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-            )
-        }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
+    ) {
+        Text(
+            text = stringResource(R.string.tab_apps),
+            style = HyperPopType.largeTitle,
+            modifier = Modifier.padding(start = 26.dp, end = 26.dp, top = 8.dp, bottom = 8.dp),
+        )
+        Column(modifier = Modifier.fillMaxSize()) {
             AppListFilterSection(
                 searchQuery = searchQuery,
                 onSearchChange = { viewModel.librarySearch.value = it },
@@ -165,10 +154,9 @@ fun LibraryPage(
                                 item(key = "system_header") {
                                     Text(
                                         text = stringResource(R.string.system_integrations),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                                        style = HyperPopType.section,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 26.dp, vertical = 8.dp)
                                     )
                                 }
                                 items(visibleSystems, key = { "system_${it.id.name}" }) { integration ->
@@ -180,10 +168,6 @@ fun LibraryPage(
                                                 { onSystemConfig(integration) }
                                             } else null
                                         )
-                                        HorizontalDivider(
-
-                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                                        )
                                     }
                                 }
                             }
@@ -193,9 +177,6 @@ fun LibraryPage(
                                         app = app,
                                         onToggle = { viewModel.toggleApp(app.packageName, it) },
                                         onSettingsClick = { onConfig(app) },
-                                    )
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                                     )
                                 }
                             }

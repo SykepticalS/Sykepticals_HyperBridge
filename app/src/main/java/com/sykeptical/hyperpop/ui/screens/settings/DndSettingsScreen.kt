@@ -36,6 +36,10 @@ import com.sykeptical.hyperpop.models.IslandSceneBehavior
 import com.sykeptical.hyperpop.ui.components.EnumSettingCard
 import com.sykeptical.hyperpop.ui.components.ListOptionCard
 import com.sykeptical.hyperpop.ui.components.SectionLabel
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,29 +52,18 @@ fun DndSettingsScreen(onBack: () -> Unit) {
     val globalConfig by prefs.globalConfigFlow.collectAsState(initial = IslandConfig())
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.dnd_mode_title)) },
-                navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                }
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.dnd_mode_title), onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = HyperPopSpace.screen)
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
                 text = stringResource(R.string.dnd_mode_desc),
-                style = MaterialTheme.typography.bodyMedium,
+                style = HyperPopType.secondary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 16.dp, start = 8.dp, end = 8.dp)
+                modifier = Modifier.padding(bottom = 8.dp, start = 14.dp, end = 14.dp)
             )
 
             ListOptionCard(
@@ -82,7 +75,7 @@ fun DndSettingsScreen(onBack: () -> Unit) {
                     scope.launch { prefs.setAutoDetectDnd(!autoDetectDnd) }
                 },
                 trailingContent = {
-                    Switch(checked = autoDetectDnd, onCheckedChange = {
+                    HpSwitch(checked = autoDetectDnd, onCheckedChange = {
                         scope.launch { prefs.setAutoDetectDnd(it) }
                     })
                 }
@@ -99,7 +92,7 @@ fun DndSettingsScreen(onBack: () -> Unit) {
                     scope.launch { prefs.setDndModeEnabled(!isDndModeEnabled) }
                 },
                 trailingContent = {
-                    Switch(checked = isDndModeEnabled, onCheckedChange = {
+                    HpSwitch(checked = isDndModeEnabled, onCheckedChange = {
                         scope.launch { prefs.setDndModeEnabled(it) }
                     })
                 }

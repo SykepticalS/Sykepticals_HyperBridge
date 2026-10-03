@@ -1,28 +1,14 @@
 package com.sykeptical.hyperpop.ui.screens.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -38,12 +23,16 @@ import com.sykeptical.hyperpop.HyperPopApplication
 import com.sykeptical.hyperpop.island.backend.IslandProtocol
 import com.sykeptical.hyperpop.island.backend.SystemUiIslandBackend
 import com.sykeptical.hyperpop.root.RootShellService
-import com.sykeptical.hyperpop.xposed.runtime.EnvironmentHealth
+import com.sykeptical.hyperpop.ui.system.HpButton
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpStatusRow
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
+import com.sykeptical.hyperpop.ui.system.HyperPopType
 import com.sykeptical.hyperpop.xposed.runtime.EnvironmentRuntime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetupHealthScreen(
     onBack: () -> Unit,
@@ -62,67 +51,58 @@ fun SetupHealthScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Privileged environment") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-            )
-        },
-    ) { padding ->
+    HpScaffold(title = "Privileged environment", onBack = onBack) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp).verticalScroll(rememberScrollState()),
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = HyperPopSpace.screen)
+                .verticalScroll(rememberScrollState()),
         ) {
-            HealthRow("Supported Xiaomi / HyperOS", health.supportedDevice)
-            HealthRow("Root", health.rootAvailable)
-            HealthRow("LSPosed service / API", health.moduleApiCompatible)
-            HealthRow("SystemUI scope", health.systemUiScope)
-            HealthRow("XMSF scope", health.xmsfScope)
-            HealthRow("SystemUI notification hook", health.notificationIngressReady)
-            HealthRow("Island backend", health.islandDispatcherReady)
-            HealthRow("XMSF Focus hook configured", health.xmsfHookConfigured)
-            HealthRow("Focus backend", health.focusCompatible)
-            HealthRow("Backend protocol", health.backendProtocolCompatible)
-
-            message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Spacer(Modifier.height(16.dp))
-            OutlinedButton(
+            HpGroup {
+                HpStatusRow("Supported Xiaomi / HyperOS", if (health.supportedDevice) "Ready" else "Unavailable", ok = health.supportedDevice)
+                HpStatusRow("Root", if (health.rootAvailable) "Ready" else "Unavailable", ok = health.rootAvailable)
+                HpStatusRow("LSPosed service / API", if (health.moduleApiCompatible) "Ready" else "Unavailable", ok = health.moduleApiCompatible)
+                HpStatusRow("SystemUI scope", if (health.systemUiScope) "Ready" else "Unavailable", ok = health.systemUiScope)
+                HpStatusRow("XMSF scope", if (health.xmsfScope) "Ready" else "Unavailable", ok = health.xmsfScope)
+                HpStatusRow("SystemUI notification hook", if (health.notificationIngressReady) "Ready" else "Unavailable", ok = health.notificationIngressReady)
+                HpStatusRow("Island backend", if (health.islandDispatcherReady) "Ready" else "Unavailable", ok = health.islandDispatcherReady)
+                HpStatusRow("XMSF Focus hook configured", if (health.xmsfHookConfigured) "Ready" else "Unavailable", ok = health.xmsfHookConfigured)
+                HpStatusRow("Focus backend", if (health.focusCompatible) "Ready" else "Unavailable", ok = health.focusCompatible)
+                HpStatusRow("Backend protocol", if (health.backendProtocolCompatible) "Ready" else "Unavailable", ok = health.backendProtocolCompatible)
+            }
+            message?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    it,
+                    style = HyperPopType.secondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+            Spacer(Modifier.height(HyperPopSpace.groupGap))
+            HpButton(
+                text = "Request required scopes",
                 onClick = {
                     (context.applicationContext as? HyperPopApplication)?.requestRequiredScopes {
                         message = it.fold({ "Scopes granted. Restart them to load hooks." }, { error -> error.message })
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Request required scopes") }
+            )
             Spacer(Modifier.height(8.dp))
-            Button(
+            HpButton(
+                text = "Restart scopes",
+                enabled = health.rootAvailable,
                 onClick = {
                     scope.launch {
                         val result = RootShellService.restartPackages(setOf(IslandProtocol.SYSTEM_UI_PACKAGE, IslandProtocol.XMSF_PACKAGE))
                         message = if (result.success) "SystemUI and XMSF restarted." else result.stderr
                     }
                 },
-                enabled = health.rootAvailable,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Restart scopes") }
+            )
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onNavigateToBugReport, modifier = Modifier.fillMaxWidth()) { Text("Report a problem") }
+            HpButton(text = "Report a problem", onClick = onNavigateToBugReport)
+            Spacer(Modifier.height(24.dp))
         }
-    }
-}
-
-@Composable
-private fun HealthRow(label: String, ready: Boolean) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(label)
-        Icon(
-            if (ready) Icons.Default.CheckCircle else Icons.Default.Error,
-            if (ready) "Ready" else "Unavailable",
-            tint = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-        )
     }
 }

@@ -13,6 +13,8 @@ import com.sykeptical.hyperpop.service.call.CallNotificationClassifier
 import com.sykeptical.hyperpop.service.call.CallNotificationSignals
 import com.sykeptical.hyperpop.service.call.CallState
 import com.sykeptical.hyperpop.service.NotificationRemoteViewsParser
+import com.sykeptical.hyperpop.service.voice.MediaBackedVoiceClassifier
+import com.sykeptical.hyperpop.service.voice.MediaBackedVoiceSignals
 import com.sykeptical.hyperpop.service.voice.VoicePlaybackDetector
 import com.sykeptical.hyperpop.service.voice.VoicePlaybackSignals
 import io.github.libxposed.api.XposedModule
@@ -216,6 +218,7 @@ object HookConfig {
             sbn.packageName == IslandProtocol.SCREEN_RECORDER_PACKAGE && sbn.id == 110 -> "SCREEN_RECORDING"
             notification.category == Notification.CATEGORY_CALL || template.contains("CallStyle") -> "CALL"
             notification.category == Notification.CATEGORY_MESSAGE || template.contains("MessagingStyle") -> "MESSAGE"
+            isMediaBackedVoice(notification, extras, template) -> "VOICE_MESSAGE"
             template.contains("MediaStyle") || notification.category == Notification.CATEGORY_TRANSPORT -> "MEDIA"
             isVoicePlayback(notification, extras, template) -> "VOICE_MESSAGE"
             extras.containsKey(Notification.EXTRA_PROGRESS_MAX) &&
@@ -227,6 +230,22 @@ object HookConfig {
             else -> "STANDARD"
         }
     }
+
+    private fun isMediaBackedVoice(
+        notification: Notification,
+        extras: Bundle,
+        template: String,
+    ): Boolean = MediaBackedVoiceClassifier.isVoiceMessage(
+        MediaBackedVoiceSignals(
+            isMediaTransport = template.contains("MediaStyle") ||
+                notification.category == Notification.CATEGORY_TRANSPORT,
+            title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+            text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
+            subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty(),
+            ticker = notification.tickerText?.toString().orEmpty(),
+            actionLabels = notification.actions?.map { it.title?.toString().orEmpty() }.orEmpty(),
+        )
+    )
 
     private fun isVoicePlayback(
         notification: Notification,

@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ClearAll
@@ -34,17 +33,11 @@ import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,7 +53,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,15 +62,15 @@ import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.data.AppPreferences
 import com.sykeptical.hyperpop.service.logincode.LoginCodeSettings
 import com.sykeptical.hyperpop.ui.components.SectionLabel
-import com.sykeptical.hyperpop.ui.components.ShapeStyle
-import com.sykeptical.hyperpop.ui.components.getExpressiveShape
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSwitch
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private data class LoginCodeApp(val packageName: String, val label: String, val icon: Bitmap?)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginCodeSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -89,7 +81,6 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
         value = loadLaunchableApps(context)
     }
     var query by rememberSaveable { mutableStateOf("") }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // Selection order is frozen when the list loads so toggling an app does not make it jump.
     val initialSelection = remember(installed) { settings.packages }
@@ -100,26 +91,11 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
     }
     val featureAlpha = if (settings.enabled) 1f else 0.5f
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.login_code_title)) },
-                navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.login_code_title), onBack = onBack) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            contentPadding = PaddingValues(horizontal = HyperPopSpace.screen, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
                 Text(
@@ -135,7 +111,7 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     subtitle = stringResource(R.string.login_code_enabled_desc),
                     icon = Icons.Outlined.Password,
                     checked = settings.enabled,
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(16.dp),
                     onChange = { scope.launch { prefs.setLoginCodeEnabled(it) } },
                 )
             }
@@ -146,7 +122,7 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     subtitle = stringResource(R.string.login_code_copy_setting_desc),
                     icon = Icons.Outlined.ContentCopy,
                     checked = settings.copyAction,
-                    shape = getExpressiveShape(4, 0, ShapeStyle.Large),
+                    shape = RoundedCornerShape(16.dp),
                     enabled = settings.enabled,
                     modifier = Modifier.alpha(featureAlpha),
                     onChange = { scope.launch { prefs.setLoginCodeCopyAction(it) } },
@@ -159,7 +135,7 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     subtitle = stringResource(R.string.login_code_dismiss_setting_desc),
                     icon = Icons.Outlined.ClearAll,
                     checked = settings.dismissAfterCopy,
-                    shape = getExpressiveShape(4, 1, ShapeStyle.Large),
+                    shape = RoundedCornerShape(16.dp),
                     enabled = dismissEnabled,
                     modifier = Modifier.alpha(if (dismissEnabled) 1f else 0.5f),
                     onChange = { scope.launch { prefs.setLoginCodeDismissAfterCopy(it) } },
@@ -171,7 +147,7 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     subtitle = stringResource(R.string.login_code_glow_setting_desc),
                     icon = Icons.Outlined.AutoAwesome,
                     checked = settings.glow,
-                    shape = getExpressiveShape(4, 2, ShapeStyle.Large),
+                    shape = RoundedCornerShape(16.dp),
                     enabled = settings.enabled,
                     modifier = Modifier.alpha(featureAlpha),
                     onChange = { scope.launch { prefs.setLoginCodeGlow(it) } },
@@ -183,7 +159,7 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     subtitle = stringResource(R.string.login_code_compact_setting_desc),
                     icon = Icons.Outlined.Pin,
                     checked = settings.compactCode,
-                    shape = getExpressiveShape(4, 3, ShapeStyle.Large),
+                    shape = RoundedCornerShape(16.dp),
                     enabled = settings.enabled,
                     modifier = Modifier.alpha(featureAlpha),
                     onChange = { scope.launch { prefs.setLoginCodeCompact(it) } },
@@ -217,7 +193,7 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     leadingIcon = { Icon(Icons.Outlined.Search, null) },
                     placeholder = { Text(stringResource(R.string.login_code_search_apps)) },
                     singleLine = true,
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 )
             }
@@ -228,11 +204,11 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            itemsIndexed(apps, key = { _, app -> app.packageName }) { index, app ->
+            itemsIndexed(apps, key = { _, app -> app.packageName }) { _, app ->
                 AppToggleRow(
                     app = app,
                     checked = app.packageName in settings.packages,
-                    shape = getExpressiveShape(apps.size, index, ShapeStyle.Large),
+                    shape = RoundedCornerShape(16.dp),
                     onChange = { checked -> scope.launch { prefs.setLoginCodeApp(app.packageName, checked) } },
                 )
             }
@@ -245,23 +221,24 @@ fun LoginCodeSettingsScreen(onBack: () -> Unit) {
 fun LoginCodePrivacyCard(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Icon(Icons.Outlined.Security, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(16.dp))
             Column {
                 Text(
                     stringResource(R.string.login_code_privacy_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     stringResource(R.string.login_code_privacy_desc),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -287,6 +264,7 @@ private fun ToggleCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
@@ -300,7 +278,7 @@ private fun ToggleCard(
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.width(12.dp))
-            Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+            HpSwitch(checked = checked, onCheckedChange = onChange, enabled = enabled)
         }
     }
 }
@@ -316,6 +294,7 @@ private fun AppToggleRow(
         onClick = { onChange(!checked) },
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -348,7 +327,7 @@ private fun AppToggleRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = checked, onCheckedChange = onChange)
+            HpSwitch(checked = checked, onCheckedChange = onChange)
         }
     }
 }

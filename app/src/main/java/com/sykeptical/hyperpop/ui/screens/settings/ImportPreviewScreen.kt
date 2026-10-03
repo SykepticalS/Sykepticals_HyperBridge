@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,23 +26,27 @@ import com.sykeptical.hyperpop.R
 import com.sykeptical.hyperpop.data.db.SettingsKeys
 import com.sykeptical.hyperpop.data.model.HyperPopBackup
 import com.sykeptical.hyperpop.ui.components.ExpressiveGroupCard
-import com.sykeptical.hyperpop.ui.components.ExpressiveSectionTitle
+import com.sykeptical.hyperpop.ui.system.HpButton
+import com.sykeptical.hyperpop.ui.system.HpGroup
+import com.sykeptical.hyperpop.ui.system.HpScaffold
+import com.sykeptical.hyperpop.ui.system.HpSectionTitle
+import com.sykeptical.hyperpop.ui.system.HpStatusRow
+import com.sykeptical.hyperpop.ui.system.HyperPopSpace
 import com.sykeptical.hyperpop.util.BackupSelection
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportPreviewScreen(
     backupData: HyperPopBackup,
     onBack: () -> Unit,
     onConfirmRestore: (BackupSelection) -> Unit
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    // Analyze content
     val settingsList = backupData.settings
+    val formattedDate = remember {
+        SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(backupData.metadata.timestamp))
+    }
 
     val hasBlocklist = settingsList.any { it.key == SettingsKeys.GLOBAL_BLOCKED_TERMS || it.key.endsWith("_blocked") }
     val hasPriorities = settingsList.any { it.key == SettingsKeys.PRIORITY_ORDER }
@@ -51,10 +54,6 @@ fun ImportPreviewScreen(
         it.key != SettingsKeys.GLOBAL_BLOCKED_TERMS &&
                 !it.key.endsWith("_blocked") &&
                 it.key != SettingsKeys.PRIORITY_ORDER
-    }
-
-    val formattedDate = remember {
-        SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(backupData.metadata.timestamp))
     }
 
     var selection by remember {
@@ -65,57 +64,26 @@ fun ImportPreviewScreen(
         ))
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.backup_restore_title)) },
-                navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
+    HpScaffold(title = stringResource(R.string.backup_restore_title), onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = HyperPopSpace.screen)
         ) {
-            // METADATA CARD
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-            ) {
-                Column(Modifier.padding(24.dp)) {
-                    Text(
-                        text = stringResource(R.string.backup_info_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Spacer(Modifier.height(12.dp))
-
-                    MetadataRow(stringResource(R.string.backup_meta_date), formattedDate)
-                    MetadataRow(stringResource(R.string.backup_meta_device), backupData.metadata.deviceModel)
-                    MetadataRow(stringResource(R.string.backup_meta_version), "${backupData.metadata.versionName} (${backupData.metadata.versionCode})")
-                    MetadataRow(stringResource(R.string.backup_meta_keys), "${settingsList.size}")
-                }
+            HpSectionTitle(stringResource(R.string.backup_info_title), first = true)
+            HpGroup {
+                HpStatusRow(stringResource(R.string.backup_meta_date), formattedDate)
+                HpStatusRow(stringResource(R.string.backup_meta_device), backupData.metadata.deviceModel)
+                HpStatusRow(
+                    stringResource(R.string.backup_meta_version),
+                    "${backupData.metadata.versionName} (${backupData.metadata.versionCode})",
+                )
+                HpStatusRow(stringResource(R.string.backup_meta_keys), "${settingsList.size}")
             }
 
-            ExpressiveSectionTitle(stringResource(R.string.backup_options_subtitle))
+            HpSectionTitle(stringResource(R.string.backup_options_subtitle))
 
             // SELECTION LIST
             ExpressiveGroupCard {
@@ -159,21 +127,13 @@ fun ImportPreviewScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(HyperPopSpace.groupGap))
 
-            // RESTORE BUTTON
-            Button(
+            HpButton(
+                text = stringResource(R.string.action_restore_selected),
                 onClick = { onConfirmRestore(selection) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                enabled = selection.includeSettings || selection.includeBlocklist || selection.includePriorities
-            ) {
-                Icon(Icons.Default.Restore, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.action_restore_selected))
-            }
+                enabled = selection.includeSettings || selection.includeBlocklist || selection.includePriorities,
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
         }
