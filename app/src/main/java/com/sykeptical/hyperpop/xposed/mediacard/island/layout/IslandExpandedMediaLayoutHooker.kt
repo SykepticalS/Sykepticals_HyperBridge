@@ -2,7 +2,9 @@ package com.sykeptical.hyperpop.xposed.mediacard.island.layout
 
 import android.content.Context
 import android.view.View
+import com.sykeptical.hyperpop.xposed.HookConfig
 import com.sykeptical.hyperpop.xposed.mediacard.MediaCardConstants
+import com.sykeptical.hyperpop.xposed.mediacard.island.layout.system.IslandExpandedMediaCameraBandPreset
 import com.sykeptical.hyperpop.xposed.mediacard.MediaCardRuntimeConfig
 import com.sykeptical.hyperpop.xposed.mediacard.island.layout.coloros.IslandExpandedMediaColorOsLayoutPreset
 import com.sykeptical.hyperpop.xposed.mediacard.island.layout.coloros.IslandExpandedMediaColorOsMetrics
@@ -97,12 +99,16 @@ object IslandExpandedMediaLayoutHooker {
     private class ReinflateHook(private val api: NativeApi) : Hooker {
         override fun intercept(chain: Chain): Any? {
             val result = chain.proceed()
-            if (!MediaCardRuntimeConfig.current.enabled) return result
+            if (!layoutRewriteActive()) return result
             runCatching {
                 val controller = chain.thisObject ?: return@runCatching
                 val context = api.readContext(controller) ?: return@runCatching
                 val layout = api.readNormalLayout(controller) ?: return@runCatching
                 api.applyCurrentLayout(layout, context)
+                if (!MediaCardRuntimeConfig.current.enabled) {
+                    if (HookConfig.expandedRoundedPill()) api.applyToPlayers(controller, layout, context)
+                    return@runCatching
+                }
                 api.applyToPlayers(controller, layout, context)
                 api.hideCoverSourceOnPlayers(controller)
             }.onFailure { MediaCardLog.e(TAG, "同步超级岛 real/dummy 媒体布局失败", it) }
@@ -114,17 +120,32 @@ object IslandExpandedMediaLayoutHooker {
     private class PlayerConstructorHook(private val api: NativeApi) : Hooker {
         override fun intercept(chain: Chain): Any? {
             val result = chain.proceed()
-            if (!MediaCardRuntimeConfig.current.enabled) return result
+            if (!layoutRewriteActive()) return result
             runCatching {
                 val player = chain.thisObject ?: return@runCatching
                 val context = chain.args.firstOrNull() as? Context ?: return@runCatching
                 api.readNormalLayout(player)?.let { layout ->
                     api.applyCurrentLayout(layout, context)
-                    api.syncAlbumArt(player, context)
+                    api.applyTo(layout, player)
+                    if (MediaCardRuntimeConfig.current.enabled) api.syncAlbumArt(player, context)
                 }
             }.onFailure { MediaCardLog.e(TAG, "初始化超级岛媒体布局失败", it) }
             return result
         }
+    }
+
+    /** Pill mode retunes the System layout even when media-card editing is off. */
+    private fun layoutRewriteActive(): Boolean =
+        MediaCardRuntimeConfig.current.enabled || HookConfig.expandedRoundedPill()
+
+    private fun applyCameraBand(environment: IslandExpandedMediaLayoutEnvironment) {
+        if (!HookConfig.expandedRoundedPill()) return
+        if (
+            MediaCardRuntimeConfig.current.islandExpanded.layoutStyle !=
+            MediaCardConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_SYSTEM
+        ) return
+        if (environment.coverHidden) return
+        IslandExpandedMediaCameraBandPreset.apply(environment)
     }
 
     private class NativeApi private constructor(
@@ -149,7 +170,8 @@ object IslandExpandedMediaLayoutHooker {
             get() = constrainWidthMethod != null && constrainHeightMethod != null
 
         fun applyCurrentLayout(constraintSet: Any, context: Context) {
-            if (!MediaCardRuntimeConfig.current.enabled) return
+            val editing = MediaCardRuntimeConfig.current.enabled
+            if (!editing && !HookConfig.expandedRoundedPill()) return
             runCatching {
                 val ids = IslandExpandedMediaLayoutResourceIds.from(context)
                 val environment = IslandExpandedMediaLayoutEnvironment(
@@ -162,6 +184,10 @@ object IslandExpandedMediaLayoutHooker {
                             MediaCardConstants.ISLAND_EXPANDED_MEDIA_COVER_STYLE_HIDDEN,
                     hideDeviceSwitch = hideDeviceSwitch()
                 )
+                if (!editing) {
+                    applyCameraBand(environment)
+                    return@runCatching
+                }
                 when (MediaCardRuntimeConfig.current.islandExpanded.layoutStyle) {
                     MediaCardConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_IOS ->
                         IslandExpandedMediaIosLayoutPreset.apply(environment)
@@ -179,6 +205,7 @@ object IslandExpandedMediaLayoutHooker {
                         IslandExpandedMediaPixelLayoutPreset.apply(environment)
                 }
                 applyElementOverrides(constraintSet, context, ids)
+                applyCameraBand(environment)
             }.onFailure { MediaCardLog.e(TAG, "应用超级岛媒体布局失败", it) }
         }
 
@@ -191,12 +218,11 @@ object IslandExpandedMediaLayoutHooker {
         fun applyToPlayers(controller: Any, constraintSet: Any, context: Context) {
             val style = MediaCardRuntimeConfig.current.islandExpanded.layoutStyle
             val albumArtSizeDp = albumArtSizeDp(style)
-            if (
-                albumArtSizeDp == null &&
+            val systemBand = albumArtSizeDp == null &&
                 style != MediaCardConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_ONEUI &&
                 style != MediaCardConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_MIUI &&
                 style != MediaCardConstants.ISLAND_EXPANDED_MEDIA_LAYOUT_STYLE_PIXEL
-            ) return
+            if (systemBand && !HookConfig.expandedRoundedPill()) return
             val ids = runCatching {
                 IslandExpandedMediaLayoutResourceIds.from(context)
             }.getOrNull() ?: return
@@ -207,6 +233,7 @@ object IslandExpandedMediaLayoutHooker {
                 .mapNotNull { holder -> findField(holder.javaClass, "player")?.get(holder) }
                 .forEach { player ->
                     applyTo(constraintSet, player)
+                    if (systemBand) return@forEach
                     (player as? View)?.let {
                         albumArtSizeDp?.let { sizeDp ->
                             IslandExpandedMediaAlbumArtSync.apply(

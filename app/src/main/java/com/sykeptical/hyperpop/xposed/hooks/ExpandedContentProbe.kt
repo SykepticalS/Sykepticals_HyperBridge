@@ -6,6 +6,7 @@ import android.widget.TextView
 import com.sykeptical.hyperpop.service.animation.expanded.ContentCluster
 import com.sykeptical.hyperpop.service.animation.expanded.ContentLeaf
 import com.sykeptical.hyperpop.service.animation.expanded.ContentLeafKind
+import com.sykeptical.hyperpop.service.animation.expanded.ContentLeafRole
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
 import com.sykeptical.hyperpop.service.animation.expanded.IslandRect
 
@@ -82,7 +83,7 @@ object ExpandedContentProbe {
                 kind == ContentLeafKind.INTERACTIVE ||
                 group == null ||
                 group.childCount == 0
-            if (bounds != null && leaf) leaves += ContentLeaf(bounds, kind)
+            if (bounds != null && leaf) leaves += ContentLeaf(bounds, kind, role(view))
             if (kind == ContentLeafKind.DECORATIVE || group == null) return
             for (index in 0 until group.childCount) {
                 walk(group.getChildAt(index), root, depth + 1, leaves, seen)
@@ -103,6 +104,24 @@ object ExpandedContentProbe {
             return ContentLeafKind.INTERACTIVE
         }
         return ContentLeafKind.PLAIN
+    }
+
+    private fun role(view: View): ContentLeafRole {
+        val name = entryName(view) ?: return ContentLeafRole.UNKNOWN
+        return when (name) {
+            "focus_title", "header_title" -> ContentLeafRole.PRIMARY_TITLE
+            "focus_content", "header_artist", "chronometer", "focus_sub_content" -> ContentLeafRole.SECONDARY_TEXT
+            "focus_profile", "focus_icon_container", "album_art", "album_art_image" -> ContentLeafRole.AVATAR
+            "focus_button_icon1", "focus_button_icon2", "focus_button_icon3" -> ContentLeafRole.CALL_CONTROL
+            "focus_button_title" -> ContentLeafRole.ACTION_PILL
+            "media_progress_bar" -> ContentLeafRole.PROGRESS
+            else -> ContentLeafRole.UNKNOWN
+        }
+    }
+
+    private fun entryName(view: View): String? {
+        if (view.id == View.NO_ID) return null
+        return runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
     }
 
     private fun decorative(view: View, root: View): Boolean {

@@ -11,8 +11,8 @@ package com.sykeptical.hyperpop.service.animation.expanded
  * lands on native geometry.
  */
 object ExpandedIslandLayoutPolicy {
-    private const val BODY_GAP_DP = 4f
-    private const val CUTOUT_SAFETY_DP = 8f
+    private const val BODY_GAP_DP = ExpandedVisualTokens.LEGACY_BODY_GAP_DP
+    private const val CUTOUT_SAFETY_DP = ExpandedVisualTokens.LEGACY_COLUMN_SAFETY_DP
 
     fun decide(request: ExpandedLayoutRequest): ExpandedLayoutDecision {
         if (!request.enabled || !request.portrait || request.keyguard || request.tablet) {
@@ -47,6 +47,8 @@ object ExpandedIslandLayoutPolicy {
         val placement = profile?.let {
             CutoutSafeLayout.solve(
                 cardLeft, cardRight, cardTop, request.cutout, request.density, radiusForPlacement, it,
+                pill = request.style.roundedPill,
+                rtl = request.rtl,
             )
         }
         val legacyTop = maxOf(request.compact.bottom + gap, request.cutout.bottom + legacySafety)
@@ -128,7 +130,12 @@ object ExpandedIslandLayoutPolicy {
             radiusPx = pill.radiusPx,
             contentScale = pill.contentScale,
             flowMask = if (request.style.blackBackground) {
-                ExpandedSurfaceStyle.flowMask(request.cutout, card.bottom, request.density)
+                ExpandedSurfaceStyle.flowMask(
+                    request.cutout,
+                    card.bottom,
+                    request.density,
+                    contentBottom = bandContentBottom(request, contentTop, card.bottom),
+                )
             } else {
                 null
             },
@@ -136,7 +143,36 @@ object ExpandedIslandLayoutPolicy {
             pillEnabled = request.style.roundedPill,
             blackBackground = request.style.blackBackground,
             tightLayout = profile != null,
+            textClips = placement?.textClips.orEmpty(),
         )
+    }
+
+    /**
+     * Black fill covers content that shares the camera's vertical band.
+     * The fade starts under that content. Pill-off keeps the cutout gap.
+     */
+    private fun bandContentBottom(
+        request: ExpandedLayoutRequest,
+        contentTop: Int,
+        cardBottom: Int,
+    ): Int {
+        if (!request.style.roundedPill) return Int.MIN_VALUE
+        val profile = request.content ?: return Int.MIN_VALUE
+        val exclusion = CameraBandGeometry.exclusion(request.cutout, request.density)
+        val contentLeft = CutoutSafeLayout.contentLeft(request.nativeExpanded.left, request.nativeExpanded.right, profile.contentWidthPx)
+        var bottom = exclusion.bottom
+        for (leaf in profile.leaves) {
+            if (leaf.kind == ContentLeafKind.DECORATIVE || leaf.bounds.isEmpty()) continue
+            val top = contentTop + leaf.bounds.top
+            if (top >= exclusion.bottom) continue
+            val windowLeft = contentLeft + leaf.bounds.left
+            val windowRight = contentLeft + leaf.bounds.right
+            val beside = windowRight <= exclusion.left || windowLeft >= exclusion.right
+            val inBand = beside || leaf.sharesCameraBand()
+            if (!inBand) continue
+            bottom = maxOf(bottom, contentTop + leaf.bounds.bottom)
+        }
+        return bottom.coerceAtMost(cardBottom - 1)
     }
 
     fun collapseTarget(compact: IslandRect): IslandRect = compact

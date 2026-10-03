@@ -22,11 +22,13 @@ class ExpandedPillPolicyTest {
     fun emptyBottomIsTrimmedAndTheLeafStaysInside() {
         val result = apply(enabled = true, provisionalBottom = 720, profile = shortProfile())
         val origin = 120
+        val leafTop = 40
         val leafBottom = 180
         val pad = (ExpandedPillPolicy.BOTTOM_PAD_DP * density).toInt()
+        val topGap = origin + leafTop - 36
+        val bottomGap = maxOf(pad, topGap)
         assertTrue(result.cardBottom < 720)
-        assertTrue(result.cardBottom >= origin + leafBottom)
-        assertTrue(result.cardBottom <= origin + leafBottom + pad)
+        assertEquals(origin + leafBottom + bottomGap, result.cardBottom)
         assertTrue(result.radiusPx >= nativeRadius)
         assertTrue(result.contentScale >= ExpandedPillPolicy.MIN_SCALE)
     }

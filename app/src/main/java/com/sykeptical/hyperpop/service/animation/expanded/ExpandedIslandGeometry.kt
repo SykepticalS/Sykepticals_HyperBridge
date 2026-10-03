@@ -58,10 +58,22 @@ enum class ContentLeafKind {
     PLAIN,
 }
 
+enum class ContentLeafRole {
+    UNKNOWN,
+    PRIMARY_TITLE,
+    SECONDARY_TEXT,
+    AVATAR,
+    CALL_CONTROL,
+    ACTION_PILL,
+    MEDIA_ART,
+    PROGRESS,
+}
+
 /** Leaf bounds are relative to the expanded content view's top-left. */
 data class ContentLeaf(
     val bounds: IslandRect,
     val kind: ContentLeafKind,
+    val role: ContentLeafRole = ContentLeafRole.UNKNOWN,
 ) {
     /**
      * The part the content view can draw. A leaf mostly outside the content,
@@ -103,6 +115,21 @@ data class SideLift(
     val translationY: Int,
 )
 
+/** Safe horizontal span for one expanded text line, in window coordinates. */
+data class TextClip(
+    val safeLeft: Int,
+    val safeRight: Int,
+    val fadePx: Int,
+    val cutoutLimited: Boolean,
+)
+
+fun ContentLeaf.sharesCameraBand(): Boolean = when (role) {
+    ContentLeafRole.PRIMARY_TITLE,
+    ContentLeafRole.SECONDARY_TEXT,
+    -> true
+    else -> false
+}
+
 data class ExpandedLayoutRequest(
     val enabled: Boolean,
     val portrait: Boolean,
@@ -120,6 +147,7 @@ data class ExpandedLayoutRequest(
     val style: ExpandedVisualStyle = ExpandedVisualStyle(),
     val nativeRadiusPx: Float = 0f,
     val content: ExpandedContentProfile? = null,
+    val rtl: Boolean = false,
 )
 
 sealed class ExpandedLayoutDecision {
@@ -146,6 +174,7 @@ sealed class ExpandedLayoutDecision {
         val blackBackground: Boolean = false,
         /** True when leaf geometry tightened the cutout gap. False keeps today's margin math. */
         val tightLayout: Boolean = false,
+        val textClips: List<TextClip> = emptyList(),
     ) : ExpandedLayoutDecision() {
         fun ownsTouch(x: Int, y: Int): Boolean = touchRegions.any { it.contains(x, y) }
 

@@ -186,6 +186,22 @@ of extrapolating from an unrelated build.
   - With the fake set `INVISIBLE` instead, the handoff ran at the tap. The fake never came back, and all eight frames from about 0.03s to 1.4s after the tap were the black pill: clock and card `#000000`, corner and battery wallpaper, top-left corner about 180px.
 - HyperPop implication, corrected: when the takeover uncovers the real island, hide a visible fake content view with `INVISIBLE`, never `GONE`, so Xiaomi's own handoff ends the app-close window animation.
 
+## Expanded Focus template and media ConstraintSet
+
+### Finding
+
+- Date: 2026-10-03
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`.
+- SystemUI/plugin version: `com.android.systemui` `16.03.251211.r`; `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MiuiSystemUI.apk` `A423B9805823B93301A0094732274F4E5EA951F86F333C7B94D9730715576E06`; `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandWindowView.getCutoutRect`; `TemplateFactoryV3.createStandardTemplateView`; `TemplateBuilderV3.updateModuleView`; `MiuiIslandMediaControllerImpl` ConstraintSet `xml/miui_media_session_island_normal`; `PlayerIslandConstraintLayout.onAttachedToWindow`.
+- Evidence source: JADX on the pulled APKs above. No new phone trace for these methods.
+- Observation:
+  - `getCutoutRect` is a square: width is `DisplayCutout.getBoundingRectTop().width()` (fallback 20dp), height is `min(width, island_height * 0.9)` with `island_height` 34dp, and Y is `cutoutY` which starts at 0 until the host pushes it.
+  - The expanded Focus view is one `focus_notification_template_standard` copy. Module A is icon/text (`focus_title` 18dp, `focus_content` 14dp, profile 48dp). Module C action icons are 52dp with a 10dp gap. Module D text buttons use 13dp labels. Titles use `ellipsize=end`, not marquee. `updatePartial` calls `bind` again. The chronometer ticks without a rebind.
+  - The expanded media layout is 364×168dp. `normalLayoutIsland.applyTo` runs on every attach, so margins set only on the live views are overwritten. Title and artist are single-line `ellipsize=end`. Playback polls the seek bar every 500ms and does not change layout.
+- HyperPop implication: pill-mode content can share the camera band only when the leaf does not cross the hole, or when it is a title that scrolls inside the safe span. Media retuning has to go through the ConstraintSet load path. Focus retuning has to run again after `bind`. A `cutoutY` of 0 is not a usable hole; rebuild from the compact island and the framework cutout width.
+
 ## Entry template
 
 ### Finding

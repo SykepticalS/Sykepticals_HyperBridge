@@ -86,10 +86,16 @@ object ExpandedSurfaceStyle {
     fun flowMaskFromCardTop(mask: FlowMask, cardTop: Int): FlowMask =
         FlowMask(mask.blackUntilY - cardTop, mask.fadeEndY - cardTop)
 
-    fun flowMask(cutout: IslandRect, cardBottom: Int, density: Float): FlowMask? {
+    fun flowMask(
+        cutout: IslandRect,
+        cardBottom: Int,
+        density: Float,
+        contentBottom: Int = Int.MIN_VALUE,
+    ): FlowMask? {
         if (cutout.isEmpty() || density <= 0f) return null
         val safety = (CutoutSafeLayout.SAFETY_DP * density).toInt()
-        val blackUntil = cutout.bottom + safety
+        var blackUntil = cutout.bottom + safety
+        if (contentBottom > blackUntil) blackUntil = contentBottom.coerceAtMost(cardBottom - 1)
         if (cardBottom <= blackUntil) return null
         val remaining = (cardBottom - blackUntil).toFloat()
         val fade = (remaining * FADE_FRACTION).coerceIn(MIN_FADE_DP * density, MAX_FADE_DP * density)

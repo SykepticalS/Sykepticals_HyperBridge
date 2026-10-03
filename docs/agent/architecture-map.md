@@ -67,7 +67,7 @@ Installed from `HyperPopModule` when `packageName == IslandProtocol.SYSTEM_UI_PA
 | `xposed/hooks/MarqueeHook.kt` | Marquee |
 | `xposed/hooks/IslandTextUpdateAnimationHook.kt` | Text update animation |
 | `xposed/hooks/BetterAnimationsHook.kt` | Better animations |
-| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar. One pending expand waits for the native collapse of the current owner |
+| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar. Pill mode seats clippable text in the camera band via `CutoutSafeLayout`; `FocusIslandLayoutApplier` retunes the island copy and leaves titles untruncated. `ExpandedLayoutProbe` logs only when `debug.hyperpop.layoutprobe=1` |
 | `xposed/hooks/StatusBarTakeoverHook.kt` | Status-bar fade for that takeover |
 | `xposed/mediacard/MediaCardHook.kt` | Media card orchestration + `DynamicClassLoaderHooks` |
 

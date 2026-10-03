@@ -4,15 +4,16 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Rounded-pill compactness. Empty space below the last real leaf is trimmed.
+ * Rounded-pill compactness. Empty space below the last real leaf matches the
+ * empty space above the first one, and never goes under the minimum pad.
  * The radius follows the resulting height and never drops below Xiaomi's
  * native cap. Content scale is a last resort and stays inside the touch floor.
  */
 object ExpandedPillPolicy {
-    const val CAP_DP = 56f
-    const val BOTTOM_PAD_DP = 10f
-    const val MIN_SCALE = 0.92f
-    const val MIN_TOUCH_DP = 44f
+    const val CAP_DP = ExpandedVisualTokens.PILL_CAP_DP
+    const val BOTTOM_PAD_DP = ExpandedVisualTokens.PILL_BOTTOM_PAD_DP
+    const val MIN_SCALE = ExpandedVisualTokens.PILL_MIN_SCALE
+    const val MIN_TOUCH_DP = ExpandedVisualTokens.MIN_TOUCH_DP
 
     data class Result(
         val cardBottom: Int,
@@ -46,9 +47,12 @@ object ExpandedPillPolicy {
         }
         val pad = (BOTTOM_PAD_DP * density).toInt()
         val real = profile.leaves.filter { it.kind != ContentLeafKind.DECORATIVE && !it.bounds.isEmpty() }
+        val highest = real.minOfOrNull { it.bounds.top } ?: 0
         val lowest = real.maxOfOrNull { it.bounds.bottom } ?: profile.contentHeightPx
-        val trimmed = min(nativeBottom, contentOriginY + lowest + pad)
-        var bottom = max(trimmed, contentOriginY + lowest).coerceAtMost(displayHeight)
+        val topGap = (contentOriginY + highest - cardTop).coerceAtLeast(0)
+        val bottomGap = max(pad, topGap)
+        val desired = (contentOriginY + lowest + bottomGap).coerceAtMost(displayHeight)
+        var bottom = max(desired, contentOriginY + lowest)
         if (bottom <= cardTop) bottom = nativeBottom
         var radius = radiusCap(bottom - cardTop, nativeRadiusPx, density)
         radius = relaxRadius(

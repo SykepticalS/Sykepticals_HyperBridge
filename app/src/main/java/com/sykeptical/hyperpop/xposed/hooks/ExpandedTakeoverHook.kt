@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import com.sykeptical.hyperpop.service.animation.expanded.AppCloseOverlayPolicy
+import com.sykeptical.hyperpop.service.animation.expanded.CameraBandGeometry
 import com.sykeptical.hyperpop.service.animation.expanded.EnqueueExpansion
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
@@ -225,6 +226,7 @@ object ExpandedTakeoverHook {
             hookIncomingExpansion(module, loader)
             hookFakeExpandedOverlay(module, loader)
             deoptimizeCallers(module, base, delegate, coordinatorClass, loader)
+            FocusIslandLayoutApplier.install(module, loader)
             module.log("HyperPop: expand-over-status-bar hook installed loader=${loader.hashCode()}")
         }.onFailure {
             pluginLoaders.remove(loader)
@@ -433,6 +435,11 @@ object ExpandedTakeoverHook {
         }
         applyOffset(view, decision.bodyOffsetPx)
         applyPresentation(view, decision)
+        ExpandedVisualSession.publish(request.cutout, decision.pillEnabled, request.rtl)
+        realContent(view)?.let { content ->
+            ExpandedLayoutProbe.capture(content, decision.card, request.cutout, displayCutoutWidth(view))
+            FocusIslandLayoutApplier.apply(content)
+        }
         if (decision.blackBackground) ExpandedSurfaceStyler.arm(view, black = true)
         else if (decision.pillEnabled) ExpandedSurfaceStyler.arm(view, black = false)
         if (decision.blackBackground || decision.pillEnabled) {
@@ -469,6 +476,8 @@ object ExpandedTakeoverHook {
     private fun restore(view: View) {
         val pending = if (coordinator.phase == TakeoverPhase.NATIVE) coordinator.takePendingExpansion() else null
         restoreOffsets()
+        FocusIslandLayoutApplier.restoreTitles()
+        ExpandedVisualSession.clear()
         ExpandedSurfaceStyler.restore(view)
         ExpandedFlowMaskApplicator.clear()
         parkedSecondaryX = null
@@ -498,6 +507,7 @@ object ExpandedTakeoverHook {
         ExpandedFlowMaskApplicator.invalidateStructure()
         applyOffset(view, current.decision.bodyOffsetPx)
         applyPresentation(view, current.decision)
+        realContent(view)?.let { FocusIslandLayoutApplier.apply(it) }
     }
 
     private fun layoutRequest(
@@ -507,7 +517,6 @@ object ExpandedTakeoverHook {
         style: ExpandedVisualStyle,
     ): ExpandedLayoutRequest? {
         val metrics = view.resources.displayMetrics
-        val cutout = cutoutRect(view) ?: return null
         val compact = if (fromSmallIsland) {
             smallCompactRect(view) ?: rectOf(view.call("getBigIslandRect", java.lang.Boolean.FALSE))
         } else {
@@ -525,6 +534,7 @@ object ExpandedTakeoverHook {
         val margin = (view.call("getExpandedViewMarginHorizontal") as? Number)?.toInt() ?: return null
         val width = (view.call("getExpandedViewWidth") as? Number)?.toInt() ?: return null
         val statusBar = (view.call("getStatusBarHeight") as? Number)?.toInt() ?: return null
+        val cutout = CameraBandGeometry.resolve(cutoutRect(view), compact, displayCutoutWidth(view)) ?: return null
         return ExpandedLayoutRequest(
             enabled = true,
             portrait = view.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT,
@@ -542,7 +552,15 @@ object ExpandedTakeoverHook {
             style = style,
             nativeRadiusPx = islandRadius(view),
             content = profile,
+            rtl = view.layoutDirection == View.LAYOUT_DIRECTION_RTL,
         )
+    }
+
+    private fun displayCutoutWidth(view: View): Int {
+        val cutout = view.rootWindowInsets?.displayCutout ?: return 0
+        val top = cutout.boundingRectTop
+        if (!top.isEmpty) return top.width()
+        return cutout.boundingRects.maxOfOrNull { it.width() } ?: 0
     }
 
     private fun blocked(view: View): Boolean {

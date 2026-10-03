@@ -13,10 +13,10 @@ import kotlin.math.sqrt
  * backgrounds are ignored so they do not push real content down.
  */
 object CutoutSafeLayout {
-    const val SAFETY_DP = 4f
-    const val HORIZONTAL_PAD_DP = 4f
-    const val EDGE_PAD_DP = 2f
-    const val MIN_LIFT_DP = 4f
+    const val SAFETY_DP = ExpandedVisualTokens.TIGHT_SAFETY_DP
+    const val HORIZONTAL_PAD_DP = ExpandedVisualTokens.LEGACY_HORIZONTAL_PAD_DP
+    const val EDGE_PAD_DP = ExpandedVisualTokens.LEGACY_EDGE_PAD_DP
+    const val MIN_LIFT_DP = ExpandedVisualTokens.LEGACY_MIN_LIFT_DP
 
     /**
      * Per-child lifts pull rewind, forward, and time labels away from the
@@ -27,6 +27,7 @@ object CutoutSafeLayout {
     data class Result(
         val contentOriginY: Int,
         val sideLifts: List<SideLift>,
+        val textClips: List<TextClip> = emptyList(),
     )
 
     fun solve(
@@ -37,6 +38,8 @@ object CutoutSafeLayout {
         density: Float,
         radiusPx: Float,
         profile: ExpandedContentProfile,
+        pill: Boolean = false,
+        rtl: Boolean = false,
     ): Result {
         val safety = (SAFETY_DP * density).toInt()
         val edge = (EDGE_PAD_DP * density).toInt()
@@ -46,17 +49,35 @@ object CutoutSafeLayout {
         val exclusionRight = cutout.right + hPad
         val contentLeft = contentLeft(cardLeft, cardRight, profile.contentWidthPx)
         val leaves = profile.leaves.filter { it.kind != ContentLeafKind.DECORATIVE && !it.bounds.isEmpty() }
+        val band = if (pill) CameraBandGeometry.exclusion(cutout, density) else null
+        val minBand = ExpandedVisualTokens.px(ExpandedVisualTokens.MIN_BAND_TEXT_DP, density)
+        val textGap = ExpandedVisualTokens.px(ExpandedVisualTokens.CAMERA_TEXT_GAP_DP, density)
         var origin = cardTop
         for (leaf in leaves) {
             val windowLeft = contentLeft + leaf.bounds.left
             val windowRight = contentLeft + leaf.bounds.right
-            val crosses = windowLeft < exclusionRight && windowRight > exclusionLeft
-            val minTop = if (crosses) {
-                cutout.bottom + safety
+            val minTop = if (band != null) {
+                bandMinTop(
+                    leaf, windowLeft, windowRight, band, cardLeft, cardRight, cardTop,
+                    radiusPx, edge, minBand, textGap, rtl,
+                )
             } else {
-                cardTop + cornerInsetY(cardLeft, cardRight, radiusPx, windowLeft, windowRight) + edge
+                val crosses = windowLeft < exclusionRight && windowRight > exclusionLeft
+                if (crosses) {
+                    cutout.bottom + safety
+                } else {
+                    cardTop + cornerInsetY(cardLeft, cardRight, radiusPx, windowLeft, windowRight) + edge
+                }
             }
             origin = max(origin, minTop - leaf.bounds.top)
+        }
+        if (band != null) {
+            origin += titleCutoutDrop(leaves, contentLeft, origin, cutout, density)
+        }
+        val clips = if (band == null) {
+            emptyList()
+        } else {
+            clipsFor(leaves, contentLeft, origin, band, minBand, textGap, rtl, density)
         }
         val lifts = if (!SIDE_LIFTS_ENABLED) {
             emptyList()
@@ -74,7 +95,102 @@ object CutoutSafeLayout {
                 if (lift < minLift) null else SideLift(cluster.index, -lift)
             }
         }
-        return Result(origin, lifts)
+        return Result(origin, lifts, clips)
+    }
+
+    /**
+     * Lowest extra drop that puts a crossing primary title under the camera
+     * hole. The pill then mirrors that new top gap below the content.
+     */
+    private fun titleCutoutDrop(
+        leaves: List<ContentLeaf>,
+        contentLeft: Int,
+        origin: Int,
+        cutout: IslandRect,
+        density: Float,
+    ): Int {
+        val gap = ExpandedVisualTokens.px(ExpandedVisualTokens.CAMERA_VERTICAL_GAP_DP, density)
+        var drop = 0
+        for (leaf in leaves) {
+            if (leaf.role != ContentLeafRole.PRIMARY_TITLE) continue
+            val windowLeft = contentLeft + leaf.bounds.left
+            val windowRight = contentLeft + leaf.bounds.right
+            if (windowRight <= cutout.left || windowLeft >= cutout.right) continue
+            val needed = cutout.bottom + gap - (origin + leaf.bounds.top)
+            if (needed > drop) drop = needed
+        }
+        return drop.coerceAtLeast(0)
+    }
+
+    private fun bandMinTop(
+        leaf: ContentLeaf,
+        windowLeft: Int,
+        windowRight: Int,
+        band: IslandRect,
+        cardLeft: Int,
+        cardRight: Int,
+        cardTop: Int,
+        radiusPx: Float,
+        edge: Int,
+        minBand: Int,
+        textGap: Int,
+        rtl: Boolean,
+    ): Int {
+        val corner = cardTop + cornerInsetY(cardLeft, cardRight, radiusPx, windowLeft, windowRight) + edge
+        val crosses = windowLeft < band.right && windowRight > band.left
+        if (!crosses) return corner
+        if (leaf.sharesCameraBand()) {
+            val span = safeSpan(windowLeft, windowRight, band, textGap, rtl)
+            if (span >= minBand) return corner
+        }
+        return band.bottom
+    }
+
+    private fun clipsFor(
+        leaves: List<ContentLeaf>,
+        contentLeft: Int,
+        origin: Int,
+        band: IslandRect,
+        minBand: Int,
+        textGap: Int,
+        rtl: Boolean,
+        density: Float,
+    ): List<TextClip> {
+        val clips = ArrayList<TextClip>(2)
+        for (leaf in leaves) {
+            if (!leaf.sharesCameraBand()) continue
+            val windowLeft = contentLeft + leaf.bounds.left
+            val windowRight = contentLeft + leaf.bounds.right
+            val top = origin + leaf.bounds.top
+            val bottom = origin + leaf.bounds.bottom
+            val crosses = windowLeft < band.right && windowRight > band.left &&
+                top < band.bottom && bottom > band.top
+            if (!crosses) continue
+            val span = safeSpan(windowLeft, windowRight, band, textGap, rtl)
+            if (span < minBand) continue
+            val safeLeft = if (!rtl) windowLeft else band.right + textGap
+            val safeRight = if (!rtl) band.left - textGap else windowRight
+            if (safeRight <= safeLeft) continue
+            clips += TextClip(
+                safeLeft = safeLeft,
+                safeRight = safeRight,
+                fadePx = CutoutTextClipPolicy.fadePx(safeRight - safeLeft, density),
+                cutoutLimited = true,
+            )
+        }
+        return clips
+    }
+
+    private fun safeSpan(
+        windowLeft: Int,
+        windowRight: Int,
+        band: IslandRect,
+        textGap: Int,
+        rtl: Boolean,
+    ): Int = if (!rtl) {
+        (band.left - textGap - windowLeft).coerceAtLeast(0)
+    } else {
+        (windowRight - band.right - textGap).coerceAtLeast(0)
     }
 
     fun contentLeft(cardLeft: Int, cardRight: Int, contentWidth: Int): Int {

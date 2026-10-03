@@ -56,6 +56,9 @@ object HookConfigSync {
                 KEY_EXPANDED_ROUNDED_PILL,
                 local(context).getBoolean(KEY_EXPANDED_ROUNDED_PILL, false),
             )
+            .remove("expanded_title_scroll_mode")
+            .remove("expanded_title_scroll_speed")
+            .remove("expanded_title_scroll_bounce")
             .putBoolean(
                 KEY_BETTER_ANIMATIONS_ENABLED,
                 if (local(context).contains(KEY_BETTER_ANIMATIONS_ENABLED)) {
