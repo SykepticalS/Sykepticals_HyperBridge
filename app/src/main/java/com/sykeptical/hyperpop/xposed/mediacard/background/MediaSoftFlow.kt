@@ -18,6 +18,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.graphics.ColorUtils
 import androidx.core.graphics.createBitmap
+import com.sykeptical.hyperpop.xposed.hooks.ExpandedSurfaceState
 import com.sykeptical.hyperpop.xposed.mediacard.compat.ColorExtractor
 import kotlin.math.PI
 import kotlin.math.cos
@@ -552,6 +553,7 @@ internal class MediaFlowBackgroundView(
     private var tone = MediaFlowTone.DARK
     private var transitionViewport: Rect? = null
     private val visibleRect = Rect()
+    var followCutoutMask: Boolean = false
 
     init {
         isClickable = false
@@ -664,6 +666,19 @@ internal class MediaFlowBackgroundView(
             Color.blue(appearance.surface) / 255f,
             1f
         )
+        val mask = if (followCutoutMask) ExpandedSurfaceState.mask else null
+        if (mask == null) {
+            runtimeShader.setFloatUniform("uMaskStart", -1f)
+            runtimeShader.setFloatUniform("uMaskEnd", -1f)
+            runtimeShader.setFloatUniform("uMaskAmount", 0f)
+        } else {
+            val location = IntArray(2)
+            getLocationInWindow(location)
+            val shift = viewport?.top ?: 0
+            runtimeShader.setFloatUniform("uMaskStart", (mask.blackUntilY - location[1] - shift).toFloat())
+            runtimeShader.setFloatUniform("uMaskEnd", (mask.fadeEndY - location[1] - shift).toFloat())
+            runtimeShader.setFloatUniform("uMaskAmount", mask.amount)
+        }
         if (viewport == null) {
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         } else {
@@ -761,6 +776,9 @@ internal class MediaFlowBackgroundView(
             uniform float uSurfaceBlend;
             uniform float uSaturation;
             uniform float4 uSurface;
+            uniform float uMaskStart;
+            uniform float uMaskEnd;
+            uniform float uMaskAmount;
 
             float hash(float2 point) {
                 return fract(sin(dot(point, float2(127.1, 311.7))) * 43758.5453);
@@ -800,6 +818,11 @@ internal class MediaFlowBackgroundView(
                 color = mix(color, uSurface.rgb, uSurfaceBlend);
                 color += sin(dot(uv, float2(1.5, 2.0)) * 3.14159 + uTime * 0.041) * 0.006;
                 color += (hash(fragCoord) - 0.5) * 0.005;
+                float reveal = 1.0;
+                if (uMaskAmount > 0.001 && uMaskEnd > uMaskStart) {
+                    reveal = mix(1.0, smoothstep(uMaskStart, uMaskEnd, fragCoord.y), uMaskAmount);
+                }
+                color = mix(float3(0.0), color, reveal);
                 return half4(clamp(color, 0.0, 1.0), 1.0);
             }
         """

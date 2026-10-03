@@ -24,6 +24,8 @@ object HookConfigSync {
     const val KEY_SCREEN_RECORDER_ICON_STYLE = "screen_recorder_icon_style"
     const val KEY_BETTER_ANIMATIONS_ENABLED = "better_animations_enabled"
     const val KEY_EXPAND_OVER_STATUS_BAR_ENABLED = "expand_over_status_bar_enabled"
+    const val KEY_EXPANDED_BLACK_BACKGROUND = "expanded_black_background"
+    const val KEY_EXPANDED_ROUNDED_PILL = "expanded_rounded_pill"
     private const val LEGACY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
 
     private fun local(context: Context) = context.getSharedPreferences(
@@ -45,6 +47,14 @@ object HookConfigSync {
             .putBoolean(
                 KEY_EXPAND_OVER_STATUS_BAR_ENABLED,
                 local(context).getBoolean(KEY_EXPAND_OVER_STATUS_BAR_ENABLED, false),
+            )
+            .putBoolean(
+                KEY_EXPANDED_BLACK_BACKGROUND,
+                local(context).getBoolean(KEY_EXPANDED_BLACK_BACKGROUND, false),
+            )
+            .putBoolean(
+                KEY_EXPANDED_ROUNDED_PILL,
+                local(context).getBoolean(KEY_EXPANDED_ROUNDED_PILL, false),
             )
             .putBoolean(
                 KEY_BETTER_ANIMATIONS_ENABLED,
@@ -145,6 +155,22 @@ object HookConfigSync {
 
     fun setExpandOverStatusBarEnabled(context: Context, enabled: Boolean) {
         local(context).edit().putBoolean(KEY_EXPAND_OVER_STATUS_BAR_ENABLED, enabled).apply()
+        sync(context)
+    }
+
+    fun expandedBlackBackground(context: Context): Boolean =
+        local(context).getBoolean(KEY_EXPANDED_BLACK_BACKGROUND, false)
+
+    fun setExpandedBlackBackground(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_EXPANDED_BLACK_BACKGROUND, enabled).apply()
+        sync(context)
+    }
+
+    fun expandedRoundedPill(context: Context): Boolean =
+        local(context).getBoolean(KEY_EXPANDED_ROUNDED_PILL, false)
+
+    fun setExpandedRoundedPill(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_EXPANDED_ROUNDED_PILL, enabled).apply()
         sync(context)
     }
 

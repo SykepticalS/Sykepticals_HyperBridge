@@ -46,6 +46,44 @@ enum class TakeoverPhase {
     COLLAPSING,
 }
 
+data class ExpandedVisualStyle(
+    val blackBackground: Boolean = false,
+    val roundedPill: Boolean = false,
+)
+
+enum class ContentLeafKind {
+    TEXT,
+    INTERACTIVE,
+    DECORATIVE,
+    PLAIN,
+}
+
+/** Leaf bounds are relative to the expanded content view's top-left. */
+data class ContentLeaf(
+    val bounds: IslandRect,
+    val kind: ContentLeafKind,
+)
+
+/** Direct child of the expanded content view, in child index order. */
+data class ContentCluster(
+    val index: Int,
+    val bounds: IslandRect,
+    val decorative: Boolean,
+)
+
+data class ExpandedContentProfile(
+    val nativeTopMarginPx: Int,
+    val contentWidthPx: Int,
+    val contentHeightPx: Int,
+    val leaves: List<ContentLeaf>,
+    val clusters: List<ContentCluster> = emptyList(),
+)
+
+data class SideLift(
+    val clusterIndex: Int,
+    val translationY: Int,
+)
+
 data class ExpandedLayoutRequest(
     val enabled: Boolean,
     val portrait: Boolean,
@@ -60,6 +98,9 @@ data class ExpandedLayoutRequest(
     val density: Float,
     val leadingEar: IslandRect? = null,
     val trailingEar: IslandRect? = null,
+    val style: ExpandedVisualStyle = ExpandedVisualStyle(),
+    val nativeRadiusPx: Float = 0f,
+    val content: ExpandedContentProfile? = null,
 )
 
 sealed class ExpandedLayoutDecision {
@@ -75,6 +116,17 @@ sealed class ExpandedLayoutDecision {
         val trailingSafe: IslandRect,
         val belowCutout: IslandRect,
         val touchRegions: List<IslandRect>,
+        /** Absolute top margin of the content view. Equals [bodyOffsetPx] when no profile was measured. */
+        val contentOffsetPx: Int = bodyOffsetPx,
+        val nativeRadiusPx: Float = 0f,
+        val radiusPx: Float = nativeRadiusPx,
+        val contentScale: Float = 1f,
+        val flowMask: FlowMask? = null,
+        val sideLifts: List<SideLift> = emptyList(),
+        val pillEnabled: Boolean = false,
+        val blackBackground: Boolean = false,
+        /** True when leaf geometry tightened the cutout gap. False keeps today's margin math. */
+        val tightLayout: Boolean = false,
     ) : ExpandedLayoutDecision() {
         fun ownsTouch(x: Int, y: Int): Boolean = touchRegions.any { it.contains(x, y) }
 

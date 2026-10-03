@@ -80,6 +80,63 @@ class ExpandedIslandLayoutPolicyTest {
     }
 
     @Test
+    fun missingProfileKeepsTheConservativeGap() {
+        val takeover = takeover()
+        assertFalse(takeover.tightLayout)
+        assertEquals(132, takeover.bodyTop)
+        assertEquals(96, takeover.bodyOffsetPx)
+        assertNull(takeover.flowMask)
+        assertEquals(0f, takeover.radiusPx)
+        assertEquals(1f, takeover.contentScale)
+    }
+
+    @Test
+    fun measuredContentStartsCloserWithoutCrossingTheCutout() {
+        val takeover = takeover(request(content = centerProfile(), nativeRadiusPx = 90f))
+        val legacy = takeover()
+        assertTrue(takeover.tightLayout)
+        val visualTop = takeover.bodyTop + 36
+        assertTrue(visualTop < legacy.bodyTop + 48 + 36)
+        assertTrue(visualTop >= cutout.bottom + (CutoutSafeLayout.SAFETY_DP * density).toInt())
+        assertFalse(IslandRect(96, visualTop, 1104, visualTop + 80).intersects(cutout))
+    }
+
+    @Test
+    fun sideContentCanSitBesideTheCutout() {
+        val takeover = takeover(request(content = sideProfile(), nativeRadiusPx = 90f))
+        assertTrue(takeover.bodyTop < cutout.bottom)
+        assertTrue(takeover.bodyTop >= compact.top)
+        val leaf = IslandRect(148, takeover.bodyTop, 248, takeover.bodyTop + 60)
+        assertFalse(leaf.intersects(cutout))
+    }
+
+    @Test
+    fun centerContentStaysBelowTheCutoutWhenASideClusterLifts() {
+        val takeover = takeover(request(content = mixedProfile(), nativeRadiusPx = 90f))
+        assertTrue(takeover.bodyTop >= cutout.bottom + (CutoutSafeLayout.SAFETY_DP * density).toInt())
+        assertTrue(takeover.sideLifts.isNotEmpty())
+        val lift = takeover.sideLifts.first()
+        val clusterTop = takeover.bodyTop + lift.translationY
+        assertTrue(clusterTop < takeover.bodyTop)
+        val lifted = IslandRect(148, clusterTop, 248, clusterTop + 60)
+        assertFalse(lifted.intersects(cutout.inflate((CutoutSafeLayout.HORIZONTAL_PAD_DP * density).toInt())))
+    }
+
+    @Test
+    fun cutoutGapScalesWithDensityAndCutoutDepth() {
+        listOf(2f, 2.75f, 3f, 3.5f).forEach { density ->
+            val deep = IslandRect(560, 20, 640, 140)
+            val shallow = IslandRect(580, 40, 620, 80)
+            val deepTop = takeover(request(cutout = deep, density = density, content = centerProfile())).bodyTop
+            val shallowTop = takeover(request(cutout = shallow, density = density, content = centerProfile())).bodyTop
+            val safety = (CutoutSafeLayout.SAFETY_DP * density).toInt()
+            assertTrue(deepTop + 36 >= deep.bottom + safety)
+            assertTrue(shallowTop + 36 >= shallow.bottom + safety)
+            assertTrue(deepTop > shallowTop)
+        }
+    }
+
+    @Test
     fun passthroughBandIncludesTheTopLeft() {
         val takeover = takeover()
         assertTrue(takeover.acceptsShadePull(8, 8, statusBarHeight = 144))
@@ -102,6 +159,9 @@ class ExpandedIslandLayoutPolicyTest {
         nativeExpanded: IslandRect = this.nativeExpanded,
         density: Float = this.density,
         leadingEar: IslandRect? = this.leadingEar,
+        nativeRadiusPx: Float = 0f,
+        content: ExpandedContentProfile? = null,
+        style: ExpandedVisualStyle = ExpandedVisualStyle(),
     ) = ExpandedLayoutRequest(
         enabled = enabled,
         portrait = portrait,
@@ -116,5 +176,38 @@ class ExpandedIslandLayoutPolicyTest {
         density = density,
         leadingEar = leadingEar,
         trailingEar = trailingEar,
+        style = style,
+        nativeRadiusPx = nativeRadiusPx,
+        content = content,
+    )
+
+    private fun centerProfile() = ExpandedContentProfile(
+        nativeTopMarginPx = 48,
+        contentWidthPx = nativeExpanded.width,
+        contentHeightPx = nativeExpanded.height,
+        leaves = listOf(ContentLeaf(IslandRect(48, 36, nativeExpanded.width - 48, 160), ContentLeafKind.TEXT)),
+        clusters = listOf(ContentCluster(0, IslandRect(48, 36, nativeExpanded.width - 48, 160), decorative = false)),
+    )
+
+    private fun sideProfile() = ExpandedContentProfile(
+        nativeTopMarginPx = 0,
+        contentWidthPx = nativeExpanded.width,
+        contentHeightPx = 200,
+        leaves = listOf(ContentLeaf(IslandRect(100, 0, 200, 60), ContentLeafKind.PLAIN)),
+        clusters = listOf(ContentCluster(0, IslandRect(100, 0, 200, 60), decorative = false)),
+    )
+
+    private fun mixedProfile() = ExpandedContentProfile(
+        nativeTopMarginPx = 0,
+        contentWidthPx = nativeExpanded.width,
+        contentHeightPx = nativeExpanded.height,
+        leaves = listOf(
+            ContentLeaf(IslandRect(100, 0, 200, 60), ContentLeafKind.PLAIN),
+            ContentLeaf(IslandRect(48, 0, nativeExpanded.width - 48, 80), ContentLeafKind.TEXT),
+        ),
+        clusters = listOf(
+            ContentCluster(0, IslandRect(100, 0, 200, 60), decorative = false),
+            ContentCluster(1, IslandRect(48, 0, nativeExpanded.width - 48, 80), decorative = false),
+        ),
     )
 }

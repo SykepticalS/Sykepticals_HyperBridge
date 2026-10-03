@@ -905,6 +905,10 @@
     <string name="expanded_islands">Expanded islands</string>
     <string name="expand_over_status_bar">Expand over status bar</string>
     <string name="expand_over_status_bar_desc">Expanded islands take over the status bar and grow from the camera.</string>
+    <string name="expanded_black_background">Black background</string>
+    <string name="expanded_black_background_desc">The expanded surface is black. Media color fades in below the camera.</string>
+    <string name="expanded_rounded_pill">Rounded pill</string>
+    <string name="expanded_rounded_pill_desc">Expanded islands use a rounder, tighter shape that still fits their content.</string>
     <string name="onboarding_look_title">A little glow</string>
     <string name="onboarding_look_body">Choose how the island is lit. You can refine this later.</string>
     <string name="glow_off">Off</string>

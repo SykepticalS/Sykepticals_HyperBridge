@@ -1118,6 +1118,7 @@ object IslandExpandedMediaAmbientFlowHooker {
         val layoutParams = MediaFlowOverlayLayout.copyForOverlay(anchor.layoutParams) ?: return null
         val view = MediaFlowBackgroundView(anchor.context, state.customTimeline).apply {
             tag = CUSTOM_FLOW_VIEW_TAG
+            followCutoutMask = true
             outlineProvider = anchor.outlineProvider
             clipToOutline = anchor.clipToOutline
         }

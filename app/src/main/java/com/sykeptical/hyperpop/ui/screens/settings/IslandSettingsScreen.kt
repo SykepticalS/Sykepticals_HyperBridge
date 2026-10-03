@@ -14,7 +14,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -175,6 +177,8 @@ private fun MotionSection() {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(HookConfigSync.betterAnimationsEnabled(context)) }
     var expandOverStatusBar by remember { mutableStateOf(HookConfigSync.expandOverStatusBarEnabled(context)) }
+    var blackBackground by remember { mutableStateOf(HookConfigSync.expandedBlackBackground(context)) }
+    var roundedPill by remember { mutableStateOf(HookConfigSync.expandedRoundedPill(context)) }
     var pending by remember { mutableStateOf(false) }
     var speed by remember { mutableFloatStateOf(HookConfigSync.marqueeSpeed(context).toFloat()) }
 
@@ -222,6 +226,42 @@ private fun MotionSection() {
                         onCheckedChange = { next ->
                             expandOverStatusBar = next
                             HookConfigSync.setExpandOverStatusBarEnabled(context, next)
+                            pending = true
+                        },
+                    )
+                },
+            )
+            SettingsRow(
+                icon = Icons.Default.DarkMode,
+                title = stringResource(R.string.expanded_black_background),
+                subtitle = stringResource(R.string.expanded_black_background_desc),
+                enabled = expandOverStatusBar,
+                trailing = {
+                    HpSwitch(
+                        checked = blackBackground,
+                        enabled = expandOverStatusBar,
+                        onCheckedChange = { next ->
+                            if (!expandOverStatusBar) return@HpSwitch
+                            blackBackground = next
+                            HookConfigSync.setExpandedBlackBackground(context, next)
+                            pending = true
+                        },
+                    )
+                },
+            )
+            SettingsRow(
+                icon = Icons.Default.RoundedCorner,
+                title = stringResource(R.string.expanded_rounded_pill),
+                subtitle = stringResource(R.string.expanded_rounded_pill_desc),
+                enabled = expandOverStatusBar,
+                trailing = {
+                    HpSwitch(
+                        checked = roundedPill,
+                        enabled = expandOverStatusBar,
+                        onCheckedChange = { next ->
+                            if (!expandOverStatusBar) return@HpSwitch
+                            roundedPill = next
+                            HookConfigSync.setExpandedRoundedPill(context, next)
                             pending = true
                         },
                     )

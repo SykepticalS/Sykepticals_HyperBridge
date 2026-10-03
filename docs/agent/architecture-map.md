@@ -210,7 +210,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | `MessagePresentationFamilyTracker` | `service/message/` |
 | `ReplyComposerHoldRegistry` | `service/` |
 | `BetterAnimationsPolicy` | `service/animation/` |
-| `ExpandedIslandLayoutPolicy`, `ExpandedTakeoverCoordinator`, `TakeoverFadePolicy`, `YieldedCompactTouchPolicy` | `service/animation/expanded/` |
+| `ExpandedIslandLayoutPolicy`, `CutoutSafeLayout`, `ExpandedPillPolicy`, `ExpandedSurfaceStyle`, `ExpandedTakeoverCoordinator`, `TakeoverFadePolicy`, `YieldedCompactTouchPolicy` | `service/animation/expanded/` |
 
 ---
 
@@ -244,7 +244,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | Protocol / ownership | `integration/xiaomi/HyperIslandProtocolExtensionsTest.kt`, `island/backend/IslandOwnershipTest.kt`, `models/IslandPresentationTest.kt` |
 | Heads-up / focus shade | `xposed/SourceHeadsUpReplacementPolicyTest.kt`, `xposed/FocusShadeBackgroundPolicyTest.kt` |
 | Channels / prefs | `service/BridgeNotificationChannelsTest.kt`, `data/AppPreferencesCacheTest.kt` (if present) |
-| Animation | `service/animation/BetterAnimationsPolicyTest.kt`, `service/animation/expanded/ExpandedIslandLayoutPolicyTest.kt`, `ExpandedTakeoverCoordinatorTest.kt`, `TakeoverFadePolicyTest.kt`, `YieldedCompactTouchPolicyTest.kt` |
+| Animation | `service/animation/BetterAnimationsPolicyTest.kt`, `service/animation/expanded/ExpandedIslandLayoutPolicyTest.kt`, `ExpandedPillPolicyTest.kt`, `ExpandedSurfaceStyleTest.kt`, `ExpandedTakeoverCoordinatorTest.kt`, `TakeoverFadePolicyTest.kt`, `YieldedCompactTouchPolicyTest.kt` |
 
 ---
 

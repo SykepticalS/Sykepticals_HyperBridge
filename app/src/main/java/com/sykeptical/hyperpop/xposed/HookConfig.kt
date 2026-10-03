@@ -64,6 +64,16 @@ object HookConfig {
     fun expandOverStatusBarEnabled(): Boolean =
         prefs?.getBoolean(HookConfigSync.KEY_EXPAND_OVER_STATUS_BAR_ENABLED, false) ?: false
 
+    /** Black expanded surface. Ignored unless the portrait takeover is on. */
+    fun expandedBlackBackground(): Boolean =
+        expandOverStatusBarEnabled() &&
+            prefs?.getBoolean(HookConfigSync.KEY_EXPANDED_BLACK_BACKGROUND, false) == true
+
+    /** Rounder, tighter expanded shape. Ignored unless the portrait takeover is on. */
+    fun expandedRoundedPill(): Boolean =
+        expandOverStatusBarEnabled() &&
+            prefs?.getBoolean(HookConfigSync.KEY_EXPANDED_ROUNDED_PILL, false) == true
+
     /** Fast, local and fail-open prediction used before SystemUI evaluates heads-up state. */
     fun expectsReplacement(sbn: StatusBarNotification): Boolean {
         val p = prefs ?: return false

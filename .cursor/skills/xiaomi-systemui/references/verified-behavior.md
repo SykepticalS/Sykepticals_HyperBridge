@@ -110,6 +110,24 @@ of extrapolating from an unrelated build.
   - Runtime, same day, after the stabilization build: a Spotify expanded island on the app drawer kept `expanded_view` centered at `(599, 337)` from 0:11 through 0:40 and across a track change, with no bottom gap. Collapse restored `big_island_view` at `(600, 81)` and the clock. No second island was visible, so secondary hide/show was not observed on the phone.
 - HyperPop implication: override `getExpandedViewY` / `getExpandedViewHeight` so the existing Folme target starts at `islandViewMarginTop` and grows downward. Leave the compact-pill Folme end state alone so alpha 0 and blur 1 can finish. Fade the three status-bar containers with `transitionAlpha`. While the primary takeover is active, play the secondary's `getHiddenAnimState` at its current `containerX`. Skip the secondary reposition methods, including `smallIslandToBigIslandAnimation` (`getBigIslandAnimState`, which centers the vacated big slot on the cutout) and `smallIslandToTempHiddenAnimation`. On collapse, let Xiaomi's big-to-small transition run; call `smallIslandChangedAnimation` only if that island is no longer in the big state and its handler still has it. Do not abandon a settled expanded session when Folme stops emitting frames. Portrait and unlocked only; any failed self-check returns the native values.
 
+## Expanded island background and corner radius
+
+### Finding
+
+- Date: 2026-10-03
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandBackgroundView.onDraw` / `setDrawable`; `DynamicIslandBaseContentView.updateDarkLightMode` / `updateBackgroundBg`; `DynamicIslandAnimationDelegate.containerClipRadius`; `DynamicIslandAnimationDelegate` outline `getOutline`; `DynamicIslandContentView.updateExpandedView`.
+- Evidence source: JADX on the pulled plugin APK, plus `aapt dump` of its resources. No new phone trace for these drawables.
+- Observation:
+  - `DynamicIslandBackgroundView.onDraw` paints `drawable` into bounds taken from `actualLeft/Top/Width/Height`, which the content outline provider writes every frame from `containerX/TransY` plus the clip progress. The drawable is behind the content, not an overlay HyperPop adds.
+  - `updateDarkLightMode` installs `dynamic_island_background_big_island_dark` for the phone dark path. That shape is a `GradientDrawable`: solid `stroke_color` (`#1FFFFFFF`) and corner radius `island_radius`. Expanded state then calls `setStroke(island_stroke, stroke_color)` on it. `island_radius` is 30dp. `island_stroke` is 1.4dp. `island_height` is 34dp, so the compact clip radius is `min(17dp, 30dp)`.
+  - `updateBackgroundBg` runs on `DynamicIslandExpandedView`. When background blur is open it enables MiBlur mode 1 and blend colors and clears the view background. When blur is closed it sets `dynamic_island_background`, a shape whose solid is `#FF000000` and which has no corner radius of its own.
+  - `containerClipRadius()` is `min((containerClipBottomProgress - containerClipTopProgress) / 2, island_radius)`. The outline provider passes that value to `outline.setRoundRect`. `LightBgView` is the calling-effect host inside the expanded view, not the card fill.
+- HyperPop implication: a black expanded surface has to recolor a mutated copy of this drawable and clear the expanded view's MiBlur, or the blur keeps covering the fill. A pill radius has to change `containerClipRadius` and the same drawable's corner radius together. Neither is an extra view.
+- Phone check, 2026-10-03, same device, HyperPop 0.6.1-sykeptical code 36, both expanded-style toggles on: an expanded Spotify island measured about 1094×473px with a corner curve of about 180px (the 56dp cap; native `island_radius` is 90px at this density) and a pure-black center column through the camera, then a smooth fade into the Ambient Flow color. Collapse returned the compact pill and the status-bar clock. `updateBackgroundBg` throws `NullPointerException: null receiver` from `isNotificationPromotedOngoing` when `currentIslandData` is already null, so teardown must not call it.
+
 ## Secondary island click while another island is expanded
 
 ### Finding

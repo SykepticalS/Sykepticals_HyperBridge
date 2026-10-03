@@ -9,10 +9,13 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutDecision
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutRequest
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedSurfaceStyle
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedTakeoverCoordinator
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedVisualStyle
 import com.sykeptical.hyperpop.service.animation.expanded.IslandRect
 import com.sykeptical.hyperpop.service.animation.expanded.TakeoverPhase
 import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouch
@@ -74,6 +77,8 @@ object ExpandedTakeoverHook {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val originalMargins = Collections.synchronizedMap(WeakHashMap<View, Int>())
     private val originalHeights = Collections.synchronizedMap(WeakHashMap<View, Int>())
+    private val originalTranslations = Collections.synchronizedMap(WeakHashMap<View, Float>())
+    private val originalScales = Collections.synchronizedMap(WeakHashMap<View, Float>())
     private val lock = Any()
 
     @Volatile private var selfCheckFailed = false
@@ -124,6 +129,24 @@ object ExpandedTakeoverHook {
                 onFrame(chain.thisObject)
                 pinSecondary(chain.thisObject)
                 result
+            }
+            delegate.noArgOrNull("containerClipRadius")?.let { method ->
+                hook(module, loader, method) { chain -> overriddenRadius(chain.thisObject, chain.proceed()) }
+            }
+            base.methodsNamed("updateDarkLightMode").forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    val view = chain.thisObject as View
+                    if (ExpandedSurfaceStyler.owns(view)) ExpandedSurfaceStyler.onDrawableReplaced(view)
+                    result
+                }
+            }
+            base.methodsNamed("updateBackgroundBg").filter { it.parameterTypes.size == 2 }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    ExpandedSurfaceStyler.onBlurReapplied(chain.thisObject as View)
+                    result
+                }
             }
             SECONDARY_MOTION.forEach { name ->
                 delegate.methodsNamed(name).filter { it.parameterTypes.isNotEmpty() }.forEach { method ->
@@ -195,7 +218,24 @@ object ExpandedTakeoverHook {
     private fun overriddenHeight(view: View, native: Any?): Any? {
         val takeover = activeDecision(view) ?: return native
         val base = (native as? Number)?.toInt() ?: return native
-        return base + takeover.bodyOffsetPx
+        return if (takeover.tightLayout || takeover.pillEnabled) takeover.card.height else base + takeover.bodyOffsetPx
+    }
+
+    private fun overriddenRadius(delegate: Any, native: Any?): Any? {
+        val value = (native as? Number)?.toFloat() ?: return native
+        val view = contentView(delegate) ?: return value
+        val takeover = activeDecision(view) ?: return value
+        if (!takeover.pillEnabled) return value
+        val live = clipHeight(delegate)
+        if (live <= 0f) return value
+        val current = synchronized(lock) { session } ?: return value
+        val progress = ExpandedSurfaceStyle.morphProgress(
+            live.toInt(),
+            current.compact.height,
+            takeover.card.height,
+        )
+        val nativeCap = takeover.nativeRadiusPx.takeIf { it > 0f } ?: value
+        return ExpandedSurfaceStyle.clipRadius(live, nativeCap, takeover.radiusPx, pill = true, progress)
     }
 
     private fun overriddenBottom(delegate: Any, native: Any?): Any? {
@@ -242,6 +282,7 @@ object ExpandedTakeoverHook {
             restore(view)
             return
         }
+        present(view, delegate, current, live)
         StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
         trackSecondary(view)
         if (coordinator.fadesUnexpandedCompact()) applyYieldedFade(view)
@@ -321,7 +362,13 @@ object ExpandedTakeoverHook {
         coordinator.requestEnable()
         if (blocked(view)) return null
         val fromSmallIsland = view.call("getState")?.javaClass?.simpleName == "SmallIsland"
-        val request = layoutRequest(view, fromSmallIsland) ?: return null
+        val content = realContent(view)
+        val profile = content?.let { runCatching { ExpandedContentProbe.capture(it) }.getOrNull() }
+        val style = ExpandedVisualStyle(
+            blackBackground = HookConfig.expandedBlackBackground(),
+            roundedPill = HookConfig.expandedRoundedPill(),
+        )
+        val request = layoutRequest(view, fromSmallIsland, profile, style) ?: return null
         val decision = ExpandedIslandLayoutPolicy.decide(request)
         if (decision !is ExpandedLayoutDecision.Takeover) return null
         val generation = coordinator.arm(
@@ -337,9 +384,14 @@ object ExpandedTakeoverHook {
                 decision,
                 request.compact,
                 fromSmallIsland,
+                profile?.nativeTopMarginPx ?: 0,
+                style,
             )
         }
         applyOffset(view, decision.bodyOffsetPx)
+        applyPresentation(view, decision)
+        if (decision.blackBackground) ExpandedSurfaceStyler.arm(view, black = true)
+        else if (decision.pillEnabled) ExpandedSurfaceStyler.arm(view, black = false)
         scheduleWatchdog(view, generation)
         yieldSecondary(view)
         return decision
@@ -369,6 +421,8 @@ object ExpandedTakeoverHook {
 
     private fun restore(view: View) {
         restoreOffsets()
+        ExpandedSurfaceStyler.restore(view)
+        ExpandedFlowMaskApplicator.clear()
         parkedSecondaryX = null
         parkedSecondaryId = null
         yieldedSecondaryId = null
@@ -382,10 +436,22 @@ object ExpandedTakeoverHook {
     private fun reapplyOffset(view: View) {
         val current = synchronized(lock) { session } ?: return
         if (!coordinator.accepts(System.identityHashCode(view), current.generation)) return
+        if (current.decision.tightLayout) {
+            val refreshed = refreshDecision(view, current)
+            if (refreshed != null && refreshed.bodyOffsetPx > current.decision.bodyOffsetPx + 2) {
+                current.decision = refreshed
+            }
+        }
         applyOffset(view, current.decision.bodyOffsetPx)
+        applyPresentation(view, current.decision)
     }
 
-    private fun layoutRequest(view: View, fromSmallIsland: Boolean): ExpandedLayoutRequest? {
+    private fun layoutRequest(
+        view: View,
+        fromSmallIsland: Boolean,
+        profile: ExpandedContentProfile?,
+        style: ExpandedVisualStyle,
+    ): ExpandedLayoutRequest? {
         val metrics = view.resources.displayMetrics
         val cutout = cutoutRect(view) ?: return null
         val compact = if (fromSmallIsland) {
@@ -412,6 +478,9 @@ object ExpandedTakeoverHook {
             density = metrics.density,
             leadingEar = viewRect(view.call("getBigIslandAreaLeft") as? View),
             trailingEar = viewRect(view.call("getBigIslandAreaRight") as? View),
+            style = style,
+            nativeRadiusPx = islandRadius(view),
+            content = profile,
         )
     }
 
@@ -659,6 +728,78 @@ object ExpandedTakeoverHook {
         return handler.call("getCurrent") as? View
     }
 
+    private fun present(
+        view: View,
+        delegate: Any,
+        current: Session,
+        live: IslandRect,
+    ) {
+        val decision = current.decision
+        val progress = ExpandedSurfaceStyle.morphProgress(live.height, current.compact.height, decision.card.height)
+        val clip = clipHeight(delegate).takeIf { it > 0f } ?: live.height.toFloat()
+        val nativeCap = decision.nativeRadiusPx.takeIf { it > 0f } ?: decision.radiusPx
+        val radius = ExpandedSurfaceStyle.clipRadius(
+            clip,
+            nativeCap,
+            decision.radiusPx,
+            decision.pillEnabled,
+            progress,
+        )
+        if (decision.blackBackground || decision.pillEnabled) {
+            if (!ExpandedSurfaceStyler.owns(view)) {
+                ExpandedSurfaceStyler.arm(view, decision.blackBackground)
+            }
+            ExpandedSurfaceStyler.frame(view, progress, radius)
+        }
+        if (decision.blackBackground) {
+            realContent(view)?.let { root ->
+                ExpandedFlowMaskApplicator.apply(root, decision.flowMask, progress)
+            }
+        }
+    }
+
+    private fun refreshDecision(view: View, current: Session): ExpandedLayoutDecision.Takeover? {
+        val content = realContent(view) ?: return null
+        val probed = runCatching { ExpandedContentProbe.capture(content) }.getOrNull() ?: return null
+        val profile = probed.copy(nativeTopMarginPx = current.nativeTopMargin)
+        val request = layoutRequest(view, current.fromSmallIsland, profile, current.style) ?: return null
+        return ExpandedIslandLayoutPolicy.decide(request) as? ExpandedLayoutDecision.Takeover
+    }
+
+    private fun applyPresentation(view: View, decision: ExpandedLayoutDecision.Takeover) {
+        val content = realContent(view) ?: return
+        val scale = decision.contentScale
+        if (scale < 0.999f) {
+            originalScales.getOrPut(content) { content.scaleX }
+            content.pivotX = content.width / 2f
+            content.pivotY = 0f
+            content.scaleX = scale
+            content.scaleY = scale
+        }
+        val group = content as? ViewGroup ?: return
+        decision.sideLifts.forEach { lift ->
+            val child = group.getChildAt(lift.clusterIndex) ?: return@forEach
+            originalTranslations.getOrPut(child) { child.translationY }
+            child.translationY = lift.translationY.toFloat()
+        }
+    }
+
+    private fun realContent(view: View): View? =
+        view.call("getCurrentIslandData")?.call("getView") as? View
+
+    private fun islandRadius(view: View): Float {
+        val id = view.resources.getIdentifier("island_radius", "dimen", view.context.packageName)
+        val density = view.resources.displayMetrics.density
+        if (id == 0) return 30f * density
+        return view.resources.getDimension(id)
+    }
+
+    private fun clipHeight(delegate: Any): Float {
+        val top = delegate.floatField("containerClipTopProgress") ?: return 0f
+        val bottom = delegate.floatField("containerClipBottomProgress") ?: return 0f
+        return bottom - top
+    }
+
     private fun applyOffset(view: View, extra: Int) {
         val data = view.call("getCurrentIslandData") ?: return
         listOf(data.call("getView"), data.call("getFakeView")).forEach { child ->
@@ -677,7 +818,7 @@ object ExpandedTakeoverHook {
             val params = parent.layoutParams
             if (params != null && params.height > 0) {
                 val base = originalHeights.getOrPut(parent) { params.height }
-                val desired = base + extra
+                val desired = (base + extra).coerceAtLeast(1)
                 if (params.height != desired) {
                     params.height = desired
                     parent.layoutParams = params
@@ -700,6 +841,15 @@ object ExpandedTakeoverHook {
         }
         originalMargins.clear()
         originalHeights.clear()
+        originalTranslations.entries.toList().forEach { (target, translation) ->
+            target.translationY = translation
+        }
+        originalTranslations.clear()
+        originalScales.entries.toList().forEach { (target, scale) ->
+            target.scaleX = scale
+            target.scaleY = scale
+        }
+        originalScales.clear()
     }
 
     private fun scheduleWatchdog(view: View, generation: Long) {
@@ -752,6 +902,7 @@ object ExpandedTakeoverHook {
             "resetToExpanded",
             "resetPress",
             "containerScheduleUpdate",
+            "containerClipRadius",
             "smallIslandChangedAnimation",
             "smallIslandChangedNoAnimation",
             "smallIslandToTempHiddenAnimation",
@@ -772,6 +923,12 @@ object ExpandedTakeoverHook {
             .forEach { (clazz, names) -> deoptimizeNamed(module, clazz, names) }
         runCatching { loader.loadClass(PHONE_HELPER) }.getOrNull()?.let { helper ->
             deoptimizeNamed(module, helper, setOf("calcInitToExpandedParams", "calcLocationParams"))
+        }
+        delegate.declaredClasses.forEach { inner ->
+            inner.methodsNamed("getOutline").forEach { method ->
+                method.isAccessible = true
+                runCatching { module.deoptimize(method) }
+            }
         }
     }
 
@@ -838,9 +995,11 @@ object ExpandedTakeoverHook {
     private class Session(
         view: View,
         val generation: Long,
-        val decision: ExpandedLayoutDecision.Takeover,
+        var decision: ExpandedLayoutDecision.Takeover,
         val compact: IslandRect,
         val fromSmallIsland: Boolean,
+        val nativeTopMargin: Int,
+        val style: ExpandedVisualStyle,
     ) {
         val owner = java.lang.ref.WeakReference(view)
         @Volatile var selfCheckDone: Boolean = false
