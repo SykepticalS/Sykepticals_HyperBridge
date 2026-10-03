@@ -163,6 +163,29 @@ of extrapolating from an unrelated build.
 - HyperPop implication: the visible pill has to stay inside `getExpandedIslandRect` or the swipe never starts. Zero the drawable stroke and `stokeWidth` together while the styler owns the island, and restore both. A second expand-required add has to wait until `collapse` finishes; replaying `handleAppEvent` lets Xiaomi place the new island. Pass the content view to `isTempHidden`.
 - Phone check, 2026-10-03, HyperPop 0.6.1-sykeptical code 36 after this pass: an expanded Spotify island on the home screen kept rewind, pause, and forward in one row with the timeline underneath, the status-bar clock hidden, and no separate black ring. An upward swipe logged `direction: UP` and `skip collapse=(false||false||true), reason=swipe up`, then the compact pill and the clock returned. A hook that returned null from `access$onInterceptTouchEvent` had been discarding that intercept.
 
+## App-exit expand still shows the native media card first
+
+### Finding
+
+- Date: 2026-10-03
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandBackgroundView.actualHeight`; `DynamicIslandBaseContentView.updateMedianLuma`; `DynamicIslandExpandedView`; runtime views `LightBgView`, `MusicBgView`, `PlayerIslandConstraintLayout`, `DynamicIslandContentFakeView`.
+- Evidence source: logcat `HyperPopPlate` at 21:25:18 and 21:30:55, plus raw screencaps from the on-device Spotify exit burst (`ex_0.raw` through `ex_7.raw`).
+- Observation:
+  - `updateMedianLuma` loads a fresh `dynamic_island_background_big_island_dark` and calls `DynamicIslandBackgroundView.setDrawable` on every pass. That is the only writer besides `updateDarkLightMode`.
+  - At takeover arm the background `actualHeight` was 132 while `getExpandedView()` was already 1087×502. The fake content view was `GONE`. The expanded tree was `DynamicIslandExpandedView` → `LightBgView` → `PlayerIslandConstraintLayout` → `MusicBgView` (1087×502, background null) plus the art, titles, and controls.
+  - Timed bursts after replacing the background drawable still showed the native full-bleed media card for the frames about 0.15–0.6s after the island tap. The black pill, with wallpaper at the screen corner and the battery, appeared on the following frame.
+- HyperPop implication: recoloring `DynamicIslandBackgroundView` does not cover this window. The drawn card is the expanded view, and `MusicBgView` / `LightBgView` paint without a background drawable.
+- Correction, same day, same device/plugin, HyperPop 0.6.1-sykeptical code 36 with temporary `HyperPopSnap` tracing (draw listener on the island window root, hooks on the methods below), raw screencap bursts, and a `dumpsys SurfaceFlinger` taken inside the bad frames. The implication above was wrong:
+  - The native card in those frames is `DynamicIslandContentFakeView`, Xiaomi's app-close stand-in. The real island was fully styled the whole time: background and expanded view `VISIBLE`, the owned black plate, `MusicBgView` `INVISIBLE` at alpha 0, and the pill radius override active.
+  - On the tap, `setState(Expanded)` ran while `getIslandWindowAnimRunning()` was still true from the Spotify close. HyperPop set the fake view `GONE`. About 20ms later Xiaomi called `onWindowAnimExtendLifetimeEnd` and set the fake back to `VISIBLE`. It stayed up until Xiaomi's own close end about 0.9s later: `updateIslandWindowAnimRunning(false, view, false)`, `onWindowAnimExtendLifetimeEnd`, `updateViewStateWhenCloseEnd`, fake `setVisibility(4)`, then `alreadyCloseAppEnd`. The black pill appeared on the next frame.
+  - `DynamicIslandContentFakeView.setVisibility` (JADX) runs a handoff only for `VISIBLE` → `INVISIBLE` (4), when the real state is not `AppExpanded` / `MiniWindowExpanded` and `isIslandWindowAnimating(real)` is true. It shows the real view and background, posts `alreadyCloseAppEnd` after 50ms, clears `openAppFromIsland`, calls `updateIslandWindowAnimRunning(false, real, false)`, then `onWindowAnimExtendLifetimeEnd`. `GONE` (8) skips all of it. `alreadyCloseAppEnd` forwards `onDynamicPluginCallback_alreadyCloseAppEnd` to the host. `hideAllElementSurface` sends the same callback.
+  - During the bad frames, SurfaceFlinger composited `SurfaceControlViewHost-com.spotify.music` (owned by SystemUI, 1200×498 buffer, scale animating, `roundedCorner` 124) below `DynamicIslandWindow`. It was still listed about 0.12s after `alreadyCloseAppEnd`; the host removes it asynchronously.
+  - With the fake set `INVISIBLE` instead, the handoff ran at the tap. The fake never came back, and all eight frames from about 0.03s to 1.4s after the tap were the black pill: clock and card `#000000`, corner and battery wallpaper, top-left corner about 180px.
+- HyperPop implication, corrected: when the takeover uncovers the real island, hide a visible fake content view with `INVISIBLE`, never `GONE`, so Xiaomi's own handoff ends the app-close window animation.
+
 ## Entry template
 
 ### Finding

@@ -7,9 +7,9 @@ import android.graphics.Region
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import com.sykeptical.hyperpop.service.animation.expanded.AppCloseOverlayPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.EnqueueExpansion
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
@@ -60,9 +60,10 @@ object ExpandedTakeoverHook {
     private const val ADD =
         "miui.systemui.dynamicisland.event.AddEventCoordinator"
     private const val HANDOFF_REASON = "hyperpop_handoff"
-    private const val EXPAND_LOG = "HyperPopExpand"
     private const val FAKE_VIEW =
         "miui.systemui.dynamicisland.window.content.DynamicIslandContentFakeView"
+    private const val BACKGROUND_VIEW =
+        "miui.systemui.dynamicisland.DynamicIslandBackgroundView"
     private const val UTILS = "miui.systemui.util.CommonUtils"
     private const val SELF_CHECK_PX = 20
     private val SECONDARY_MOTION = setOf(
@@ -88,6 +89,7 @@ object ExpandedTakeoverHook {
     private val originalHeights = Collections.synchronizedMap(WeakHashMap<View, Int>())
     private val originalTranslations = Collections.synchronizedMap(WeakHashMap<View, Float>())
     private val originalScales = Collections.synchronizedMap(WeakHashMap<View, Float>())
+    private val fakeNativeRadii = Collections.synchronizedMap(WeakHashMap<View, Float>())
     private val heldAdds = ConcurrentHashMap<Long, HeldAdd>()
     private val compactReplayKey = ThreadLocal<String?>()
     private val lock = Any()
@@ -96,7 +98,6 @@ object ExpandedTakeoverHook {
     @Volatile private var loggedFailure = false
     @Volatile private var session: Session? = null
     @Volatile private var expandRetryUntilMs = 0L
-    @Volatile private var lastExpandLogMs = 0L
     @Volatile private var parkedSecondaryX: Int? = null
     @Volatile private var parkedSecondaryId: Int? = null
     @Volatile private var yieldedSecondaryId: Int? = null
@@ -138,6 +139,7 @@ object ExpandedTakeoverHook {
                 chain.proceed()
             }
             hook(module, loader, schedule) { chain ->
+                capClipBottom(chain.thisObject)
                 val result = chain.proceed()
                 onFrame(chain.thisObject)
                 pinSecondary(chain.thisObject)
@@ -158,9 +160,11 @@ object ExpandedTakeoverHook {
                 hook(module, loader, method) { chain ->
                     val result = chain.proceed()
                     ExpandedSurfaceStyler.onBlurReapplied(chain.thisObject as View)
+                    ExpandedSurfaceStyler.onFakeBlurReapplied(chain.thisObject as View)
                     result
                 }
             }
+            hookOwnedPlate(module, loader)
             SECONDARY_MOTION.forEach { name ->
                 delegate.methodsNamed(name).filter { it.parameterTypes.isNotEmpty() }.forEach { method ->
                     hook(module, loader, method) { chain ->
@@ -248,10 +252,9 @@ object ExpandedTakeoverHook {
         val view = contentView(delegate) ?: return value
         val takeover = activeDecision(view) ?: return value
         if (!takeover.pillEnabled) return value
-        val live = clipHeight(delegate)
-        if (live <= 0f) return value
         val current = synchronized(lock) { session } ?: return value
-        val shown = shownHeight(view, live.toInt())
+        val shown = shownHeight(view, clipHeight(delegate).toInt())
+        if (shown <= 0) return value
         val progress = ExpandedSurfaceStyle.morphProgress(
             shown,
             current.compact.height,
@@ -410,7 +413,6 @@ object ExpandedTakeoverHook {
         )
         if (generation < 0) return rejectExpand(view)
         expandRetryUntilMs = 0L
-        Log.i(EXPAND_LOG, "arm card=${decision.card.height}x${decision.card.width}")
         val previous = synchronized(lock) {
             val old = session
             session = Session(
@@ -433,6 +435,10 @@ object ExpandedTakeoverHook {
         applyPresentation(view, decision)
         if (decision.blackBackground) ExpandedSurfaceStyler.arm(view, black = true)
         else if (decision.pillEnabled) ExpandedSurfaceStyler.arm(view, black = false)
+        if (decision.blackBackground || decision.pillEnabled) {
+            val radius = if (decision.pillEnabled) decision.radiusPx else 0f
+            ExpandedSurfaceStyler.frame(view, 1f, radius)
+        }
         scheduleWatchdog(view, generation)
         yieldSecondary(view)
         return decision
@@ -849,18 +855,61 @@ object ExpandedTakeoverHook {
         val key: String,
     )
 
+    /**
+     * updateMedianLuma installs a fresh native drawable on every luma pass.
+     * While the takeover owns the plate, that call must not put Xiaomi's
+     * card back.
+     */
+    private fun hookOwnedPlate(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val background = loader.loadClass(BACKGROUND_VIEW)
+            background.methodsNamed("setDrawable").forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val view = chain.thisObject as? View
+                    if (view != null && ExpandedSurfaceStyler.blocksReplacement(view)) {
+                        ExpandedSurfaceStyler.reassert(view)
+                        return@hook null
+                    }
+                    chain.proceed()
+                }
+            }
+        }.onFailure {
+            module.log("HyperPop: owned-plate hook unavailable: ${it.message}")
+        }
+    }
+
     private fun hookFakeExpandedOverlay(module: XposedModule, loader: ClassLoader) {
         runCatching {
             val fakeClass = loader.loadClass(FAKE_VIEW)
             fakeClass.methodsNamed("updateFakeExpandedViewState").forEach { method ->
                 hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
                     val fake = chain.thisObject as? View
                     val real = fake?.call("getRealView") as? View
                     if (real != null && real.call("getState")?.javaClass?.simpleName == "Expanded") {
                         uncoverRealIsland(real)
                         beginOrContinue(real)
                     }
-                    chain.proceed()
+                    result
+                }
+            }
+            fakeClass.declaredMethods.filter { it.name == "onTrackingFakeViewStart" }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val fake = chain.thisObject as? View
+                    fake?.let(::fitTrackingRadius)
+                    val result = chain.proceed()
+                    fake?.let(::styleTrackingFake)
+                    result
+                }
+            }
+            fakeClass.declaredMethods.filter { it.name == "setVisibility" }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    val fake = chain.thisObject as? View
+                    if (fake != null && fake.visibility != View.VISIBLE) {
+                        runCatching { ExpandedSurfaceStyler.restoreFake(fake) }
+                    }
+                    result
                 }
             }
         }.onFailure {
@@ -985,31 +1034,67 @@ object ExpandedTakeoverHook {
         ) {
             expandRetryUntilMs = now + 1_500L
         }
-        if (now - lastExpandLogMs > 250L) {
-            lastExpandLogMs = now
-            Log.i(
-                EXPAND_LOG,
-                "reject state=$name storedH=${view.intField("expandedViewHeight")} " +
-                    "maxH=${runCatching { (view.call("getExpandedViewMaxHeight") as? Number)?.toInt() }.getOrNull()}",
-            )
-        }
         return null
     }
 
     /**
      * The app-close overlay can still be the surface the user sees when they
      * expand. It does not go through the takeover, so the card stays native
-     * until Xiaomi hides it. Hide it as soon as we take over the real island.
+     * until Xiaomi hides it. Hide it as soon as we take over the real island,
+     * with the visibility that runs Xiaomi's own handoff.
      */
     private fun uncoverRealIsland(view: View) {
         runCatching {
             val fake = view.call("getFakeView") as? View ?: return
-            if (fake.visibility != View.VISIBLE) return
-            fake.visibility = View.GONE
+            fake.visibility = AppCloseOverlayPolicy.hideVisibility(fake.visibility) ?: return
             if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
             (view.call("getBackgroundView") as? View)?.let { background ->
                 if (background.visibility != View.VISIBLE) background.visibility = View.VISIBLE
             }
+        }
+    }
+
+    /**
+     * Swiping the expanded island down to open the app as a window hides the
+     * real island and drags the fake one, whose corners use its own radius.
+     */
+    private fun fitTrackingRadius(fake: View) {
+        runCatching {
+            val native = fakeNativeRadii.getOrPut(fake) { fake.floatField("radius") ?: return }
+            val real = fake.call("getRealView") as? View
+            val pill = real?.let { activeDecision(it) }?.takeIf { it.pillEnabled }?.radiusPx
+            val radius = AppCloseOverlayPolicy.trackingRadius(native, pill)
+            if (fake.floatField("radius") == radius) return
+            setFloatField(fake, "radius", radius)
+            fake.invalidateOutline()
+            (fake.call("getFakeExpandedView") as? View)?.invalidateOutline()
+        }
+    }
+
+    private fun styleTrackingFake(fake: View) {
+        runCatching {
+            val real = fake.call("getRealView") as? View
+            val takeover = real?.let { activeDecision(it) }
+            if (takeover == null || !takeover.blackBackground) {
+                ExpandedSurfaceStyler.restoreFake(fake)
+                return
+            }
+            val relative = takeover.flowMask?.let { ExpandedSurfaceStyle.flowMaskFromCardTop(it, takeover.card.top) }
+            val cardTop = (real.call("getIslandViewMarginTop") as? Number)?.toInt() ?: takeover.card.top
+            val radius = fake.floatField("radius") ?: takeover.radiusPx
+            ExpandedSurfaceStyler.blackenFake(fake, radius, relative, cardTop)
+        }
+    }
+
+    /** Keeps Xiaomi's spring from drawing the clip past the card bottom. */
+    private fun capClipBottom(delegate: Any) {
+        runCatching {
+            if (coordinator.phase != TakeoverPhase.EXPANDING && coordinator.phase != TakeoverPhase.EXPANDED) return
+            val view = contentView(delegate) ?: return
+            val takeover = activeDecision(view) ?: return
+            val bottom = delegate.floatField("containerClipBottomProgress") ?: return
+            val capped = ExpandedSurfaceStyle.cappedClipBottom(bottom, takeover.card.bottom)
+            if (capped < bottom) setFloatField(delegate, "containerClipBottomProgress", capped)
         }
     }
 
@@ -1024,16 +1109,20 @@ object ExpandedTakeoverHook {
     }
 
     /**
-     * The container clip stays near the compact pill for a moment after an
-     * app exit, while the expanded view is already the full card. Driving the
-     * black fill and the pill radius from the clip keeps that card looking native.
+     * The outline draws the card into the background view's actualHeight before
+     * the layout height catches up. The pill has to follow that drawn card.
      */
     private fun shownHeight(view: View, clipPx: Int): Int {
         val expanded = (view.call("getExpandedView") as? View)?.let { child ->
             child.height.coerceAtLeast(child.measuredHeight)
         } ?: 0
-        val background = (view.call("getBackgroundView") as? View)?.height ?: 0
-        return maxOf(clipPx, expanded, background)
+        val background = view.call("getBackgroundView") as? View
+        return ExpandedSurfaceStyle.drawnHeight(
+            clipPx,
+            expanded,
+            background?.height ?: 0,
+            background?.intField("actualHeight") ?: 0,
+        )
     }
 
     private fun clipHeight(delegate: Any): Float {

@@ -25,6 +25,16 @@ object ExpandedSurfaceStyle {
         return lerpArgb(nativeFill, BLACK, progress)
     }
 
+    /** The owned card plate. It does not lerp Xiaomi's fill. */
+    fun ownedPlateFill(): Int = BLACK
+
+    /**
+     * The outline draws the card into [actualHeight] before the view's layout
+     * height catches up. The tallest measurement is the card on screen.
+     */
+    fun drawnHeight(clipPx: Int, expandedHeight: Int, backgroundHeight: Int, actualHeight: Int): Int =
+        maxOf(clipPx, expandedHeight, backgroundHeight, actualHeight).coerceAtLeast(0)
+
     /**
      * Xiaomi's own rule is min(clipHeight / 2, island radius). Pill mode
      * raises that cap along the morph instead of replacing the radius outright.
@@ -63,6 +73,18 @@ object ExpandedSurfaceStyle {
         if (span <= 1) return 1f
         return ((liveHeight - compactHeight).toFloat() / span).coerceIn(0f, 1f)
     }
+
+    /**
+     * Xiaomi's spring overshoots the clip bottom past the card. The media
+     * background stops at the card bottom, so the overshoot shows only the
+     * black plate as a band under the card. The clip target is the card
+     * bottom ([cardBottom], from getExpandedBottom), in the same coordinates.
+     */
+    fun cappedClipBottom(clipBottom: Float, cardBottom: Int): Float = minOf(clipBottom, cardBottom.toFloat())
+
+    /** The same fade, measured from a card top that may move, such as the fake island's. */
+    fun flowMaskFromCardTop(mask: FlowMask, cardTop: Int): FlowMask =
+        FlowMask(mask.blackUntilY - cardTop, mask.fadeEndY - cardTop)
 
     fun flowMask(cutout: IslandRect, cardBottom: Int, density: Float): FlowMask? {
         if (cutout.isEmpty() || density <= 0f) return null

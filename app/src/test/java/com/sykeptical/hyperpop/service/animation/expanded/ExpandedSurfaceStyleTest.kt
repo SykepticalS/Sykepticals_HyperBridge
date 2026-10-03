@@ -35,12 +35,47 @@ class ExpandedSurfaceStyleTest {
     }
 
     @Test
+    fun ownedPlateIsBlackWithoutLerpingTheNativeFill() {
+        assertEquals(ExpandedSurfaceStyle.BLACK, ExpandedSurfaceStyle.ownedPlateFill())
+        assertEquals(nativeFill, ExpandedSurfaceStyle.fill(nativeFill, black = true, progress = 0f))
+    }
+
+    @Test
+    fun drawnHeightFollowsTheOutlineWhileTheViewIsStillCompact() {
+        assertEquals(
+            535,
+            ExpandedSurfaceStyle.drawnHeight(
+                clipPx = 72,
+                expandedHeight = 0,
+                backgroundHeight = 72,
+                actualHeight = 535,
+            ),
+        )
+        assertEquals(200, ExpandedSurfaceStyle.drawnHeight(200, 80, 40, 10))
+        assertEquals(0, ExpandedSurfaceStyle.drawnHeight(-5, -1, 0, 0))
+    }
+
+    @Test
     fun clipRadiusMatchesXiaomiAtTheStartAndThePillAtTheEnd() {
         val nativeCap = 90f
         val pillCap = 168f
         assertEquals(nativeCap, ExpandedSurfaceStyle.clipRadius(200f, nativeCap, pillCap, pill = true, progress = 0f))
         assertEquals(nativeCap, ExpandedSurfaceStyle.clipRadius(200f, nativeCap, pillCap, pill = false, progress = 1f))
         assertEquals(min(100f, pillCap), ExpandedSurfaceStyle.clipRadius(200f, nativeCap, pillCap, pill = true, progress = 1f))
+    }
+
+    @Test
+    fun clipBottomOvershootStopsAtTheCardBottom() {
+        assertEquals(565f, ExpandedSurfaceStyle.cappedClipBottom(568f, cardBottom = 565), 0f)
+        assertEquals(400f, ExpandedSurfaceStyle.cappedClipBottom(400f, cardBottom = 565), 0f)
+        assertEquals(565f, ExpandedSurfaceStyle.cappedClipBottom(565f, cardBottom = 565), 0f)
+    }
+
+    @Test
+    fun fakeFlowMaskKeepsTheFadeAtTheSameDepthInTheCard() {
+        val relative = ExpandedSurfaceStyle.flowMaskFromCardTop(FlowMask(blackUntilY = 160, fadeEndY = 280), cardTop = 30)
+        assertEquals(130, relative.blackUntilY)
+        assertEquals(250, relative.fadeEndY)
     }
 
     @Test

@@ -73,6 +73,26 @@ object ExpandedFlowMaskApplicator {
         }
     }
 
+    /**
+     * Masks the flow views under [root] with a fade measured from [cardTopInWindow].
+     * The effects are view-local, so they move with a card that is dragged.
+     * Independent of the real island's targets; returns the masked views.
+     */
+    fun applyFromCardTop(root: View, relative: FlowMask, cardTopInWindow: Int): List<View> {
+        val found = ArrayList<View>(4)
+        walk(root, 0, found)
+        val location = IntArray(2)
+        found.forEach { view ->
+            view.getLocationInWindow(location)
+            val local = FlowMask(
+                cardTopInWindow + relative.blackUntilY,
+                cardTopInWindow + relative.fadeEndY,
+            )
+            view.setRenderEffect(effect(location[1], local))
+        }
+        return found
+    }
+
     fun invalidateStructure() {
         targetsRoot = java.lang.ref.WeakReference(null)
     }
