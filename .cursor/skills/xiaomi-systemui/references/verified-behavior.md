@@ -218,6 +218,23 @@ of extrapolating from an unrelated build.
   - Placement is `translationY = getExpandedViewHeight() - miniBarMarginBottom - miniBarHeight`. The bar therefore sits inside the expanded height, with the margin under it. `getExpandedIslandRect` is that same Y and height, and the downward drag starts from a touch inside that rect once `getMiniBarVisible()` is true. The drag opens a freeform window after `mini_window_max_trigger_threshold` (60dp).
 - HyperPop implication: read `getMiniBarVisible()` and the view's visibility. Do not infer the bar from the island type. The expanded card bottom has to include the bar and its margin, and `updateMiniBarTranslation` has to run again after HyperPop changes `getExpandedViewHeight`, or the bar stays at the previous height.
 
+## Secondary island expand keeps a square black plate
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: Same identity as the 2026-10-03 expanded-background entry. No new phone trace for this pass.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandAnimationDelegate.smallIslandToExpandedAnimation` / `bigIslandToExpandedAnimation`; layout `dynamic_island_child_view`; drawables `dynamic_island_background`, `dynamic_island_background_big_island_dark`.
+- Evidence source: JADX and `aapt dump xmltree` on the pulled plugin APK.
+- Observation:
+  - `dynamic_island_child_view` puts `@drawable/dynamic_island_background` on `@id/container`. That shape is solid `#FF000000` with no corner radius, and the container sets `clipChildren=false`. `@id/big_island_view` and `@id/small_island_view` use `dynamic_island_background_island`, which is only a corner radius (`island_radius`) and has no fill.
+  - `bigIslandToExpandedAnimation` on a phone fades `BIG_ISLAND_ALPHA`, `BIG_ISLAND_BLUR`, and `BIG_ISLAND_SCALE`, and eases `CONTAINER_CLIP_TOP_PROGRESS`. It does not hide `big_island_view`.
+  - `smallIslandToExpandedAnimation` sets `big_island_view` to `INVISIBLE` once, in `onBegin`. It eases `SMALL_ISLAND_ALPHA` to the expanded state's 0. It does not ease `BIG_ISLAND_ALPHA` or `CONTAINER_CLIP_TOP_PROGRESS` on their own, though both are in `getExpandedAnimState` (`BIG_ISLAND_ALPHA` targets 0). `expandedToSmallIslandAnimation` shows `small_island_view` again and does not show `big_island_view`. `expandedToBigIslandAnimation` shows `big_island_view`.
+  - `DynamicIslandBackgroundView` constructs `stokeWidth` from `island_stroke` (1.4dp) and `onDraw` outsets the drawable by that amount. `updateMedianLuma` reinstalls `dynamic_island_background_big_island_dark` and, once `isExpanded()`, strokes it with `expanded_stroke` (0.5dp).
+- HyperPop implication: a circle that expands has to keep `big_island_view` hidden for the whole takeover, and the container and expanded-view fills have to follow the pill clip radius. Zeroing the background stroke once is not enough, because the square container fill is a different view from the one the big-island fade covers.
+
 ## Entry template
 
 ### Finding
