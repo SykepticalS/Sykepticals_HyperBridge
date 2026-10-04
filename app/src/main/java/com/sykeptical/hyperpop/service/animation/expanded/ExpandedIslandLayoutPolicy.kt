@@ -80,6 +80,7 @@ object ExpandedIslandLayoutPolicy {
             density = request.density,
             profile = profile,
             displayHeight = request.displayHeight,
+            handle = request.bottomWindowHandle,
         )
         if (pill.cardBottom <= contentTop || pill.cardBottom > request.displayHeight) {
             return ExpandedLayoutDecision.Native
@@ -144,6 +145,7 @@ object ExpandedIslandLayoutPolicy {
             blackBackground = request.style.blackBackground,
             tightLayout = profile != null,
             textClips = placement?.textClips.orEmpty(),
+            bottomReserved = ExpandedHandlePolicy.reserved(card, request.bottomWindowHandle),
         )
     }
 

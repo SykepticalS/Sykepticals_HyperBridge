@@ -202,6 +202,22 @@ of extrapolating from an unrelated build.
   - The expanded media layout is 364×168dp. `normalLayoutIsland.applyTo` runs on every attach, so margins set only on the live views are overwritten. Title and artist are single-line `ellipsize=end`. Playback polls the seek bar every 500ms and does not change layout.
 - HyperPop implication: pill-mode content can share the camera band only when the leaf does not cross the hole, or when it is a title that scrolls inside the safe span. Media retuning has to go through the ConstraintSet load path. Focus retuning has to run again after `bind`. A `cutoutY` of 0 is not a usable hole; rebuild from the compact island and the framework cutout width.
 
+## Expanded mini-window bar
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: Same identity as the 2026-10-02 entry. No phone was connected for this pass.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandBaseContentView.updateMiniBar`, `updateMiniBarTranslation`, `canExpandedViewSlide`; `DynamicIslandContentFakeView.handleTouchEvent`; `DynamicIslandTouchInteractor.onInterceptTouchEvent`; layout `mini_window_bar`.
+- Evidence source: JADX on the pulled plugin APK, plus `aapt dump resources` for the bar dimens. Not a runtime measurement.
+- Observation:
+  - The bar is view id `mini_window_bar`, a sibling of the expanded-view stub inside the island content, gravity top-center, initially invisible. Its drawable is a 60.36dp × 3.64dp rounded rect, color `#33FFFFFF`. `mini_window_bar_marginBottom` is 7.27dp.
+  - `updateMiniBar` sets `miniBarVisible` from `canExpandedViewSlide` on the real island (expanded state, freeform support, activity intent, package not blocked) and sets the view to `VISIBLE` or `GONE`. It is not tied to a package or island type by itself.
+  - Placement is `translationY = getExpandedViewHeight() - miniBarMarginBottom - miniBarHeight`. The bar therefore sits inside the expanded height, with the margin under it. `getExpandedIslandRect` is that same Y and height, and the downward drag starts from a touch inside that rect once `getMiniBarVisible()` is true. The drag opens a freeform window after `mini_window_max_trigger_threshold` (60dp).
+- HyperPop implication: read `getMiniBarVisible()` and the view's visibility. Do not infer the bar from the island type. The expanded card bottom has to include the bar and its margin, and `updateMiniBarTranslation` has to run again after HyperPop changes `getExpandedViewHeight`, or the bar stays at the previous height.
+
 ## Entry template
 
 ### Finding

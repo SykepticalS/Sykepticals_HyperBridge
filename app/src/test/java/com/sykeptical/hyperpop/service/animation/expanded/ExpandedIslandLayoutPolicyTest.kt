@@ -2,6 +2,7 @@ package com.sykeptical.hyperpop.service.animation.expanded
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -156,6 +157,57 @@ class ExpandedIslandLayoutPolicyTest {
     }
 
     @Test
+    fun aVisibleHandleLengthensThePillByTheBarAndItsMargin() {
+        val handle = BottomWindowHandle(heightPx = 11, bottomMarginPx = 22)
+        val style = ExpandedVisualStyle(roundedPill = true)
+        val plain = takeover(request(content = centerProfile(), nativeRadiusPx = 90f, style = style))
+        val seated = takeover(
+            request(
+                content = centerProfile(),
+                nativeRadiusPx = 90f,
+                style = style,
+                bottomWindowHandle = handle,
+            ),
+        )
+        assertNull(plain.bottomReserved)
+        assertEquals(plain.card.bottom + 33, seated.card.bottom)
+        assertEquals(
+            IslandRect(seated.card.left, seated.card.bottom - 33, seated.card.right, seated.card.bottom),
+            seated.bottomReserved,
+        )
+        assertTrue(seated.radiusPx >= plain.radiusPx)
+        assertTrue(seated.ownsTouch(seated.card.centerX, seated.card.bottom - 1))
+    }
+
+    @Test
+    fun anAlreadyTallCardDoesNotGrowASecondTimeForTheHandle() {
+        val handle = BottomWindowHandle(heightPx = 11, bottomMarginPx = 22)
+        val plain = takeover(request(content = centerProfile()))
+        val seated = takeover(request(content = centerProfile(), bottomWindowHandle = handle))
+        assertEquals(plain.card.bottom, seated.card.bottom)
+        assertEquals(33, seated.bottomReserved?.height)
+    }
+
+    @Test
+    fun blackBackgroundIncludesTheHandleInTheCardAndTheFade() {
+        val handle = BottomWindowHandle(heightPx = 11, bottomMarginPx = 22)
+        val style = ExpandedVisualStyle(blackBackground = true, roundedPill = true)
+        val seated = takeover(
+            request(
+                content = centerProfile(),
+                nativeRadiusPx = 90f,
+                style = style,
+                bottomWindowHandle = handle,
+            ),
+        )
+        val mask = seated.flowMask
+        assertNotNull(mask)
+        assertTrue(mask!!.fadeEndY <= seated.card.bottom)
+        assertEquals(seated.card.bottom, seated.bottomReserved?.bottom)
+        assertTrue(seated.blackBackground)
+    }
+
+    @Test
     fun passthroughBandIncludesTheTopLeft() {
         val takeover = takeover()
         assertTrue(takeover.acceptsShadePull(8, 8, statusBarHeight = 144))
@@ -181,6 +233,7 @@ class ExpandedIslandLayoutPolicyTest {
         nativeRadiusPx: Float = 0f,
         content: ExpandedContentProfile? = null,
         style: ExpandedVisualStyle = ExpandedVisualStyle(),
+        bottomWindowHandle: BottomWindowHandle? = null,
     ) = ExpandedLayoutRequest(
         enabled = enabled,
         portrait = portrait,
@@ -198,6 +251,7 @@ class ExpandedIslandLayoutPolicyTest {
         style = style,
         nativeRadiusPx = nativeRadiusPx,
         content = content,
+        bottomWindowHandle = bottomWindowHandle,
     )
 
     private fun centerProfile() = ExpandedContentProfile(
