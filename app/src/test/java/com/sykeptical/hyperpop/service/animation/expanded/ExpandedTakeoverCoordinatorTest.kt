@@ -198,10 +198,35 @@ class ExpandedTakeoverCoordinatorTest {
         assertEquals(0f, coordinator.statusBarAlpha, 0.001f)
         assertEquals(0f, coordinator.secondaryAlpha, 0.001f)
         assertTrue(coordinator.fadesUnexpandedCompact())
+        assertTrue(coordinator.hidesOwnedBigIslandLayer())
+        assertTrue(coordinator.hidesSettledSmallIslandLayer())
         assertFalse(coordinator.suppressesSecondaryVisual())
         assertTrue(coordinator.secondaryActive)
         assertTrue(coordinator.blocksTouchFor(2))
         assertFalse(coordinator.blocksTouchFor(8))
+    }
+
+    @Test
+    fun bigIslandExpandDoesNotHideItsOwnCompactLayer() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        val generation = coordinator.arm(7, 0, fromSmallIsland = false)
+        assertFalse(coordinator.hidesOwnedBigIslandLayer())
+        coordinator.onFrame(7, generation, target, compact, target, group, nowMs = 10)
+        assertEquals(TakeoverPhase.EXPANDED, coordinator.phase)
+        assertFalse(coordinator.hidesOwnedBigIslandLayer())
+        assertFalse(coordinator.hidesSettledSmallIslandLayer())
+    }
+
+    @Test
+    fun smallIslandExpandReleasesItsCompactLayerOnCollapse() {
+        val coordinator = ExpandedTakeoverCoordinator()
+        val generation = coordinator.arm(8, 0, fromSmallIsland = true)
+        assertTrue(coordinator.hidesOwnedBigIslandLayer())
+        assertFalse(coordinator.hidesSettledSmallIslandLayer())
+        assertTrue(coordinator.beginCollapse(8, generation))
+        assertEquals(TakeoverPhase.COLLAPSING, coordinator.phase)
+        assertFalse(coordinator.hidesOwnedBigIslandLayer())
+        assertFalse(coordinator.hidesSettledSmallIslandLayer())
     }
 
     @Test

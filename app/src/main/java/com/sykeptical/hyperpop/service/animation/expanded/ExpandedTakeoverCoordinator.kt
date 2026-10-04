@@ -95,6 +95,20 @@ class ExpandedTakeoverCoordinator(
         expandedFromSmallIsland && secondaryActive && phase != TakeoverPhase.NATIVE
 
     /**
+     * Expanding the circle does not run the big-island fade, and Xiaomi only
+     * hides that layer once, at animation start. Keep it hidden for the whole
+     * takeover so its unrounded plate cannot sit around the pill. Collapse
+     * has to show the layer again.
+     */
+    fun hidesOwnedBigIslandLayer(): Boolean =
+        expandedFromSmallIsland &&
+            (phase == TakeoverPhase.EXPANDING || phase == TakeoverPhase.EXPANDED)
+
+    /** The circle's own compact view should be gone once the pill has settled. */
+    fun hidesSettledSmallIslandLayer(): Boolean =
+        expandedFromSmallIsland && phase == TakeoverPhase.EXPANDED
+
+    /**
      * Hidden-sibling hits stay disabled through the show animation. The
      * status-bar fade path arms them again once that sibling is visible.
      * The native-hide path waits until the takeover is fully native.
