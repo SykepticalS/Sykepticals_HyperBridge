@@ -39,6 +39,7 @@ object ExpandedPillPolicy {
         density: Float,
         profile: ExpandedContentProfile?,
         displayHeight: Int,
+        handle: BottomWindowHandle? = null,
     ): Result {
         val nativeBottom = provisionalBottom.coerceAtMost(displayHeight)
         if (!enabled || profile == null) {
@@ -54,6 +55,13 @@ object ExpandedPillPolicy {
         val desired = (contentOriginY + lowest + bottomGap).coerceAtMost(displayHeight)
         var bottom = max(desired, contentOriginY + lowest)
         if (bottom <= cardTop) bottom = nativeBottom
+        bottom = ExpandedHandlePolicy.seatBottom(
+            bottom,
+            contentOriginY + lowest,
+            handle,
+            density,
+            displayHeight,
+        )
         var radius = radiusCap(bottom - cardTop, nativeRadiusPx, density)
         radius = relaxRadius(
             cardLeft, cardRight, cardTop, bottom, contentOriginY, contentLeft, radius, nativeRadiusPx, real,

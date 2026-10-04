@@ -76,6 +76,23 @@ class ExpandedPillPolicyTest {
     }
 
     @Test
+    fun aHandleExtendsTheTunedBottomAndTheRadiusUsesThatHeight() {
+        val plain = apply(enabled = true, provisionalBottom = 720, profile = shortProfile())
+        val seated = apply(
+            enabled = true,
+            provisionalBottom = 720,
+            profile = shortProfile(),
+            handle = BottomWindowHandle(heightPx = 11, bottomMarginPx = 22),
+        )
+        assertEquals(plain.cardBottom + 33, seated.cardBottom)
+        assertEquals(
+            ExpandedPillPolicy.radiusCap(seated.cardBottom - 36, nativeRadius, density),
+            seated.radiusPx,
+            0.5f,
+        )
+    }
+
+    @Test
     fun aButtonParkedOffTheEdgeDoesNotCountAsContent() {
         val parked = ContentLeaf(IslandRect(1069, 48, 1224, 203), ContentLeafKind.INTERACTIVE)
         val shown = ContentLeaf(IslandRect(884, 48, 1039, 203), ContentLeafKind.INTERACTIVE)
@@ -128,6 +145,7 @@ class ExpandedPillPolicyTest {
         enabled: Boolean,
         provisionalBottom: Int,
         profile: ExpandedContentProfile,
+        handle: BottomWindowHandle? = null,
     ) = ExpandedPillPolicy.apply(
         enabled = enabled,
         cardLeft = 48,
@@ -140,6 +158,7 @@ class ExpandedPillPolicyTest {
         density = density,
         profile = profile,
         displayHeight = 2608,
+        handle = handle,
     )
 
     private fun shortProfile() = ExpandedContentProfile(

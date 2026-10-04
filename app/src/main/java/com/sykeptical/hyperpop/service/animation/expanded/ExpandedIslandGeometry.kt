@@ -130,6 +130,19 @@ fun ContentLeaf.sharesCameraBand(): Boolean = when (role) {
     else -> false
 }
 
+/**
+ * The expanded island's mini-window drag bar, when Xiaomi is actually showing it.
+ *
+ * [heightPx] and [bottomMarginPx] are the bar's measured size and the gap under
+ * it. [bounds] is where it is drawn right now. That rect follows the expanded
+ * height, so layout uses the size and margin rather than chasing the rect.
+ */
+data class BottomWindowHandle(
+    val heightPx: Int,
+    val bottomMarginPx: Int,
+    val bounds: IslandRect? = null,
+)
+
 data class ExpandedLayoutRequest(
     val enabled: Boolean,
     val portrait: Boolean,
@@ -148,6 +161,7 @@ data class ExpandedLayoutRequest(
     val nativeRadiusPx: Float = 0f,
     val content: ExpandedContentProfile? = null,
     val rtl: Boolean = false,
+    val bottomWindowHandle: BottomWindowHandle? = null,
 )
 
 sealed class ExpandedLayoutDecision {
@@ -175,6 +189,8 @@ sealed class ExpandedLayoutDecision {
         /** True when leaf geometry tightened the cutout gap. False keeps today's margin math. */
         val tightLayout: Boolean = false,
         val textClips: List<TextClip> = emptyList(),
+        /** Bar plus the margin under it, in window coordinates. Null when Xiaomi is not showing the bar. */
+        val bottomReserved: IslandRect? = null,
     ) : ExpandedLayoutDecision() {
         fun ownsTouch(x: Int, y: Int): Boolean = touchRegions.any { it.contains(x, y) }
 

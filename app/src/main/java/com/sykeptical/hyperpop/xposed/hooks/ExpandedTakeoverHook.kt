@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import com.sykeptical.hyperpop.service.animation.expanded.AppCloseOverlayPolicy
+import com.sykeptical.hyperpop.service.animation.expanded.BottomWindowHandle
 import com.sykeptical.hyperpop.service.animation.expanded.CameraBandGeometry
 import com.sykeptical.hyperpop.service.animation.expanded.EnqueueExpansion
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
@@ -85,6 +86,7 @@ object ExpandedTakeoverHook {
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
     )
     private val coordinator = ExpandedTakeoverCoordinator()
+    private val reapplying = ThreadLocal<Boolean>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val originalMargins = Collections.synchronizedMap(WeakHashMap<View, Int>())
     private val originalHeights = Collections.synchronizedMap(WeakHashMap<View, Int>())
@@ -136,7 +138,12 @@ object ExpandedTakeoverHook {
             hook(module, loader, expandedBottom) { chain -> overriddenBottom(chain.thisObject, chain.proceed()) }
             hook(module, loader, animState) { chain ->
                 val view = runCatching { contentView(chain.thisObject) }.getOrNull()
-                if (view != null) runCatching { beginOrContinue(view) }
+                if (view != null) {
+                    if (view.call("getState")?.javaClass?.simpleName == "Expanded") {
+                        runCatching { view.call("updateMiniBar", view) }
+                    }
+                    runCatching { beginOrContinue(view) }
+                }
                 chain.proceed()
             }
             hook(module, loader, schedule) { chain ->
@@ -190,6 +197,13 @@ object ExpandedTakeoverHook {
                     revealSecondary(view)
                 }
                 result
+            }
+            base.methodsNamed("updateMiniBar").firstOrNull { it.parameterTypes.size == 1 }?.let { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    reapplyOffset(chain.thisObject as View)
+                    result
+                }
             }
             hook(module, loader, updateSize) { chain ->
                 val result = chain.proceed()
@@ -446,6 +460,7 @@ object ExpandedTakeoverHook {
             val radius = if (decision.pillEnabled) decision.radiusPx else 0f
             ExpandedSurfaceStyler.frame(view, 1f, radius)
         }
+        syncMiniBar(view)
         scheduleWatchdog(view, generation)
         yieldSecondary(view)
         return decision
@@ -480,6 +495,7 @@ object ExpandedTakeoverHook {
         ExpandedVisualSession.clear()
         ExpandedSurfaceStyler.restore(view)
         ExpandedFlowMaskApplicator.clear()
+        ExpandedHandleSurface.release()
         parkedSecondaryX = null
         parkedSecondaryId = null
         yieldedSecondaryId = null
@@ -492,22 +508,37 @@ object ExpandedTakeoverHook {
     }
 
     private fun reapplyOffset(view: View) {
+        if (reapplying.get() == true) return
         val current = synchronized(lock) { session } ?: return
         if (!coordinator.accepts(System.identityHashCode(view), current.generation)) return
-        if (current.decision.tightLayout) {
-            val refreshed = refreshDecision(view, current)
-            if (refreshed != null && (
-                    refreshed.bodyOffsetPx > current.decision.bodyOffsetPx + 2 ||
-                    kotlin.math.abs(refreshed.card.height - current.decision.card.height) > 8
-                )
-            ) {
-                current.decision = refreshed
-            }
+        reapplying.set(true)
+        try {
+            reapplyOffsetLocked(view, current)
+        } finally {
+            reapplying.set(false)
+        }
+    }
+
+    private fun reapplyOffsetLocked(view: View, current: Session) {
+        val refreshed = refreshDecision(view, current)
+        if (refreshed != null && adoptRefreshed(current.decision, refreshed)) {
+            current.decision = refreshed
         }
         ExpandedFlowMaskApplicator.invalidateStructure()
         applyOffset(view, current.decision.bodyOffsetPx)
         applyPresentation(view, current.decision)
         realContent(view)?.let { FocusIslandLayoutApplier.apply(it) }
+        syncMiniBar(view)
+    }
+
+    private fun adoptRefreshed(
+        current: ExpandedLayoutDecision.Takeover,
+        refreshed: ExpandedLayoutDecision.Takeover,
+    ): Boolean {
+        if (refreshed.bottomReserved != current.bottomReserved) return true
+        if (!current.tightLayout && refreshed.bottomReserved == null) return false
+        return refreshed.bodyOffsetPx > current.bodyOffsetPx + 2 ||
+            kotlin.math.abs(refreshed.card.height - current.card.height) > 8
     }
 
     private fun layoutRequest(
@@ -553,7 +584,37 @@ object ExpandedTakeoverHook {
             nativeRadiusPx = islandRadius(view),
             content = profile,
             rtl = view.layoutDirection == View.LAYOUT_DIRECTION_RTL,
+            bottomWindowHandle = bottomWindowHandle(view),
         )
+    }
+
+    /**
+     * Xiaomi shows the bar only after [updateMiniBar] sets both the flag and
+     * the view visible. Package and island type are not a substitute.
+     */
+    private fun bottomWindowHandle(view: View): BottomWindowHandle? {
+        val shown = view.call("getMiniBarVisible") as? Boolean ?: return null
+        val bar = view.call("getMiniBar") as? View ?: return null
+        if (!shown || bar.visibility != View.VISIBLE) return null
+        val height = bar.height.takeIf { it > 0 }
+            ?: view.floatField("miniBarHeight")?.let { kotlin.math.round(it).toInt() }?.takeIf { it > 0 }
+            ?: return null
+        val margin = view.floatField("miniBarMarginBottom")
+            ?.let { kotlin.math.round(it).toInt() }
+            ?.coerceAtLeast(0)
+            ?: 0
+        val width = bar.width.takeIf { it > 0 } ?: height
+        val location = IntArray(2)
+        bar.getLocationInWindow(location)
+        val bounds = IslandRect(location[0], location[1], location[0] + width, location[1] + height)
+        return BottomWindowHandle(height, margin, bounds.takeIf { !it.isEmpty() })
+    }
+
+    private fun syncMiniBar(view: View) {
+        val method = view.javaClass.methods.firstOrNull { candidate ->
+            candidate.name.startsWith("updateMiniBarTranslation") && candidate.parameterTypes.size == 1
+        } ?: return
+        runCatching { method.invoke(view, view) }
     }
 
     private fun displayCutoutWidth(view: View): Int {
@@ -1003,6 +1064,21 @@ object ExpandedTakeoverHook {
         if (decision.blackBackground) {
             realContent(view)?.let { root ->
                 ExpandedFlowMaskApplicator.apply(root, decision.flowMask, progress)
+            }
+            ExpandedHandleSurface.release()
+        } else if (decision.bottomReserved != null) {
+            realContent(view)?.let { root ->
+                ExpandedHandleSurface.align(root, view, decision.card.bottom)
+            }
+        } else {
+            ExpandedHandleSurface.release()
+        }
+        if (coordinator.phase == TakeoverPhase.EXPANDED && decision.bottomReserved != null) {
+            val bottom = delegate.floatField("containerClipBottomProgress")
+            if (bottom != null && decision.card.bottom - bottom > 1f) {
+                setFloatField(delegate, "containerClipBottomProgress", decision.card.bottom.toFloat())
+                view.invalidateOutline()
+                (view.call("getBackgroundView") as? View)?.invalidate()
             }
         }
     }
