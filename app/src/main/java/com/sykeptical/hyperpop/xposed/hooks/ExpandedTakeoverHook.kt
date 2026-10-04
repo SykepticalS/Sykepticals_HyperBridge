@@ -13,6 +13,7 @@ import com.sykeptical.hyperpop.service.animation.expanded.AppCloseOverlayPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.CameraBandGeometry
 import com.sykeptical.hyperpop.service.animation.expanded.EnqueueExpansion
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedFakeMirrorPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutDecision
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutRequest
@@ -25,6 +26,7 @@ import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouch
 import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouchPolicy
 import com.sykeptical.hyperpop.xposed.HookConfig
 import com.sykeptical.hyperpop.xposed.log
+import com.sykeptical.hyperpop.xposed.mediacard.island.IslandExpandedMediaAmbientFlowHooker
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
@@ -86,10 +88,11 @@ object ExpandedTakeoverHook {
     )
     private val coordinator = ExpandedTakeoverCoordinator()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val originalMargins = Collections.synchronizedMap(WeakHashMap<View, Int>())
-    private val originalHeights = Collections.synchronizedMap(WeakHashMap<View, Int>())
-    private val originalTranslations = Collections.synchronizedMap(WeakHashMap<View, Float>())
-    private val originalScales = Collections.synchronizedMap(WeakHashMap<View, Float>())
+    private val realSaved = SavedLayout()
+    private val fakeSaved = SavedLayout()
+    private val fakeMarkers = Collections.synchronizedMap(
+        WeakHashMap<View, ExpandedFakeMirrorPolicy.Marker>(),
+    )
     private val fakeNativeRadii = Collections.synchronizedMap(WeakHashMap<View, Float>())
     private val heldAdds = ConcurrentHashMap<Long, HeldAdd>()
     private val compactReplayKey = ThreadLocal<String?>()
@@ -102,6 +105,11 @@ object ExpandedTakeoverHook {
     @Volatile private var parkedSecondaryX: Int? = null
     @Volatile private var parkedSecondaryId: Int? = null
     @Volatile private var yieldedSecondaryId: Int? = null
+    @Volatile private var layoutStamp: Int = 0
+    @Volatile private var mirroredExtension = Int.MIN_VALUE
+    @Volatile private var fakeRestoreDeferred = false
+    private var deferredFakeKeys: Set<View>? = null
+    private var deferredShownKeys: Set<View>? = null
 
     private var tabletMethod: Method? = null
     private var tabletInstance: Any? = null
@@ -429,17 +437,24 @@ object ExpandedTakeoverHook {
             old
         }
         previous?.owner?.get()?.takeIf { it !== view }?.let { old ->
-            restoreOffsets()
+            val deferred = restoreOffsets(old)
             ExpandedSurfaceStyler.restore(old)
             ExpandedFlowMaskApplicator.clear()
+            ExpandedMediaSurfaceApplicator.restoreReal(endDrag = !deferred)
+            if (!deferred) ExpandedMediaSurfaceApplicator.restoreShown()
+            mirroredExtension = Int.MIN_VALUE
         }
+        layoutStamp = ExpandedFakeMirrorPolicy.stamp(
+            decision.bodyOffsetPx,
+            decision.card.bottom,
+            decision.contentScale,
+        )
         applyOffset(view, decision.bodyOffsetPx)
-        applyPresentation(view, decision)
         ExpandedVisualSession.publish(request.cutout, decision.pillEnabled, request.rtl)
         realContent(view)?.let { content ->
             ExpandedLayoutProbe.capture(content, decision.card, request.cutout, displayCutoutWidth(view))
-            FocusIslandLayoutApplier.apply(content)
         }
+        tuneRoots(view, decision)
         if (decision.blackBackground) ExpandedSurfaceStyler.arm(view, black = true)
         else if (decision.pillEnabled) ExpandedSurfaceStyler.arm(view, black = false)
         if (decision.blackBackground || decision.pillEnabled) {
@@ -475,11 +490,14 @@ object ExpandedTakeoverHook {
 
     private fun restore(view: View) {
         val pending = if (coordinator.phase == TakeoverPhase.NATIVE) coordinator.takePendingExpansion() else null
-        restoreOffsets()
+        restoreOffsets(view)
         FocusIslandLayoutApplier.restoreTitles()
         ExpandedVisualSession.clear()
         ExpandedSurfaceStyler.restore(view)
         ExpandedFlowMaskApplicator.clear()
+        ExpandedMediaSurfaceApplicator.restoreReal(endDrag = !fakeRestoreDeferred)
+        if (!fakeRestoreDeferred) ExpandedMediaSurfaceApplicator.restoreShown()
+        mirroredExtension = Int.MIN_VALUE
         parkedSecondaryX = null
         parkedSecondaryId = null
         yieldedSecondaryId = null
@@ -505,9 +523,13 @@ object ExpandedTakeoverHook {
             }
         }
         ExpandedFlowMaskApplicator.invalidateStructure()
+        layoutStamp = ExpandedFakeMirrorPolicy.stamp(
+            current.decision.bodyOffsetPx,
+            current.decision.card.bottom,
+            current.decision.contentScale,
+        )
         applyOffset(view, current.decision.bodyOffsetPx)
-        applyPresentation(view, current.decision)
-        realContent(view)?.let { FocusIslandLayoutApplier.apply(it) }
+        tuneRoots(view, current.decision)
     }
 
     private fun layoutRequest(
@@ -911,13 +933,49 @@ object ExpandedTakeoverHook {
                     result
                 }
             }
+            fakeClass.methodsNamed("updateExpandedView").forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    val fake = chain.thisObject as? View
+                    val real = fake?.call("getRealView") as? View
+                    if (real != null) runCatching { syncFake(real) }
+                    result
+                }
+            }
+            fakeClass.declaredMethods.filter { it.name == "onTrackingFakeViewDown" }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    (chain.thisObject as? View)?.let { traceDrag("down", it) }
+                    result
+                }
+            }
             fakeClass.declaredMethods.filter { it.name == "onTrackingFakeViewStart" }.forEach { method ->
                 hook(module, loader, method) { chain ->
                     val fake = chain.thisObject as? View
                     fake?.let(::fitTrackingRadius)
+                    ExpandedMediaSurfaceApplicator.noteDragging(true)
                     val result = chain.proceed()
                     fake?.let(::styleTrackingFake)
+                    val real = fake?.call("getRealView") as? View
+                    if (real != null) runCatching { syncFake(real) }
+                    fake?.let { traceDrag("start", it) }
                     result
+                }
+            }
+            fakeClass.declaredMethods.filter { it.name == "onTrackingFakeViewUpdate" }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    (chain.thisObject as? View)?.let { traceDrag("update", it) }
+                    result
+                }
+            }
+            listOf("onTrackingFakeViewEnd", "onTrackingFakeViewReset").forEach { name ->
+                fakeClass.declaredMethods.filter { it.name == name }.forEach { method ->
+                    hook(module, loader, method) { chain ->
+                        val result = chain.proceed()
+                        (chain.thisObject as? View)?.let { traceDrag("end", it) }
+                        result
+                    }
                 }
             }
             fakeClass.declaredMethods.filter { it.name == "setVisibility" }.forEach { method ->
@@ -926,6 +984,8 @@ object ExpandedTakeoverHook {
                     val fake = chain.thisObject as? View
                     if (fake != null && fake.visibility != View.VISIBLE) {
                         runCatching { ExpandedSurfaceStyler.restoreFake(fake) }
+                        ExpandedMediaSurfaceApplicator.noteDragging(false)
+                        if (fakeRestoreDeferred) restoreDeferredFake()
                     }
                     result
                 }
@@ -1000,9 +1060,14 @@ object ExpandedTakeoverHook {
             }
             ExpandedSurfaceStyler.frame(view, progress, radius)
         }
-        if (decision.blackBackground) {
-            realContent(view)?.let { root ->
+        realContent(view)?.let { root ->
+            if (decision.blackBackground) {
                 ExpandedFlowMaskApplicator.apply(root, decision.flowMask, progress)
+            }
+            val extension = ExpandedMediaSurfaceApplicator.apply(root, decision.card.bottom)
+            if (extension != mirroredExtension) {
+                fakeLeaf(view)?.let { ExpandedMediaSurfaceApplicator.mirror(it) }
+                mirroredExtension = extension
             }
         }
     }
@@ -1026,11 +1091,14 @@ object ExpandedTakeoverHook {
         return resolveLayout(request).second as? ExpandedLayoutDecision.Takeover
     }
 
-    private fun applyPresentation(view: View, decision: ExpandedLayoutDecision.Takeover) {
-        val content = realContent(view) ?: return
+    private fun applyPresentation(
+        content: View,
+        decision: ExpandedLayoutDecision.Takeover,
+        saved: SavedLayout,
+    ) {
         val scale = decision.contentScale
         if (scale < 0.999f) {
-            originalScales.getOrPut(content) { content.scaleX }
+            saved.scales.getOrPut(content) { content.scaleX }
             content.pivotX = content.width / 2f
             content.pivotY = 0f
             content.scaleX = scale
@@ -1039,9 +1107,56 @@ object ExpandedTakeoverHook {
         val group = content as? ViewGroup ?: return
         decision.sideLifts.forEach { lift ->
             val child = group.getChildAt(lift.clusterIndex) ?: return@forEach
-            originalTranslations.getOrPut(child) { child.translationY }
+            saved.translations.getOrPut(child) { child.translationY }
             child.translationY = lift.translationY.toFloat()
         }
+    }
+
+    /** Real copy and the drag copy, from the decision already resolved for this session. */
+    private fun tuneRoots(view: View, decision: ExpandedLayoutDecision.Takeover) {
+        realContent(view)?.let { root ->
+            tuneRoot(root, decision, realSaved)
+        }
+        syncFake(view, force = true)
+    }
+
+    private fun tuneRoot(
+        root: View,
+        decision: ExpandedLayoutDecision.Takeover,
+        saved: SavedLayout,
+    ) {
+        applyPresentation(root, decision, saved)
+        FocusIslandLayoutApplier.apply(root)
+    }
+
+    /**
+     * Writes the settled layout onto the drag copy when its marker is stale.
+     * A matching marker is one comparison. Reparenting that resets child
+     * margins changes the token, so the next drag start writes it again.
+     */
+    private fun syncFake(owner: View, force: Boolean = false) {
+        val current = synchronized(lock) { session } ?: return
+        if (current.owner.get() !== owner) return
+        if (!coordinator.accepts(System.identityHashCode(owner), current.generation)) return
+        val leaf = fakeLeaf(owner) ?: return
+        val token = layoutToken(leaf)
+        val recorded = fakeMarkers[leaf]
+        if (!force && !ExpandedFakeMirrorPolicy.needsSync(recorded, current.generation, layoutStamp, token)) {
+            return
+        }
+        tuneRoot(leaf, current.decision, fakeSaved)
+        ExpandedMediaSurfaceApplicator.mirror(leaf)
+        runCatching {
+            val overlay = fakeOverlay(leaf) ?: return@runCatching
+            val expanded = overlay.call("getFakeExpandedView") as? View ?: return@runCatching
+            IslandExpandedMediaAmbientFlowHooker.applyFakeTransitionElements(overlay, expanded)
+            IslandExpandedMediaAmbientFlowHooker.applyFakeTransitionTheme(overlay)
+        }
+        fakeMarkers[leaf] = ExpandedFakeMirrorPolicy.marker(
+            current.generation,
+            layoutStamp,
+            layoutToken(leaf),
+        )
     }
 
     private fun rejectExpand(view: View): ExpandedLayoutDecision.Takeover? {
@@ -1093,10 +1208,11 @@ object ExpandedTakeoverHook {
         runCatching {
             val real = fake.call("getRealView") as? View
             val takeover = real?.let { activeDecision(it) }
-            if (takeover == null || !takeover.blackBackground) {
+            if (takeover == null || (!takeover.blackBackground && !takeover.pillEnabled)) {
                 ExpandedSurfaceStyler.restoreFake(fake)
                 return
             }
+            if (!takeover.blackBackground) return
             val relative = takeover.flowMask?.let { ExpandedSurfaceStyle.flowMaskFromCardTop(it, takeover.card.top) }
             val cardTop = (real.call("getIslandViewMarginTop") as? Number)?.toInt() ?: takeover.card.top
             val radius = fake.floatField("radius") ?: takeover.radiusPx
@@ -1116,8 +1232,33 @@ object ExpandedTakeoverHook {
         }
     }
 
-    private fun realContent(view: View): View? =
-        view.call("getCurrentIslandData")?.call("getView") as? View
+    private fun realContent(view: View): View? = islandData(view)?.call("getView") as? View
+
+    private fun fakeLeaf(view: View): View? = islandData(view)?.call("getFakeView") as? View
+
+    private fun islandData(view: View): Any? = view.call("getCurrentIslandData")
+
+    private fun fakeOverlay(leaf: View): ViewGroup? {
+        var current: View? = leaf
+        var depth = 0
+        while (current != null && depth < 12) {
+            if (current.javaClass.name == FAKE_VIEW) return current as? ViewGroup
+            current = current.parent as? View
+            depth += 1
+        }
+        return null
+    }
+
+    private fun layoutToken(root: View): Int {
+        val group = root as? ViewGroup ?: return 0
+        val margins = IntArray(group.childCount)
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index)
+            val params = child.layoutParams as? ViewGroup.MarginLayoutParams
+            margins[index] = params?.topMargin ?: child.top
+        }
+        return ExpandedFakeMirrorPolicy.layoutToken(margins)
+    }
 
     private fun islandRadius(view: View): Float {
         val id = view.resources.getIdentifier("island_radius", "dimen", view.context.packageName)
@@ -1150,26 +1291,30 @@ object ExpandedTakeoverHook {
     }
 
     private fun applyOffset(view: View, extra: Int) {
-        val data = view.call("getCurrentIslandData") ?: return
-        listOf(data.call("getView"), data.call("getFakeView")).forEach { child ->
-            val target = child as? View ?: return@forEach
+        val real = realContent(view)
+        val fake = fakeLeaf(view)
+        listOf(real to realSaved, fake to fakeSaved).forEach { (child, saved) ->
+            val target = child ?: return@forEach
             val params = target.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
-            val base = originalMargins.getOrPut(target) { params.topMargin }
+            val base = saved.margins.getOrPut(target) { params.topMargin }
             val desired = base + extra
             if (params.topMargin != desired) {
                 params.topMargin = desired
                 target.layoutParams = params
             }
-            growAncestors(view, target, extra.coerceAtLeast(0))
+            growAncestors(view, target, extra.coerceAtLeast(0), saved)
         }
     }
 
-    private fun growAncestors(content: View, leaf: View, extra: Int) {
+    private fun growAncestors(content: View, leaf: View, extra: Int, saved: SavedLayout) {
+        val limit = if (saved === fakeSaved) fakeOverlay(leaf) ?: leaf else content
         var parent = leaf.parent as? View
-        while (parent != null && parent !== content) {
+        var depth = 0
+        while (parent != null && parent !== limit && parent !== content && depth < 8) {
+            depth += 1
             val params = parent.layoutParams
             if (params != null && params.height > 0) {
-                val base = originalHeights.getOrPut(parent) { params.height }
+                val base = saved.heights.getOrPut(parent) { params.height }
                 val desired = (base + extra).coerceAtLeast(1)
                 if (params.height != desired) {
                     params.height = desired
@@ -1180,28 +1325,90 @@ object ExpandedTakeoverHook {
         }
     }
 
-    private fun restoreOffsets() {
-        originalMargins.entries.toList().forEach { (view, margin) ->
-            val params = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
-            params.topMargin = margin
-            view.layoutParams = params
+    /**
+     * Real copy returns immediately. The drag copy keeps its tuned geometry
+     * until Xiaomi hides it, so a completed launch does not snap mid-animation.
+     * Returns whether that copy is still waiting.
+     */
+    private fun restoreOffsets(view: View): Boolean {
+        realSaved.restoreAll()
+        val overlay = view.call("getFakeView") as? View
+        val defer = overlay != null && ExpandedFakeMirrorPolicy.deferRestore(overlay.visibility == View.VISIBLE)
+        if (!defer) {
+            fakeSaved.restoreAll()
+            fakeMarkers.clear()
+            fakeRestoreDeferred = false
+            deferredFakeKeys = null
+            deferredShownKeys = null
+            return false
         }
-        originalHeights.entries.toList().forEach { (view, height) ->
-            val params = view.layoutParams ?: return@forEach
-            params.height = height
-            view.layoutParams = params
+        deferredFakeKeys = fakeSaved.keys()
+        deferredShownKeys = ExpandedMediaSurfaceApplicator.captureShown()
+        fakeRestoreDeferred = true
+        return true
+    }
+
+    private fun restoreDeferredFake() {
+        val keys = deferredFakeKeys
+        val shown = deferredShownKeys
+        fakeRestoreDeferred = false
+        deferredFakeKeys = null
+        deferredShownKeys = null
+        if (keys == null) {
+            fakeSaved.restoreAll()
+            fakeMarkers.clear()
+        } else {
+            fakeSaved.restoreOnly(keys)
+            keys.forEach { fakeMarkers.remove(it) }
         }
-        originalMargins.clear()
-        originalHeights.clear()
-        originalTranslations.entries.toList().forEach { (target, translation) ->
-            target.translationY = translation
+        ExpandedMediaSurfaceApplicator.restoreShown(shown)
+    }
+
+    private fun traceDrag(phase: String, fake: View) {
+        if (phase == "update" && !HyperPopDragTrace.updateOpen()) return
+        val real = fake.call("getRealView") as? View
+        val realLeaf = real?.let { realContent(it) }
+        val shown = real?.let { fakeLeaf(it) }
+        val marker = shown?.let { fakeMarkers[it] }
+        val current = synchronized(lock) { session }
+        val message = "phase=$phase active=${ExpandedVisualSession.active} " +
+            "takeover=${coordinator.phase.name} gen=${current?.generation} stamp=$layoutStamp " +
+            "marker=${marker?.generation}/${marker?.stamp}/${marker?.token} " +
+            "real=${describeLeaf(realLeaf)} fake=${describeLeaf(shown)}"
+        when (phase) {
+            "down" -> HyperPopDragTrace.down(message)
+            "start" -> HyperPopDragTrace.start(message)
+            "update" -> HyperPopDragTrace.update(message)
+            else -> HyperPopDragTrace.end(message)
         }
-        originalTranslations.clear()
-        originalScales.entries.toList().forEach { (target, scale) ->
-            target.scaleX = scale
-            target.scaleY = scale
+    }
+
+    private fun describeLeaf(view: View?): String {
+        if (view == null) return "null"
+        val params = view.layoutParams as? ViewGroup.MarginLayoutParams
+        val parent = (view.parent as? View)?.javaClass?.simpleName
+        val group = view as? ViewGroup
+        val children = buildString {
+            if (group == null) return@buildString
+            val count = group.childCount.coerceAtMost(6)
+            for (index in 0 until count) {
+                val child = group.getChildAt(index)
+                val childParams = child.layoutParams as? ViewGroup.MarginLayoutParams
+                append(" {")
+                append(child.javaClass.simpleName)
+                append(" t=")
+                append(childParams?.topMargin ?: child.top)
+                append(" ty=")
+                append(child.translationY)
+                append(" sy=")
+                append(child.scaleY)
+                append('}')
+            }
         }
-        originalScales.clear()
+        return "${view.javaClass.simpleName} parent=$parent " +
+            "bounds=${view.left},${view.top},${view.right},${view.bottom} " +
+            "lp=${params?.width}x${params?.height} top=${params?.topMargin} " +
+            "ty=${view.translationY} sy=${view.scaleY}$children"
     }
 
     private fun scheduleWatchdog(view: View, generation: Long) {
@@ -1342,6 +1549,68 @@ object ExpandedTakeoverHook {
         val location = IntArray(2)
         view.getLocationInWindow(location)
         return IslandRect(location[0], location[1], location[0] + view.width, location[1] + view.height)
+    }
+
+    private class SavedLayout {
+        val margins = Collections.synchronizedMap(WeakHashMap<View, Int>())
+        val heights = Collections.synchronizedMap(WeakHashMap<View, Int>())
+        val translations = Collections.synchronizedMap(WeakHashMap<View, Float>())
+        val scales = Collections.synchronizedMap(WeakHashMap<View, Float>())
+
+        fun keys(): Set<View> {
+            val all = HashSet<View>(margins.size + heights.size + translations.size + scales.size)
+            all += margins.keys
+            all += heights.keys
+            all += translations.keys
+            all += scales.keys
+            return all
+        }
+
+        fun restoreAll() = restoreOnly(null)
+
+        fun restoreOnly(keys: Set<View>?) {
+            restoreInts(margins, keys) { view, margin ->
+                val params = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return@restoreInts
+                params.topMargin = margin
+                view.layoutParams = params
+            }
+            restoreInts(heights, keys) { view, height ->
+                val params = view.layoutParams ?: return@restoreInts
+                params.height = height
+                view.layoutParams = params
+            }
+            restoreFloats(translations, keys) { view, translation ->
+                view.translationY = translation
+            }
+            restoreFloats(scales, keys) { view, scale ->
+                view.scaleX = scale
+                view.scaleY = scale
+            }
+        }
+
+        private fun restoreInts(
+            saved: MutableMap<View, Int>,
+            keys: Set<View>?,
+            write: (View, Int) -> Unit,
+        ) {
+            saved.entries.filter { keys == null || it.key in keys }.forEach { (view, value) ->
+                runCatching { write(view, value) }
+                saved.remove(view)
+            }
+            if (keys == null) saved.clear()
+        }
+
+        private fun restoreFloats(
+            saved: MutableMap<View, Float>,
+            keys: Set<View>?,
+            write: (View, Float) -> Unit,
+        ) {
+            saved.entries.filter { keys == null || it.key in keys }.forEach { (view, value) ->
+                runCatching { write(view, value) }
+                saved.remove(view)
+            }
+            if (keys == null) saved.clear()
+        }
     }
 
     private class Session(

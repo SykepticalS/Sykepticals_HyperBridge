@@ -51,5 +51,12 @@ object ExpandedVisualTokens {
     const val PILL_CAP_DP = 56f
     const val PILL_MIN_SCALE = 0.92f
 
+    /**
+     * How far the expanded media card bottom sits above the symmetric pill.
+     * Content leaves stay put. Xiaomi keeps the drag handle inset from this
+     * new bottom by its own mini-bar margin.
+     */
+    const val MEDIA_OUTER_BOTTOM_TRIM_DP = 20f
+
     fun px(dp: Float, density: Float): Int = (dp * density).toInt()
 }

@@ -60,6 +60,22 @@ class ExpandedPillPolicyTest {
     }
 
     @Test
+    fun mediaTrimRaisesOnlyTheBottomAndLeavesOtherFamiliesAlone() {
+        val plain = apply(enabled = true, provisionalBottom = 720, profile = shortProfile())
+        val mediaLeaf = shortProfile().leaves.single().copy(role = ContentLeafRole.PROGRESS)
+        val media = apply(
+            enabled = true,
+            provisionalBottom = 720,
+            profile = shortProfile().copy(leaves = listOf(mediaLeaf)),
+        )
+        val trim = (ExpandedVisualTokens.MEDIA_OUTER_BOTTOM_TRIM_DP * density).toInt()
+        assertEquals(0, plain.bottomTrimPx)
+        assertEquals(trim, media.bottomTrimPx)
+        assertEquals(plain.cardBottom - trim, media.cardBottom)
+        assertTrue(media.cardBottom > 120 + mediaLeaf.bounds.bottom)
+    }
+
+    @Test
     fun normalContentIsNotScaled() {
         val result = apply(enabled = true, provisionalBottom = 720, profile = shortProfile())
         assertEquals(1f, result.contentScale)

@@ -144,6 +144,7 @@ object ExpandedIslandLayoutPolicy {
             blackBackground = request.style.blackBackground,
             tightLayout = profile != null,
             textClips = placement?.textClips.orEmpty(),
+            mediaBottomTrimPx = pill.bottomTrimPx,
         )
     }
 

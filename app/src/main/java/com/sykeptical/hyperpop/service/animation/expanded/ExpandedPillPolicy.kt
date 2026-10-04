@@ -19,6 +19,8 @@ object ExpandedPillPolicy {
         val cardBottom: Int,
         val radiusPx: Float,
         val contentScale: Float,
+        /** How far [cardBottom] was raised for a media island. Zero for every other family. */
+        val bottomTrimPx: Int = 0,
     )
 
     fun radiusCap(cardHeight: Int, nativeRadiusPx: Float, density: Float): Float {
@@ -54,11 +56,29 @@ object ExpandedPillPolicy {
         val desired = (contentOriginY + lowest + bottomGap).coerceAtMost(displayHeight)
         var bottom = max(desired, contentOriginY + lowest)
         if (bottom <= cardTop) bottom = nativeBottom
+        val bottomTrimPx = mediaBottomTrim(real, bottom, contentOriginY + lowest, density)
+        bottom -= bottomTrimPx
         var radius = radiusCap(bottom - cardTop, nativeRadiusPx, density)
         radius = relaxRadius(
             cardLeft, cardRight, cardTop, bottom, contentOriginY, contentLeft, radius, nativeRadiusPx, real,
         )
-        return Result(bottom, radius, 1f)
+        return Result(bottom, radius, 1f, bottomTrimPx)
+    }
+
+    /**
+     * Media only. The progress bar marks that family. The trim raises the
+     * outer bottom and leaves every leaf where it is.
+     */
+    private fun mediaBottomTrim(
+        leaves: List<ContentLeaf>,
+        bottom: Int,
+        contentFloor: Int,
+        density: Float,
+    ): Int {
+        if (leaves.none { it.role == ContentLeafRole.PROGRESS }) return 0
+        val requested = (ExpandedVisualTokens.MEDIA_OUTER_BOTTOM_TRIM_DP * density).toInt()
+        if (requested <= 0) return 0
+        return requested.coerceAtMost((bottom - contentFloor).coerceAtLeast(0))
     }
 
     /**

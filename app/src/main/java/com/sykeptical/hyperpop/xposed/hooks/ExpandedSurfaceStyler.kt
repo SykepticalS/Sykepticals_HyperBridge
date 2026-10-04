@@ -201,7 +201,8 @@ object ExpandedSurfaceStyler {
         expanded.background = style.background
         expanded.clipToOutline = style.hadClip
         runCatching { invokeBlur(fake.context.classLoader, "setMiViewBlurModeCompat", expanded, 1) }
-        invoke(fake, "updateBackgroundBg", expanded, false)
+        // currentIslandData is already null when the drag hands the real island back.
+        runCatching { invoke(fake, "updateBackgroundBg", expanded, false) }
     }
 
     private fun stripFakeBlur(fake: View, style: FakeStyle) {

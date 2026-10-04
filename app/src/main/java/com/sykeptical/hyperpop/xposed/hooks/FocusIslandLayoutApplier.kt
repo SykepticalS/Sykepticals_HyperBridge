@@ -1,5 +1,6 @@
 package com.sykeptical.hyperpop.xposed.hooks
 
+import android.content.res.Resources
 import android.graphics.Rect
 import android.text.TextUtils.TruncateAt
 import android.view.View
@@ -38,6 +39,7 @@ object FocusIslandLayoutApplier {
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
     )
     private val titleOriginals = WeakHashMap<TextView, TitleText>()
+    private val idsByResources = Collections.synchronizedMap(WeakHashMap<Resources, MutableMap<String, Int>>())
 
     private data class TitleText(val ellipsize: TruncateAt?, val maxEms: Int)
     fun install(module: XposedModule, loader: ClassLoader) {
@@ -74,8 +76,9 @@ object FocusIslandLayoutApplier {
     }
 
     fun onIsland(view: View) {
-        val content = view.call("getCurrentIslandData")?.call("getView") as? View ?: return
-        apply(content)
+        val data = view.call("getCurrentIslandData") ?: return
+        (data.call("getView") as? View)?.let { apply(it) }
+        (data.call("getFakeView") as? View)?.let { apply(it) }
     }
 
     fun apply(root: View) {
@@ -248,35 +251,42 @@ object FocusIslandLayoutApplier {
         while (current != null) {
             val parent = current.parent as? View ?: return null
             if (parent.javaClass.name.contains("DynamicIslandExpandedView")) return current
+            val fakeExpanded = id(parent, "fake_expanded_view")
+            if (fakeExpanded != 0 && parent.id == fakeExpanded) return current
             current = parent
         }
         return null
     }
 
     private fun find(root: View, name: String): View? {
-        if (entryName(root) == name) return root
-        val group = root as? ViewGroup ?: return null
-        for (index in 0 until group.childCount) {
-            find(group.getChildAt(index), name)?.let { return it }
-        }
-        return null
+        val resolved = id(root, name)
+        if (resolved == 0) return null
+        if (root.id == resolved) return root
+        return root.findViewById(resolved)
     }
 
     private fun findAll(root: View, name: String): List<View> {
+        val resolved = id(root, name)
+        if (resolved == 0) return emptyList()
         val found = ArrayList<View>(4)
-        collect(root, name, found)
+        collect(root, resolved, found)
         return found
     }
 
-    private fun collect(view: View, name: String, found: MutableList<View>) {
-        if (entryName(view) == name) found += view
+    private fun collect(view: View, id: Int, found: MutableList<View>) {
+        if (view.id == id) found += view
         val group = view as? ViewGroup ?: return
-        for (index in 0 until group.childCount) collect(group.getChildAt(index), name, found)
+        for (index in 0 until group.childCount) collect(group.getChildAt(index), id, found)
     }
 
-    private fun entryName(view: View): String? {
-        if (view.id == View.NO_ID) return null
-        return runCatching { view.resources.getResourceEntryName(view.id) }.getOrNull()
+    /** Resolves each name once per Resources. A miss is cached too. */
+    private fun id(view: View, name: String): Int {
+        val resources = view.resources
+        val cache = idsByResources.getOrPut(resources) { HashMap() }
+        synchronized(cache) { cache[name] }?.let { return it }
+        val resolved = resources.getIdentifier(name, "id", view.context.packageName)
+        synchronized(cache) { cache[name] = resolved }
+        return resolved
     }
 
     private fun Any.call(name: String): Any? {

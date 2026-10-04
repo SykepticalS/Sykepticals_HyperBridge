@@ -15,6 +15,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import com.sykeptical.hyperpop.xposed.hooks.ExpandedMediaSurfaceApplicator
+import com.sykeptical.hyperpop.xposed.hooks.ExpandedVisualSession
 import com.sykeptical.hyperpop.xposed.mediacard.MediaCardConstants
 import com.sykeptical.hyperpop.xposed.mediacard.HookRuntimeRegistry
 import com.sykeptical.hyperpop.xposed.mediacard.compat.IslandAlbumCoverStyleHooker
@@ -442,17 +444,24 @@ object IslandExpandedMediaAmbientFlowHooker {
     ) : Hooker {
         override fun intercept(chain: Chain): Any? {
             val result = chain.proceed()
-            if (!MediaCardRuntimeConfig.current.enabled) return result
             runCatching {
                 val dummyHolder = dummyHolderField.get(chain.thisObject) ?: return@runCatching
                 val event = chain.args.firstOrNull() ?: return@runCatching
                 val action = eventComponent(event, "getFirst", "first") as? String
                     ?: return@runCatching
                 val extras = eventComponent(event, "getSecond", "second") as? Bundle
-                nativeApi?.applyDummyMiniBarTracking(
+                val offset = extras?.getFloat("pull_down_action_offset_y", 0f) ?: 0f
+                val api = nativeApi ?: return@runCatching
+                if (ExpandedVisualSession.active || ExpandedMediaSurfaceApplicator.isDragging()) {
+                    // Native emit already wrote the drag offset onto the dummy background.
+                    api.holdSettledBackground(dummyHolder)
+                    return@runCatching
+                }
+                if (!MediaCardRuntimeConfig.current.enabled) return@runCatching
+                api.applyDummyMiniBarTracking(
                     dummyHolder = dummyHolder,
                     action = action,
-                    pullDownOffset = extras?.getFloat("pull_down_action_offset_y", 0f) ?: 0f
+                    pullDownOffset = offset
                 )
             }.onFailure { error ->
                 MediaCardLog.e(TAG, "同步展开态 MiniBar 背景失败", error)
@@ -1429,6 +1438,7 @@ object IslandExpandedMediaAmbientFlowHooker {
         private val expandedBackgroundMethods = Collections.synchronizedMap(
             WeakHashMap<ClassLoader, ExpandedBackgroundMethods>()
         )
+        private val settledBackgrounds = Collections.synchronizedMap(WeakHashMap<Any, View>())
         private val holderBackgrounds = IslandMediaBackgroundHostAdapter(
             holderField = holderField,
             dummyHolderField = dummyHolderField,
@@ -1688,6 +1698,17 @@ object IslandExpandedMediaAmbientFlowHooker {
             }
         }
 
+        /**
+         * `pull_down_type_update` sets `dummy.mediaBgView.translationY` to the
+         * drag offset. The outer fake view already follows the finger, so the
+         * background stays where the settled layout put it.
+         */
+        fun holdSettledBackground(dummyHolder: Any) {
+            val background = settledBackgrounds[dummyHolder]
+                ?: getMusicBgView(dummyHolder).also { settledBackgrounds[dummyHolder] = it }
+            if (background.translationY != 0f) background.translationY = 0f
+        }
+
         fun resetDummyBackgroundTransform(binder: Any) {
             val dummyHolder = dummyHolderField.get(binder) ?: return
             val mediaBackground = holderBackgrounds.findHost(dummyHolder)?.customBackground
@@ -1696,6 +1717,11 @@ object IslandExpandedMediaAmbientFlowHooker {
         }
 
         fun syncDummyBackgroundTransform(binder: Any) {
+            if (ExpandedVisualSession.active || ExpandedMediaSurfaceApplicator.isDragging()) {
+                val dummyHolder = dummyHolderField.get(binder) ?: return
+                holdSettledBackground(dummyHolder)
+                return
+            }
             val offsetField = mediaBgTransYOffsetField ?: return
             val offset = offsetField.getFloat(binder)
             val dummyHolder = dummyHolderField.get(binder) ?: return

@@ -175,6 +175,8 @@ sealed class ExpandedLayoutDecision {
         /** True when leaf geometry tightened the cutout gap. False keeps today's margin math. */
         val tightLayout: Boolean = false,
         val textClips: List<TextClip> = emptyList(),
+        /** Pixels the media card bottom was raised. Other families stay at 0. */
+        val mediaBottomTrimPx: Int = 0,
     ) : ExpandedLayoutDecision() {
         fun ownsTouch(x: Int, y: Int): Boolean = touchRegions.any { it.contains(x, y) }
 

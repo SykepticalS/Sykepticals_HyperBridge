@@ -202,6 +202,54 @@ of extrapolating from an unrelated build.
   - The expanded media layout is 364×168dp. `normalLayoutIsland.applyTo` runs on every attach, so margins set only on the live views are overwritten. Title and artist are single-line `ellipsize=end`. Playback polls the seek bar every 500ms and does not change layout.
 - HyperPop implication: pill-mode content can share the camera band only when the leaf does not cross the hole, or when it is a title that scrolls inside the safe span. Media retuning has to go through the ConstraintSet load path. Focus retuning has to run again after `bind`. A `cutoutY` of 0 is not a usable hole; rebuild from the compact island and the framework cutout width.
 
+## Expanded bottom-handle pull-down
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `com.android.systemui` `16.03.251211.r`; `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MiuiSystemUI.apk` `A423B9805823B93301A0094732274F4E5EA951F86F333C7B94D9730715576E06`; `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandContentFakeView.handleTouchEvent` / `onTrackingFakeViewStart` / `onTrackingFakeViewUpdate` / `ExpandedTracker.startTrack` / `updateTrack` / `finishTrack`; `DynamicIslandEventCoordinator.startDropDownExpandedIsland` / `updateDropDownExpandedIsland` / `finishDropDownExpandedIsland`; `MiuiIslandMediaViewBinderImpl.attach` collector `emit`.
+- Evidence source: JADX on the pulled APKs above. No phone trace of the gesture after the HyperPop change.
+- Observation:
+  - The bottom-handle drag is the fake view. `onTrackingFakeViewDown` stores `mFakeViewHeight` from `getExpandedViewHeight()`. Past touch slop, `handleTouchEvent` calls `onTrackingFakeViewStart`, which shows the fake, hides the real island and its background, then `startTrack`.
+  - `onTrackingFakeViewUpdate` writes the outer Folme rect (`left`/`right` stay, `top`/`bottom` follow the finger) and `updateOutline`. `ExpandedTracker.updateTrack` sends `pull_down_action_offset_y`.
+  - The media collector's `pull_down_type_update` sets `dummyHolder.mediaBgView.translationY` to that offset. `pull_down_type_start` and `pull_down_type_finish` do not reposition artwork, titles, or controls. The dummy player is `DynamicIslandData.fakeView`.
+- HyperPop implication, corrected the same day from `TemplateBuilderV3`, `FocusNotificationController.addDynamicIslandView`, and `DynamicIslandContentFakeView.updateExpandedView`: every expanded island is built twice. Focus inflates `focus_notification_template_standard` into `islandLayout` and `islandLayoutFake`, binds the second copy through `islandFakeAdapter`, and stores them as `DynamicIslandData.view` and `fakeView`. Media uses `miuiPlayerHolder` and `miuiDummyPlayerHolder`; the dummy player is `fakeView`. `updateExpandedView` puts `fakeView` into `fake_expanded_view`. `onTrackingFakeViewStart` hides the real island and shows that second copy. Per frame Xiaomi changes only the fake outline, the mini-bar translation, and `pull_down_action_offset_y` (which the media dummy writes onto `mediaBgView.translationY`). A phone trace the same day showed `getExpandedViewHeight()` 591 while `fake_expanded_view` was laid out 535px tall (`56,30-1143,565`). Tuning only `getView()` therefore leaves the drag looking like Xiaomi's untuned layout.
+- HyperPop implication: apply the already-resolved takeover to both copies before the gesture. Keep Xiaomi's outline, mini bar, Folme rect, and launch. Do not remeasure the drag copy. Hold the dummy background translation at the settled value for the gesture, including the launch frames after the real island has left `Expanded`, and restore the drag copy's originals only once Xiaomi hides it.
+
+## Expanded media play/pause refresh
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`.
+- SystemUI/plugin version: `com.android.systemui` `16.03.251211.r`; `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: not re-pulled for this entry. Evidence is runtime only, on the installed build above.
+- Class/method/event: expanded content view `reset()` → `updateExpandedSize()` → `setState(Expanded)`; `ConstraintSet.load` and `MiuiIslandMediaControllerImpl.reInflateView*`.
+- Evidence source: device trace (temporary HyperPop hook logging plus screen captures during Spotify play/pause, next, previous on the expanded media island).
+- Observation:
+  - One play/pause produced two refreshes about 0.45s apart. Each ran `reset()`, then `updateExpandedSize()`, then `setState(Expanded)` on the same view, with no `ConstraintSet.load` or `reInflateView*` in between. The island stayed expanded throughout.
+  - After the refresh the `DynamicIslandExpandedView` and `LightBgView` hosts were still laid out at their old bounds while their params were back to wrap/match. The next Xiaomi layout then measured the expanded view at its natural content height (544px against a 597px card) with nothing to re-run HyperPop's host growth, because per-frame presentation does not run on an idle island.
+  - The first expansion after a SystemUI start used a content probe taken before the HyperPop ConstraintSet was laid out (card bottom 621). The refresh re-probed the settled layout (card bottom 627). Later expansions used 627.
+- HyperPop implication: a media refresh is a full session teardown and rebuild, not a ConstraintSet reload. Host heights have to be written from the resolved card and the host params, never from stale laid-out bounds. The 6px first-update card difference is not yet reconciled.
+
+## Expanded media mini-bar placement
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: same Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`) identity as the expanded bottom-handle entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandBaseContentView.updateMiniBarTranslation$miui_dynamicisland_release`; dims `mini_window_bar_height`, `mini_window_bar_marginBottom`, `mini_window_bar_width`.
+- Evidence source: JADX on the plugin APK above. The live expanded media card on this phone was `(56,30)-(1143,627)` while Spotify was expanded.
+- Observation:
+  - The drag handle is `mini_window_bar`. Its translation is `expandedViewHeight - miniBarMarginBottom - miniBarHeight`.
+  - The decoded dimens are height 3.64dp, bottom margin 7.27dp, width 60.36dp. At density 480 the margin is about 22px, which matched the light bar sitting just above y=627.
+- HyperPop implication: a shorter `getExpandedViewHeight()` moves the handle up with the card. Leaving `miniBarMarginBottom` alone keeps the handle inset from the new bottom by 7.27dp. Shrinking that margin as well holds the handle still and hides a small trim.
+
 ## Entry template
 
 ### Finding

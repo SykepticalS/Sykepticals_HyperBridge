@@ -67,7 +67,7 @@ Installed from `HyperPopModule` when `packageName == IslandProtocol.SYSTEM_UI_PA
 | `xposed/hooks/MarqueeHook.kt` | Marquee |
 | `xposed/hooks/IslandTextUpdateAnimationHook.kt` | Text update animation |
 | `xposed/hooks/BetterAnimationsHook.kt` | Better animations |
-| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar. Pill mode seats clippable text in the camera band via `CutoutSafeLayout`; `FocusIslandLayoutApplier` retunes the island copy and leaves titles untruncated. `ExpandedLayoutProbe` logs only when `debug.hyperpop.layoutprobe=1` |
+| `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar. Pill mode seats clippable text in the camera band via `CutoutSafeLayout`; `FocusIslandLayoutApplier` retunes both the real expanded copy and Xiaomi's drag copy (`DynamicIslandData.fakeView`) and leaves titles untruncated. `ExpandedFakeMirrorPolicy` skips that second write when the drag copy is already in sync. Media backgrounds extend to the handle-aware card bottom via `ExpandedMediaSurfaceApplicator`, and the drag copy reuses that resolved extension. Hosts inside Xiaomi's expanded view are pinned to the card from their params (a media refresh resets them while their laid-out bounds are stale). `ExpandedLayoutProbe` logs only when `debug.hyperpop.layoutprobe=1` |
 | `xposed/hooks/StatusBarTakeoverHook.kt` | Status-bar fade for that takeover |
 | `xposed/mediacard/MediaCardHook.kt` | Media card orchestration + `DynamicClassLoaderHooks` |
 
