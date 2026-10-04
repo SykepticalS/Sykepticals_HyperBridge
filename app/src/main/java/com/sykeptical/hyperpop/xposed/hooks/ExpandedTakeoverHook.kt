@@ -325,6 +325,7 @@ object ExpandedTakeoverHook {
             return
         }
         present(view, delegate, current, live)
+        if (coordinator.releaseRetiringWhenCovered()) finishAllRetiring()
         StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
     }
 
@@ -392,6 +393,23 @@ object ExpandedTakeoverHook {
                 "alpha=${view.alpha} at=${Throwable().stackTrace.getOrNull(1)?.methodName}"
         }
         coordinator.finishRetiring(id, retiring.generation)
+        restoreRetiringSurface(view)
+    }
+
+    /**
+     * The replaced owner is leaving with Xiaomi's expiry animation, which has
+     * to read native geometry. The status-bar fade stays with the coordinator
+     * until the incoming island covers it.
+     */
+    fun releaseRetiringSurface(view: View) {
+        if (retired.isEmpty()) return
+        val id = System.identityHashCode(view)
+        if (retired.remove(id) == null) return
+        trace { "releaseRetiringSurface ${hex(id)} state=${view.call("getState")?.javaClass?.simpleName}" }
+        restoreRetiringSurface(view)
+    }
+
+    private fun restoreRetiringSurface(view: View) {
         val scopes = listOfNotNull(view, runCatching { view.call("getFakeView") as? View }.getOrNull())
         realSaved.restoreWithin(scopes)
         fakeSaved.restoreWithin(scopes)

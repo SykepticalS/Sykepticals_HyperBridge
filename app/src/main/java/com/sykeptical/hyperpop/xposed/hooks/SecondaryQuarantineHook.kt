@@ -63,6 +63,8 @@ object SecondaryQuarantineHook {
     private var lastViolations = emptySet<Int>()
     private val pendingReveal = mutableSetOf<Int>()
     private val watchedHandoffs = mutableSetOf<Int>()
+    /** Replaced owners playing expandedToDeletedAnimation without leaving their slot. */
+    private val expiryDismissals = mutableSetOf<Int>()
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         hookLoader(module, param.defaultClassLoader)
@@ -87,6 +89,7 @@ object SecondaryQuarantineHook {
         if (!pluginLoaders.add(loader)) return
         hookFlush(module, loader)
         val guarded = hookMotion(module, loader)
+        hookExpiryRemoval(module, loader)
         hookReplacementEnd(module, loader)
         hookBurnIn(module, loader)
         hookTouch(module, loader)
@@ -122,7 +125,7 @@ object SecondaryQuarantineHook {
         }
         watchHandoffs(slots)
         when (decision) {
-            is QuarantineFlush.Activate -> sweep(slots, decision.sweepIds)
+            is QuarantineFlush.Activate -> sweep(slots, decision.sweepIds, decision.expiryIds)
             is QuarantineFlush.Hold -> sweep(slots, decision.sweepIds)
             is QuarantineFlush.Release -> cancelHidden(slots)
             QuarantineFlush.None -> Unit
@@ -173,17 +176,18 @@ object SecondaryQuarantineHook {
         handlers.values.forEach { handler -> handler.call("stop") }
     }
 
-    private fun sweep(slots: IslandSlots, ids: Set<Int>) {
+    private fun sweep(slots: IslandSlots, ids: Set<Int>, expiryIds: Set<Int> = emptySet()) {
         ids.forEach { id ->
             val view = slots.views[id] ?: return@forEach
             trace { "sweep ${hex(id)} state=${view.call("getState")?.javaClass?.simpleName} ${alphaOf(view)}" }
-            hide(view, repeat = true)
+            hide(view, repeat = true, expiry = id in expiryIds)
             policy.markHidden(id)
         }
     }
 
     private fun cancelHidden(slots: IslandSlots) {
         policy.hiddenIds().forEach { id ->
+            if (id in expiryDismissals) return@forEach
             val view = slots.views[id] ?: return@forEach
             view.call("getAnimatorDelegate")?.let { cancelFolme(it) }
         }
@@ -210,6 +214,7 @@ object SecondaryQuarantineHook {
                         val fromHidden = policy.wasHidden(id)
                         if (fromHidden && isSlotRender(method.name)) policy.markRendered(id)
                         val result = chain.proceed()
+                        if (fromHidden && isSlotRender(method.name)) expiryDismissals.remove(id)
                         val reveal = isSlotRender(method.name) && (fromHidden || pendingReveal.remove(id))
                         if (reveal) slowReveal(view)
                         if (!method.name.startsWith("onSwipe")) trace {
@@ -217,6 +222,10 @@ object SecondaryQuarantineHook {
                                 "state=${view.call("getState")?.javaClass?.simpleName} ${alphaOf(view)}"
                         }
                         return@hook result
+                    }
+                    if (id in expiryDismissals) {
+                        trace { "motion ${method.name} ${hex(id)} expiry in flight" }
+                        return@hook null
                     }
                     trace { "motion ${method.name} ${hex(id)} blocked owner=${hex(policy.ownerId)}" }
                     hide(view, repeat = false)
@@ -528,9 +537,11 @@ object SecondaryQuarantineHook {
         return list.mapNotNull { it as? View }
     }
 
-    private fun hide(view: View, repeat: Boolean) {
+    private fun hide(view: View, repeat: Boolean, expiry: Boolean = false) {
         val id = System.identityHashCode(view)
+        if (id in expiryDismissals) return
         val delegate = view.call("getAnimatorDelegate")
+        if (expiry && playExpandedExpiry(view)) return
         if (policy.wasHidden(id) && (!repeat || delegate == null || !stillVisible(view, delegate))) return
         if (delegate == null) {
             trace { "hide ${hex(id)} no delegate: view alpha 0" }
@@ -548,13 +559,47 @@ object SecondaryQuarantineHook {
         }
         retarget(delegate, state, "CONTAINER_ALPHA", 0f)
         val last = view.call("getLastState")?.javaClass?.simpleName
-        val instant = policy.wasHidden(id) || last == null || last == "Init" || last == "Empty"
-        val played = if (instant) folmeSetTo(delegate, state) else folmeTo(delegate, state)
+        val immediate = policy.wasHidden(id) || last == null || last == "Init" || last == "Empty"
+        if (immediate) cancelFolme(delegate)
+        val played = if (immediate) folmeSetTo(delegate, state) else folmeTo(delegate, state)
         trace {
             "hide ${hex(id)} state=${view.call("getState")?.javaClass?.simpleName} last=$last " +
-                "instant=$instant played=$played"
+                "instant=$immediate played=$played"
         }
         if (!played) view.alpha = 0f
+    }
+
+    /**
+     * Xiaomi plays this when an expanded island times out: Folme to the cutout
+     * state, with the expanded content fading as it goes. The island stays in
+     * its slot; the animation's own end otherwise removes the view.
+     */
+    private fun playExpandedExpiry(view: View): Boolean {
+        ExpandedTakeoverHook.releaseRetiringSurface(view)
+        val delegate = view.call("getAnimatorDelegate") ?: return false
+        val played = invoked(delegate, "expandedToDeletedAnimation", view)
+        if (!played) return false
+        expiryDismissals += System.identityHashCode(view)
+        trace { "expiry ${hex(System.identityHashCode(view))} expandedToDeletedAnimation" }
+        return true
+    }
+
+    private fun hookExpiryRemoval(module: XposedModule, loader: ClassLoader) {
+        runCatching {
+            val delegate = loader.loadClass(DELEGATE)
+            delegate.declaredMethods.filter { it.name == "removeViewFromWindow" }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val view = chain.args.getOrNull(0) as? View ?: return@hook chain.proceed()
+                    val id = System.identityHashCode(view)
+                    val state = view.call("getState")?.javaClass?.simpleName
+                    if (id in expiryDismissals && state != "Deleted") {
+                        trace { "expiry keep ${hex(id)} state=$state" }
+                        return@hook null
+                    }
+                    chain.proceed()
+                }
+            }
+        }.onFailure { module.log("HyperPop: secondary quarantine expiry removal unavailable: ${it.message}") }
     }
 
     /**

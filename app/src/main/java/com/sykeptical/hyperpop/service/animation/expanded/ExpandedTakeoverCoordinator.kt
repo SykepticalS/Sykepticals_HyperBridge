@@ -131,6 +131,17 @@ class ExpandedTakeoverCoordinator(
         return true
     }
 
+    /**
+     * The incoming island now covers the status bar, so a replaced owner no
+     * longer has to stay retired to keep that fade. Returns true once.
+     */
+    fun releaseRetiringWhenCovered(): Boolean {
+        if (phase != TakeoverPhase.EXPANDED || retiring.isEmpty()) return false
+        retiring.clear()
+        publish(ownerAlpha)
+        return true
+    }
+
     fun accepts(ownerId: Int, generation: Long): Boolean =
         this.ownerId == ownerId && this.generation == generation && phase != TakeoverPhase.NATIVE
 

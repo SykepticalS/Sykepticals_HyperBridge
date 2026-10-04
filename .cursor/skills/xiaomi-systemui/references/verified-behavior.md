@@ -160,7 +160,7 @@ of extrapolating from an unrelated build.
   - `DynamicIslandBackgroundView.onDraw` draws the drawable outset by `stokeWidth` on every side, outside the content clip. The expanded drawable keeps `setStroke(island_stroke, stroke_color)`.
   - `AddEventCoordinator.handleAppEvent(AddDynamicIsland)` with `canExpanded` true calls `ExpandedStateHandler.handleReplacedState`, which makes the new view `Expanded` and passes the previous expanded view down the chain in the same call. `canExpanded` does not look at `userExpanded`. `isTempHidden` on the event coordinator takes the content view; a no-arg call does not exist.
   - Media content is sized with `updateExpandedSize(maxWidth, maxHeight)`. Other templates, including calls, use the focus view's own height.
-- HyperPop implication: the visible pill has to stay inside `getExpandedIslandRect` or the swipe never starts. Zero the drawable stroke and `stokeWidth` together while the styler owns the island, and restore both. A second expand-required add has to wait until `collapse` finishes; replaying `handleAppEvent` lets Xiaomi place the new island. Pass the content view to `isTempHidden`.
+- HyperPop implication: the visible pill has to stay inside `getExpandedIslandRect` or the swipe never starts. The expanded outline is Xiaomi's: `updateDarkLightMode` calls `setStroke(island_stroke, stroke_color)` on the plate, and `onDraw` outsets that plate by `stokeWidth`. Replacing the drawable or writing `stokeWidth` to 0 hides that stroke under the clip. HyperPop may set the plate's corner radius to the clip radius so the same stroke follows the pill; `island_radius` is 30dp and otherwise leaves `stroke_color` in the corner pockets. Restore that radius on collapse when the same drawable is still installed. A second expand-required add has to wait until `collapse` finishes; replaying `handleAppEvent` lets Xiaomi place the new island. Pass the content view to `isTempHidden`.
 - Phone check, 2026-10-03, HyperPop 0.6.1-sykeptical code 36 after this pass: an expanded Spotify island on the home screen kept rewind, pause, and forward in one row with the timeline underneath, the status-bar clock hidden, and no separate black ring. An upward swipe logged `direction: UP` and `skip collapse=(false||false||true), reason=swipe up`, then the compact pill and the clock returned. A hook that returned null from `access$onInterceptTouchEvent` had been discarding that intercept.
 
 ## App-exit expand still shows the native media card first
@@ -249,6 +249,40 @@ of extrapolating from an unrelated build.
   - The drag handle is `mini_window_bar`. Its translation is `expandedViewHeight - miniBarMarginBottom - miniBarHeight`.
   - The decoded dimens are height 3.64dp, bottom margin 7.27dp, width 60.36dp. At density 480 the margin is about 22px, which matched the light bar sitting just above y=627.
 - HyperPop implication: a shorter `getExpandedViewHeight()` moves the handle up with the card. Leaving `miniBarMarginBottom` alone keeps the handle inset from the new bottom by 7.27dp. Shrinking that margin as well holds the handle still and hides a small trim.
+
+## Secondary promotion keeps compact ears in the big-island Folme state
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandAnimationDelegate.getHiddenAnimState` / `getSmallIslandAnimState` / `getBigIslandAnimState` / `smallIslandToBigIslandAnimation` / `bigIslandScheduleUpdate`; `DynamicIslandAnimationController.onStateChange`; `BigIslandStateHandler.handleFillInState`.
+- Evidence source: JADX on the plugin APK above. No new phone trace for this promotion.
+- Observation:
+  - `SmallIsland` → `BigIsland` is the promotion. `onStateChange` calls `smallIslandToBigIslandAnimation`. `handleFillInState` is what moves the small-island current into the big slot and `addState`s `BigIsland`.
+  - `getHiddenAnimState` and `getSmallIslandAnimState` both set `BIG_ISLAND_ALPHA` 0, `BIG_ISLAND_BLUR` 0, and `BIG_ISLAND_AREA_LEFT_TRANS_X` / `RIGHT` to `getAreaLeftCollapseTransX()` / `getAreaRightCollapseTransX()` (the ear width, so the content sits outside the clip). `CONTAINER_ALPHA` is 0 only in the hidden state.
+  - `getBigIslandAnimState` is the primary compact state: `BIG_ISLAND_ALPHA` 1, `BIG_ISLAND_BLUR` 0, both ear translations 0, `SMALL_ISLAND_ALPHA` 0, `CONTAINER_ALPHA` 1, `CONTAINER_X` 0.
+  - `smallIslandToBigIslandAnimation` calls `updateBigIslandLayout()` (shell width and translation) and then `Folme.to(getBigIslandAnimState())`. `onBegin` sets `bigIslandView` to `VISIBLE`. `bigIslandScheduleUpdate` writes that alpha, scale, blur, and the two ear translations onto the big-island view.
+  - `expandedToAppExpandedAnimation` hides the expanded owner. It does not itself promote the sibling.
+- HyperPop implication: a yielded circle is already in `getHiddenAnimState`. Do not `setTo` `getSmallIslandAnimState` before the promotion; that writes the blank-ear state again and can outlive the shell move. Cancel the hidden Folme and let `smallIslandToBigIslandAnimation` apply `getBigIslandAnimState`. Do not start a second changed-animation on top of it.
+
+## Expanded island expiry animation
+
+### Finding
+
+- Date: 2026-10-04
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`.
+- Class/method/event: `DynamicIslandSafeguardsController.delayDeleted`; `DynamicIslandWindowViewController.removeDynamicIslandView`; `DynamicIslandWindowView.removeDynamicIslandDataSuspend`; `DynamicIslandAnimationController.onStateChange`; `DynamicIslandAnimationDelegate.expandedToDeletedAnimation` / `removeViewFromWindow`; `DynamicIslandWindowView.preRemoveDynamicIsland`.
+- Evidence source: JADX on the pulled plugin APK above. No new phone trace.
+- Observation:
+  - Island timeout calls `onDynamicIslandTimeoutRemoved` and `removeDynamicIslandView(key)`, which removes the island data with animation enabled. That dispatches `DeletedDynamicIsland` and, when the previous state is `Expanded` and `deleteNoAnimation` is false, `expandedToDeletedAnimation`.
+  - On a phone that animation runs Folme to `getCutoutAnimState`, easing the expanded translation, scale, alpha, and blur with it. `onComplete` and `onCancel` call `removeViewFromWindow`.
+  - `removeViewFromWindow` detaches the content parent unless the view is still listed and is a media island. `preRemoveDynamicIsland` only deletes the island data when the state is already `Deleted` and `deleteByAddNew` is set.
+- HyperPop implication: a replaced expanded owner can play `expandedToDeletedAnimation` while its handler state is still compact. Skip `removeViewFromWindow` for that play unless the state is `Deleted`, so the slot remains and can be redrawn after the takeover. Let the animation's Folme run; do not replace it with `getHiddenAnimState`.
 
 ## Entry template
 

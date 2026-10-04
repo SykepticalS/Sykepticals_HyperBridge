@@ -267,9 +267,14 @@ class ExpandedTakeoverCoordinatorTest {
         val replacement = coordinator.replace(2, nowMs = 20)!!
         coordinator.onFrame(2, replacement.generation, midway(), compact, target, group, nowMs = 30)
         assertEquals(TakeoverPhase.EXPANDING, coordinator.phase)
+        assertFalse(coordinator.releaseRetiringWhenCovered())
+        assertTrue(coordinator.retires(1, first))
         coordinator.onFrame(2, replacement.generation, target, compact, target, group, nowMs = 40)
         assertEquals(TakeoverPhase.EXPANDED, coordinator.phase)
-        assertTrue(coordinator.retires(1, first))
+        assertTrue(coordinator.releaseRetiringWhenCovered())
+        assertFalse(coordinator.hasRetiring())
+        assertEquals(0f, coordinator.statusBarAlpha, 0.001f)
+        assertFalse(coordinator.releaseRetiringWhenCovered())
     }
 
     @Test

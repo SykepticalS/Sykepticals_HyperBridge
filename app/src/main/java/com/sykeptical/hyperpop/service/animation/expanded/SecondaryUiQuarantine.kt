@@ -16,11 +16,16 @@ data class QuarantineSnapshot(
 )
 
 sealed class QuarantineFlush {
-    /** Expanded owner is present. Hide every other compact current. */
+    /**
+     * Expanded owner is present. Hide every other compact current.
+     * [expiryIds] are owners Xiaomi just replaced. They play the native expanded
+     * expiry animation instead of collapsing into a visible compact pill.
+     */
     data class Activate(
         val ownerId: Int,
         val generation: Long,
         val sweepIds: Set<Int>,
+        val expiryIds: Set<Int> = emptySet(),
     ) : QuarantineFlush()
 
     /** Expanded island has left its handler, but the takeover card is still up. */
@@ -72,21 +77,23 @@ class SecondaryUiQuarantine {
         val expanded = snapshot.expandedId
         if (expanded != null) {
             val replacing = !active || ownerId != expanded
+            val outgoing = if (replacing) ownerId.takeIf { active } else null
             if (replacing) {
-                val outgoing = ownerId.takeIf { active }
                 generation += 1L
                 ownerId = expanded
                 hiddenIds.clear()
                 refreshableGeneration = -1L
                 handoffIds -= expanded
-                // Xiaomi's handleReplacedState moved the previous expanded owner
-                // into a compact slot in this same flush. Its Expanded -> compact
-                // morph is the native replacement animation.
-                if (outgoing != null && outgoing in compactIds(snapshot)) handoffIds += outgoing
+                // Xiaomi's handleReplacedState drops the previous expanded owner
+                // into a compact slot whose morph finishes as a visible pill.
+                // That pill has to follow the same hide as every other compact
+                // current in this flush.
+                if (outgoing != null) handoffIds -= outgoing
             }
             handoffIds.retainAll(compactIds(snapshot))
             active = true
-            return QuarantineFlush.Activate(expanded, generation, sweepIds())
+            val expiry = outgoing?.takeIf { it in compactIds(snapshot) }
+            return QuarantineFlush.Activate(expanded, generation, sweepIds(), setOfNotNull(expiry))
         }
         if (snapshot.takeoverHolding && active) {
             handoffIds.retainAll(compactIds(snapshot))
@@ -104,7 +111,7 @@ class SecondaryUiQuarantine {
     fun blocks(id: Int): Boolean =
         active && id != ownerId && id !in handoffIds && id in compactIds(snapshot)
 
-    /** The previous expanded owner, still running Xiaomi's Expanded -> compact morph. */
+    /** A compact island still allowed to run Xiaomi's own morph. Replaced owners are not. */
     fun inHandoff(id: Int): Boolean = id in handoffIds
 
     /**
