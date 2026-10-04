@@ -105,6 +105,19 @@ object ExpandedFlowMaskApplicator {
         targetsRoot = java.lang.ref.WeakReference(null)
     }
 
+    /** Only masks under [scopes]. The current owner's mask and its shared state stay. */
+    fun clearWithin(scopes: List<View>) {
+        effects.keysWithin(scopes).forEach { view ->
+            view.setRenderEffect(null)
+            effects.remove(view)
+        }
+        val root = targetsRoot.get()
+        if (root != null && scopes.any { root.isWithin(it) }) {
+            targets = emptyList()
+            targetsRoot = java.lang.ref.WeakReference(null)
+        }
+    }
+
     private class Applied(
         val blackUntilY: Int,
         val fadeEndY: Int,

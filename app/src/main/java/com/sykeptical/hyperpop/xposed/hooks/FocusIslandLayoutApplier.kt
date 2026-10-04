@@ -66,6 +66,7 @@ object FocusIslandLayoutApplier {
                 module.hook(method).intercept { chain ->
                     val result = chain.proceed()
                     val view = chain.thisObject as? View
+                    if (view != null) runCatching { ExpandedTakeoverHook.onNativeContentInstalled(view) }
                     if (view != null) runCatching { onIsland(view) }
                     result
                 }
@@ -158,6 +159,20 @@ object FocusIslandLayoutApplier {
         synchronized(titleOriginals) { titleOriginals.clear() }
     }
 
+    /** Only titles under [scopes]. Another owner's full titles stay. */
+    fun restoreTitlesWithin(scopes: List<View>) {
+        val snapshot = synchronized(titleOriginals) {
+            titleOriginals.entries.filter { (title, _) -> scopes.any { title.isWithin(it) } }
+        }
+        snapshot.forEach { (title, saved) ->
+            runCatching {
+                title.ellipsize = saved.ellipsize
+                title.maxEms = saved.maxEms
+            }
+            synchronized(titleOriginals) { titleOriginals.remove(title) }
+        }
+    }
+
     private fun showFullTitles(root: View) {
         listOf("focus_title", "header_title").forEach { name ->
             findAll(root, name).forEach { view ->
@@ -175,6 +190,7 @@ object FocusIslandLayoutApplier {
 
     private fun onHolder(holder: Any?) {
         if (!ExpandedVisualSession.active || holder == null) return
+        ExpandedTakeoverHook.noteNativeBind()
         val root = holderView(holder)?.let { expandedContent(it) } ?: return
         apply(root)
     }

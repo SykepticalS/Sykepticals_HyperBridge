@@ -1,7 +1,7 @@
 package com.sykeptical.hyperpop.service.animation.expanded
 
 /**
- * Status-bar and secondary alpha from the live card.
+ * Status-bar alpha from the live card.
  *
  * Compact already overlaps the status bar vertically, so the fade follows how
  * much of the measured icon group the card has covered beyond the compact

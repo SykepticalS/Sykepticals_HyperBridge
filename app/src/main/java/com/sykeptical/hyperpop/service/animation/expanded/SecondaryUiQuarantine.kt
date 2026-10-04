@@ -64,6 +64,7 @@ class SecondaryUiQuarantine {
 
     private var snapshot = QuarantineSnapshot()
     private val hiddenIds = mutableSetOf<Int>()
+    private val handoffIds = mutableSetOf<Int>()
     private var refreshableGeneration: Long = -1L
 
     fun onFlushStart(snapshot: QuarantineSnapshot): QuarantineFlush {
@@ -72,17 +73,26 @@ class SecondaryUiQuarantine {
         if (expanded != null) {
             val replacing = !active || ownerId != expanded
             if (replacing) {
+                val outgoing = ownerId.takeIf { active }
                 generation += 1L
                 ownerId = expanded
                 hiddenIds.clear()
                 refreshableGeneration = -1L
+                handoffIds -= expanded
+                // Xiaomi's handleReplacedState moved the previous expanded owner
+                // into a compact slot in this same flush. Its Expanded -> compact
+                // morph is the native replacement animation.
+                if (outgoing != null && outgoing in compactIds(snapshot)) handoffIds += outgoing
             }
+            handoffIds.retainAll(compactIds(snapshot))
             active = true
             return QuarantineFlush.Activate(expanded, generation, sweepIds())
         }
         if (snapshot.takeoverHolding && active) {
+            handoffIds.retainAll(compactIds(snapshot))
             return QuarantineFlush.Hold(sweepIds())
         }
+        handoffIds.clear()
         if (!active) return QuarantineFlush.None
         val released = generation
         active = false
@@ -91,7 +101,17 @@ class SecondaryUiQuarantine {
         return QuarantineFlush.Release(released)
     }
 
-    fun blocks(id: Int): Boolean = active && id != ownerId && id in compactIds(snapshot)
+    fun blocks(id: Int): Boolean =
+        active && id != ownerId && id !in handoffIds && id in compactIds(snapshot)
+
+    /** The previous expanded owner, still running Xiaomi's Expanded -> compact morph. */
+    fun inHandoff(id: Int): Boolean = id in handoffIds
+
+    /**
+     * The native morph finished, was cancelled, or was replaced by another
+     * motion. From here the island follows the settled quarantine.
+     */
+    fun endHandoff(id: Int): Boolean = handoffIds.remove(id)
 
     fun wasHidden(id: Int): Boolean = id in hiddenIds
 
@@ -156,14 +176,14 @@ class SecondaryUiQuarantine {
     fun violations(snapshot: QuarantineSnapshot): Set<Int> {
         if (!active) return emptySet()
         val owner = ownerId ?: return emptySet()
-        return compactIds(snapshot).filter { it != owner && it !in hiddenIds }.toSet()
+        return compactIds(snapshot).filter { it != owner && it !in hiddenIds && it !in handoffIds }.toSet()
     }
 
     private fun blockedCompact(id: Int?): Boolean = id != null && id != ownerId
 
     private fun sweepIds(): Set<Int> {
         val owner = ownerId ?: return emptySet()
-        return compactIds(snapshot).filter { it != owner }.toSet()
+        return compactIds(snapshot).filter { it != owner && it !in handoffIds }.toSet()
     }
 
     private fun compactIds(snapshot: QuarantineSnapshot): Set<Int> = setOfNotNull(

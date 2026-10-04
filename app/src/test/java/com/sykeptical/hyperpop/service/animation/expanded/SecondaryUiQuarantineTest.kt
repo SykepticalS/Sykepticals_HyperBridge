@@ -133,6 +133,64 @@ class SecondaryUiQuarantineTest {
     }
 
     @Test
+    fun theReplacedOwnerKeepsItsNativeMorphThenFollowsTheQuarantine() {
+        val quarantine = SecondaryUiQuarantine()
+        quarantine.onFlushStart(snapshot(expanded = 7, small = 4))
+        quarantine.markHidden(4)
+        val replaced = quarantine.onFlushStart(snapshot(expanded = 8, big = 7, small = 4)) as QuarantineFlush.Activate
+        assertEquals(8, replaced.ownerId)
+        assertEquals(setOf(4), replaced.sweepIds)
+        assertTrue(quarantine.inHandoff(7))
+        assertFalse(quarantine.blocks(7))
+        assertTrue(quarantine.blocks(4))
+        assertTrue(quarantine.touchMask().blockBig)
+        assertEquals(setOf(4), quarantine.violations(snapshot(expanded = 8, big = 7, small = 4)))
+
+        assertTrue(quarantine.endHandoff(7))
+        assertFalse(quarantine.endHandoff(7))
+        assertTrue(quarantine.blocks(7))
+        val settled = quarantine.onFlushStart(snapshot(expanded = 8, big = 7, small = 4)) as QuarantineFlush.Activate
+        assertEquals(setOf(7, 4), settled.sweepIds)
+    }
+
+    @Test
+    fun aCompactIslandThatTakesTheCardIsNotAHandoff() {
+        val quarantine = SecondaryUiQuarantine()
+        quarantine.onFlushStart(snapshot(expanded = 7, small = 4))
+        quarantine.onFlushStart(snapshot(expanded = 4, big = 7))
+        assertTrue(quarantine.inHandoff(7))
+        assertFalse(quarantine.inHandoff(4))
+        quarantine.onFlushStart(snapshot(expanded = 7, big = 4))
+        assertFalse(quarantine.inHandoff(7))
+        assertTrue(quarantine.inHandoff(4))
+    }
+
+    @Test
+    fun aHandoffEndsWhenTheIslandLeavesItsSlotOrTheQuarantineReleases() {
+        val quarantine = SecondaryUiQuarantine()
+        quarantine.onFlushStart(snapshot(expanded = 7))
+        quarantine.onFlushStart(snapshot(expanded = 8, big = 7))
+        assertTrue(quarantine.inHandoff(7))
+        quarantine.onFlushStart(snapshot(expanded = 8))
+        assertFalse(quarantine.inHandoff(7))
+
+        quarantine.onFlushStart(snapshot(expanded = 9, big = 8))
+        assertTrue(quarantine.inHandoff(8))
+        assertTrue(quarantine.onFlushStart(snapshot(big = 8)) is QuarantineFlush.Release)
+        assertFalse(quarantine.inHandoff(8))
+        quarantine.onFlushStart(snapshot(expanded = 9, big = 8))
+        assertTrue(quarantine.blocks(8))
+    }
+
+    @Test
+    fun aReplacementWithoutAPriorOwnerHasNoHandoff() {
+        val quarantine = SecondaryUiQuarantine()
+        quarantine.onFlushStart(snapshot(expanded = 8, big = 7))
+        assertFalse(quarantine.inHandoff(7))
+        assertTrue(quarantine.blocks(7))
+    }
+
+    @Test
     fun aStaleReleaseCannotRefreshAfterANewExpansion() {
         val quarantine = SecondaryUiQuarantine()
         quarantine.onFlushStart(snapshot(expanded = 7, big = 4))

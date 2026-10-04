@@ -99,6 +99,14 @@ internal object ExpandedMediaSurfaceApplicator {
         restoreShown()
     }
 
+    /** Only surfaces under [scopes]. Another owner's extension stays applied. */
+    fun restoreWithin(scopes: List<View>) {
+        restoreMargins(realSurfaces, realSurfaces.keysWithin(scopes))
+        restoreHosts(realHosts, realHosts.keysWithin(scopes))
+        restoreMargins(shownSurfaces, shownSurfaces.keysWithin(scopes))
+        restoreHosts(shownHosts, shownHosts.keysWithin(scopes))
+    }
+
     private fun extend(surface: View, extension: Int, saved: MutableMap<View, Int>) {
         val params = surface.layoutParams as? ViewGroup.MarginLayoutParams ?: return
         val base = saved.getOrPut(surface) { params.bottomMargin }

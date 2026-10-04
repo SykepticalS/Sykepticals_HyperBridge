@@ -11,24 +11,24 @@ import com.sykeptical.hyperpop.service.animation.expanded.FlowMask
 import java.lang.reflect.Modifier
 
 /**
- * Replaces Xiaomi's expanded-island plate with a HyperPop drawable and removes
- * the blur material that would otherwise cover it. Ambient Flow stays; the
- * flow mask fades it into the plate. The original drawable and backgrounds
- * are put back on restore.
+ * Removes the blur material over the expanded island and, when a pill radius
+ * is active, points Xiaomi's own plate at that radius. The stroke, its color,
+ * and the `stokeWidth` outset stay on Xiaomi's drawable. Ambient Flow stays;
+ * the flow mask fades it into the black expanded plate. The original corner
+ * radius is put back on restore.
  */
 object ExpandedSurfaceStyler {
     private const val BLUR = "miui.systemui.util.MiBlurCompat"
     private val reflect = ReflectionLookup()
-    private val installing = ThreadLocal<Boolean>()
-    private var active: Active? = null
-    private var activeView = java.lang.ref.WeakReference<View>(null)
+    private val actives = java.util.concurrent.ConcurrentHashMap<Int, Active>()
+    private val retiringIds = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Int, Boolean>())
 
     private class Active(
+        val owner: java.lang.ref.WeakReference<View>,
         val ownerId: Int,
         val background: java.lang.ref.WeakReference<View>,
         val original: Drawable?,
-        var copy: GradientDrawable?,
-        val outsetPx: Int?,
+        val originalCornerRadiusPx: Float?,
         val black: Boolean,
         var progress: Float = 0f,
         var radiusPx: Float = 0f,
@@ -44,24 +44,25 @@ object ExpandedSurfaceStyler {
         val background: Drawable?,
     )
 
+    /**
+     * A replaced owner keeps its plate while Xiaomi morphs it into its compact
+     * slot. The next [arm] leaves it alone; [restore] ends it.
+     */
+    fun retire(view: View) {
+        val id = System.identityHashCode(view)
+        if (actives.containsKey(id)) retiringIds += id
+    }
+
     fun arm(view: View, black: Boolean) {
-        val previous = activeView.get()
-        if (previous != null && previous !== view) restore(previous)
-        if (active?.ownerId == System.identityHashCode(view)) return
-        restore(view)
+        val id = System.identityHashCode(view)
+        actives.values.toList().forEach { other ->
+            if (other.ownerId == id || other.ownerId in retiringIds) return@forEach
+            val owner = other.owner.get()
+            if (owner != null) restore(owner) else actives.remove(other.ownerId)
+        }
+        if (actives.containsKey(id)) return
         val background = backgroundView(view) ?: return
         val original = invoke(background, "getDrawable") as? Drawable
-        val plate = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setStroke(0, Color.TRANSPARENT)
-            if (black) {
-                setColor(ExpandedSurfaceStyle.ownedPlateFill())
-            } else {
-                (original as? GradientDrawable)?.color?.defaultColor?.let { setColor(it) }
-            }
-        }
-        installDrawable(background, plate)
-        val outset = setOutset(background, 0)
         val expanded = invoke(view, "getExpandedView") as? View
         val content = invoke(view, "getCurrentIslandData")?.let { invoke(it, "getView") as? View }
         val expandedBackground = expanded?.background
@@ -73,45 +74,34 @@ object ExpandedSurfaceStyler {
             expanded.clipToOutline = true
         }
         val installed = Active(
-            ownerId = System.identityHashCode(view),
+            owner = java.lang.ref.WeakReference(view),
+            ownerId = id,
             background = java.lang.ref.WeakReference(background),
             original = original,
-            copy = plate,
-            outsetPx = outset,
+            originalCornerRadiusPx = (original as? GradientDrawable)?.cornerRadius,
             black = black,
             expandedPlate = expandedPlate,
             expandedBackground = expandedBackground,
             expandedHadClip = expandedHadClip,
             cleared = cleared,
         )
-        active = installed
-        activeView = java.lang.ref.WeakReference(view)
+        actives[id] = installed
         if (black) stripBlur(view, installed)
     }
 
-    /** True when Xiaomi is trying to replace the plate this takeover owns. */
-    fun blocksReplacement(background: View): Boolean {
-        if (installing.get() == true) return false
-        return active?.background?.get() === background
-    }
-
-    /** Puts the owned plate back. Safe to call from the setDrawable hook. */
-    fun reassert(background: View) {
-        val current = active ?: return
-        if (current.background.get() !== background) return
-        val plate = current.copy ?: return
-        installDrawable(background, plate)
-        applyPlate(current)
-        val owner = activeView.get()
-        if (current.black && owner != null) stripBlur(owner, current)
+    /**
+     * Xiaomi just installed its own plate. Point that plate's corner radius at
+     * the clip so the native stroke follows the pill. The stroke itself is
+     * left as Xiaomi set it.
+     */
+    fun alignNativeOutline(background: View) {
+        val current = actives.values.firstOrNull { it.background.get() === background } ?: return
+        applyCorner(current, background)
     }
 
     fun frame(view: View, progress: Float, radiusPx: Float) {
-        val current = active ?: return
-        if (current.ownerId != System.identityHashCode(view)) return
+        val current = actives[System.identityHashCode(view)] ?: return
         val background = current.background.get() ?: backgroundView(view)
-        val showing = background?.let { invoke(it, "getDrawable") as? Drawable }
-        if (showing != null && showing !== current.copy) onDrawableReplaced(view)
         current.progress = progress
         current.radiusPx = radiusPx
         applyPlate(current)
@@ -120,40 +110,35 @@ object ExpandedSurfaceStyler {
     }
 
     fun onDrawableReplaced(view: View) {
-        val current = active ?: return
-        if (current.ownerId != System.identityHashCode(view)) return
-        val background = backgroundView(view) ?: return
-        val drawable = invoke(background, "getDrawable") as? Drawable ?: return
-        if (drawable === current.copy) return
-        val plate = current.copy ?: return
-        installDrawable(background, plate)
-        applyPlate(current)
+        val current = actives[System.identityHashCode(view)] ?: return
+        val background = current.background.get() ?: backgroundView(view) ?: return
+        applyCorner(current, background)
     }
 
     fun onBlurReapplied(view: View) {
-        val current = active ?: return
-        if (current.ownerId != System.identityHashCode(view) || !current.blurStripped) return
+        val current = actives[System.identityHashCode(view)] ?: return
+        if (!current.blurStripped) return
         stripBlur(view, current)
     }
 
     fun restore(view: View) {
-        val current = active ?: return
-        if (current.ownerId != System.identityHashCode(view)) return
+        val id = System.identityHashCode(view)
+        retiringIds -= id
+        val current = actives.remove(id) ?: return
         val background = current.background.get() ?: backgroundView(view)
-        background?.let {
-            installDrawable(it, current.original)
-            current.outsetPx?.let { outset -> setOutset(it, outset) }
+        val radius = current.originalCornerRadiusPx
+        if (background != null && radius != null) {
+            val showing = invoke(background, "getDrawable") as? GradientDrawable
+            if (showing != null && showing === current.original) showing.cornerRadius = radius
         }
         if (current.blurStripped) restoreBlur(view, current, teardown = true)
         val expanded = invoke(view, "getExpandedView") as? View
         expanded?.background = current.expandedBackground
         expanded?.clipToOutline = current.expandedHadClip
         current.cleared.forEach { saved -> saved.view.get()?.background = saved.background }
-        active = null
-        if (activeView.get() === view) activeView = java.lang.ref.WeakReference(null)
     }
 
-    fun owns(view: View): Boolean = active?.ownerId == System.identityHashCode(view)
+    fun owns(view: View): Boolean = actives.containsKey(System.identityHashCode(view))
 
     private class FakeStyle(
         val expanded: java.lang.ref.WeakReference<View>,
@@ -241,30 +226,24 @@ object ExpandedSurfaceStyler {
         runCatching { invokeBlur(view.context.classLoader, "setMiViewBlurModeCompat", expanded, 1) }
     }
 
-    private fun installDrawable(background: View, drawable: Drawable?) {
-        installing.set(true)
-        try {
-            invoke(background, "setDrawable", drawable)
-        } finally {
-            installing.set(false)
-        }
-    }
-
     private fun applyPlate(current: Active) {
-        val plate = current.copy ?: return
-        if (current.black) plate.setColor(ExpandedSurfaceStyle.ownedPlateFill())
-        val edge = ExpandedSurfaceStyle.ownedEdge(current.radiusPx)
-        plate.setStroke(edge.strokeWidthPx, Color.TRANSPARENT)
-        plate.cornerRadius = edge.cornerRadiusPx
+        val radius = ExpandedSurfaceStyle.plateCornerRadius(current.radiusPx)
+        current.background.get()?.let { applyCorner(current, it) }
         current.expandedPlate?.let { expanded ->
             expanded.setColor(ExpandedSurfaceStyle.ownedPlateFill())
-            expanded.setStroke(edge.strokeWidthPx, Color.TRANSPARENT)
-            expanded.cornerRadius = edge.cornerRadiusPx
+            expanded.setStroke(0, Color.TRANSPARENT)
+            expanded.cornerRadius = radius
         }
         current.cleared.forEach { saved ->
             val target = saved.view.get() ?: return@forEach
             if (target.background != null) target.background = null
         }
+    }
+
+    private fun applyCorner(current: Active, background: View) {
+        val radius = ExpandedSurfaceStyle.plateCornerRadius(current.radiusPx)
+        if (radius <= 0f) return
+        (invoke(background, "getDrawable") as? GradientDrawable)?.cornerRadius = radius
     }
 
     private fun newPlate(): GradientDrawable = GradientDrawable().apply {
@@ -292,13 +271,6 @@ object ExpandedSurfaceStyler {
     }
 
     private fun backgroundView(view: View): View? = invoke(view, "getBackgroundView") as? View
-
-    private fun setOutset(background: View, width: Int): Int? {
-        val field = reflect.field(background.javaClass, "stokeWidth") ?: return null
-        val previous = runCatching { field.getInt(background) }.getOrNull() ?: return null
-        if (previous != width) runCatching { field.setInt(background, width) }
-        return previous
-    }
 
     private fun invoke(target: Any, name: String, vararg args: Any?): Any? {
         val method = reflect.method(target.javaClass, name, args.size) ?: return null

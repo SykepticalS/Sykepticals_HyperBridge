@@ -11,9 +11,16 @@ import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
 import com.sykeptical.hyperpop.service.animation.expanded.IslandRect
 
 /**
- * Reads the expanded content view once, before its margin is changed.
+ * Reads the expanded content view before its margin is changed.
  * Full-bleed backgrounds are decorative so they do not push text down.
  * A missing layout falls open to the conservative gap.
+ *
+ * Xiaomi lays a freshly bound Focus template out only after the expansion has
+ * started. A view with no size is therefore measured here the way Xiaomi will:
+ * at the size its layout params already carry, or at its natural height inside
+ * the native width when Xiaomi has not resolved one yet. A view that is laid
+ * out but still has a visible bound view without a size, such as a late action
+ * module, is laid out again so the reading holds the complete template.
  */
 object ExpandedContentProbe {
     private const val MAX_VIEWS = 80
@@ -21,13 +28,21 @@ object ExpandedContentProbe {
     private const val FLOW_TAG = "hyperpop.media.island_expanded_media_custom_flow"
     private const val HOLDER_BACKGROUND_TAG = "hyperpop.media.island_media_holder_background"
 
-    fun capture(content: View): ExpandedContentProfile? {
+    /** [widthHintPx] is the native expanded width, used only when the layout params carry none. */
+    fun capture(content: View, widthHintPx: Int = 0): ExpandedContentProfile? {
         val margin = (content.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
-        if ((content.width <= 0 || content.height <= 0) && !measure(content)) return null
+        if ((content.width <= 0 || content.height <= 0) && !measure(content, widthHintPx)) return null
         if (content.width <= 0 || content.height <= 0) return null
         val leaves = ArrayList<ContentLeaf>(16)
         val seen = intArrayOf(0)
-        walk(content, content, 0, leaves, seen)
+        val unlaid = intArrayOf(0)
+        walk(content, content, 0, leaves, seen, unlaid)
+        if (unlaid[0] > 0 && content.isLayoutRequested && measure(content, widthHintPx)) {
+            leaves.clear()
+            seen[0] = 0
+            walk(content, content, 0, leaves, seen, intArrayOf(0))
+        }
+        if (content.width <= 0 || content.height <= 0) return null
         val shown = leaves.mapNotNull { it.visibleWithin(content.width, content.height) }
         if (shown.isEmpty()) return null
         val clusters = (content as? ViewGroup)?.let { group ->
@@ -46,15 +61,19 @@ object ExpandedContentProbe {
         )
     }
 
-    private fun measure(content: View): Boolean {
-        val width = content.layoutParams?.width ?: return false
-        val height = content.layoutParams?.height ?: return false
-        if (width <= 0 || height <= 0) return false
+    private fun measure(content: View, widthHintPx: Int): Boolean {
+        val params = content.layoutParams
+        val width = params?.width?.takeIf { it > 0 } ?: widthHintPx.takeIf { it > 0 } ?: return false
+        val exactHeight = params?.height?.takeIf { it > 0 }
+        val heightSpec = if (exactHeight != null) {
+            View.MeasureSpec.makeMeasureSpec(exactHeight, View.MeasureSpec.EXACTLY)
+        } else {
+            val limit = content.resources.displayMetrics.heightPixels
+            if (limit <= 0) return false
+            View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST)
+        }
         return runCatching {
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY),
-            )
+            content.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), heightSpec)
             content.layout(
                 content.left,
                 content.top,
@@ -71,6 +90,7 @@ object ExpandedContentProbe {
         depth: Int,
         leaves: MutableList<ContentLeaf>,
         seen: IntArray,
+        unlaid: IntArray,
     ) {
         if (view !== root) {
             if (seen[0] >= MAX_VIEWS || depth > MAX_DEPTH) return
@@ -84,16 +104,28 @@ object ExpandedContentProbe {
                 group == null ||
                 group.childCount == 0
             if (bounds != null && leaf) leaves += ContentLeaf(bounds, kind, role(view))
+            if (bounds == null && leaf && shownInside(view, root)) unlaid[0] += 1
             if (kind == ContentLeafKind.DECORATIVE || group == null) return
             for (index in 0 until group.childCount) {
-                walk(group.getChildAt(index), root, depth + 1, leaves, seen)
+                walk(group.getChildAt(index), root, depth + 1, leaves, seen, unlaid)
             }
             return
         }
         val group = view as? ViewGroup ?: return
         for (index in 0 until group.childCount) {
-            walk(group.getChildAt(index), root, depth + 1, leaves, seen)
+            walk(group.getChildAt(index), root, depth + 1, leaves, seen, unlaid)
         }
+    }
+
+    /** Visible itself and through every parent up to the content root. */
+    private fun shownInside(view: View, root: View): Boolean {
+        var current: View? = view
+        while (current != null) {
+            if (current.visibility != View.VISIBLE) return false
+            if (current === root) return true
+            current = current.parent as? View
+        }
+        return false
     }
 
     private fun kind(view: View, root: View): ContentLeafKind {

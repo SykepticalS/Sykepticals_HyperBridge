@@ -15,12 +15,22 @@ sealed class EnqueueExpansion {
     ) : EnqueueExpansion()
 }
 
+/** A replaced owner still morphing into its compact slot under its own takeover geometry. */
+data class RetiringOwner(val id: Int, val generation: Long)
+
+data class Replacement(val retired: RetiringOwner, val generation: Long)
+
+enum class RetiringFrame {
+    IGNORED,
+    MOVING,
+    SETTLED,
+}
+
 /**
  * One expanded island owns the status-bar fade, whether it started as the
- * big island or the circle. The other island stays semantically alive.
- * A disable request waits for the next native boundary so an in-flight morph
- * is not cut in half. Rotation, keyguard, detach, and the watchdog abandon
- * immediately and restore every alpha.
+ * big island or the circle. A disable request waits for the next native
+ * boundary so an in-flight morph is not cut in half. Rotation, keyguard,
+ * detach, and the watchdog abandon immediately and restore the status bar.
  */
 class ExpandedTakeoverCoordinator(
     private val frameTimeoutMs: Long = 3_000L,
@@ -31,17 +41,7 @@ class ExpandedTakeoverCoordinator(
         private set
     var ownerId: Int? = null
         private set
-    var expandedFromSmallIsland: Boolean = false
-        private set
     var statusBarAlpha: Float = 1f
-        private set
-    var secondaryAlpha: Float = 1f
-        private set
-    var secondaryActive: Boolean = false
-        private set
-    var secondarySuppressed: Boolean = false
-        private set
-    var yieldedIslandId: Int? = null
         private set
     var allowsNewExpansion: Boolean = true
         private set
@@ -52,71 +52,90 @@ class ExpandedTakeoverCoordinator(
     private var lastFrameMs: Long = 0L
     private var disableRequested: Boolean = false
     private var nextToken: Long = 0L
+    private var ownerAlpha: Float = 1f
+    private val retiring = LinkedHashMap<Int, Retiring>()
 
-    fun arm(ownerId: Int, nowMs: Long, fromSmallIsland: Boolean = false): Long {
+    private class Retiring(val generation: Long, var alpha: Float)
+
+    fun arm(ownerId: Int, nowMs: Long): Long {
         if (!allowsNewExpansion) return -1L
         generation += 1L
         this.ownerId = ownerId
-        expandedFromSmallIsland = fromSmallIsland
-        yieldedIslandId = null
         phase = TakeoverPhase.EXPANDING
         lastFrameMs = nowMs
         publish(1f)
         return generation
     }
 
+    /**
+     * Xiaomi's handleReplacedState moves the expanded owner to a compact slot in
+     * the same operation that expands the incoming island. That only happens
+     * while the owner is still Xiaomi's expanded current. A collapsing owner has
+     * already left that slot, so its incoming add waits in the queue instead.
+     */
+    fun admitsNativeReplacement(
+        incomingId: Int,
+        xiaomiExpandedIsOwner: Boolean,
+        ownerTempShow: Boolean,
+    ): Boolean {
+        val owner = ownerId ?: return false
+        if (owner == incomingId || !xiaomiExpandedIsOwner || ownerTempShow) return false
+        if (pendingExpansion != null) return false
+        return phase == TakeoverPhase.EXPANDING || phase == TakeoverPhase.EXPANDED
+    }
+
+    /**
+     * Arms [incomingId] over an owner that is still on screen. The owner keeps
+     * its generation as a retiring island until its own compact morph lands.
+     * Returns null when there is no owner to hand off, so the caller arms normally.
+     */
+    fun replace(incomingId: Int, nowMs: Long): Replacement? {
+        val outgoing = ownerId ?: return null
+        if (outgoing == incomingId || phase == TakeoverPhase.NATIVE || !allowsNewExpansion) return null
+        val retired = RetiringOwner(outgoing, generation)
+        retiring.remove(outgoing)
+        retiring[outgoing] = Retiring(generation, ownerAlpha)
+        return Replacement(retired, arm(incomingId, nowMs))
+    }
+
+    fun retires(id: Int, generation: Long): Boolean = retiring[id]?.generation == generation
+
+    fun retiringGeneration(id: Int): Long? = retiring[id]?.generation
+
+    fun hasRetiring(): Boolean = retiring.isNotEmpty()
+
+    /** The retiring card covers the status bar too until it reaches compact height. */
+    fun onRetiringFrame(
+        id: Int,
+        generation: Long,
+        live: IslandRect,
+        compact: IslandRect,
+        target: IslandRect,
+        statusGroup: IslandRect?,
+    ): RetiringFrame {
+        val entry = retiring[id]?.takeIf { it.generation == generation } ?: return RetiringFrame.IGNORED
+        if (live.height <= compact.height + 8) {
+            retiring.remove(id)
+            publish(ownerAlpha)
+            return RetiringFrame.SETTLED
+        }
+        entry.alpha = TakeoverFadePolicy.alpha(compact, live, target, statusGroup)
+        publish(ownerAlpha)
+        return RetiringFrame.MOVING
+    }
+
+    fun finishRetiring(id: Int, generation: Long): Boolean {
+        if (retiring[id]?.generation != generation) return false
+        retiring.remove(id)
+        publish(ownerAlpha)
+        return true
+    }
+
     fun accepts(ownerId: Int, generation: Long): Boolean =
         this.ownerId == ownerId && this.generation == generation && phase != TakeoverPhase.NATIVE
 
-    fun onSecondaryPresence(active: Boolean, islandId: Int? = null) {
-        secondaryActive = active
-        yieldedIslandId = if (active) islandId ?: yieldedIslandId else null
-        refreshSuppression()
-    }
-
     /** Settled expanded geometry stays put when Folme stops emitting frames. */
     fun retainsExpandedGeometry(): Boolean = phase == TakeoverPhase.EXPANDED
-
-    /**
-     * The circle is hidden with Xiaomi's native hidden Folme state while the
-     * big island is the expanded owner. A circle that itself expands fades
-     * the remaining compact island with the status-bar alpha instead.
-     */
-    fun suppressesSecondaryVisual(): Boolean =
-        !expandedFromSmallIsland &&
-            secondaryActive &&
-            (phase == TakeoverPhase.EXPANDING || phase == TakeoverPhase.EXPANDED)
-
-    /**
-     * The compact island that is not expanding fades with the status bar.
-     * Its session stays active; only the drawn alpha follows [secondaryAlpha].
-     */
-    fun fadesUnexpandedCompact(): Boolean =
-        expandedFromSmallIsland && secondaryActive && phase != TakeoverPhase.NATIVE
-
-    /**
-     * Hidden-sibling hits stay disabled through the show animation. The
-     * status-bar fade path arms them again once that sibling is visible.
-     * The native-hide path waits until the takeover is fully native.
-     */
-    fun blocksYieldedIslandTouch(): Boolean {
-        if (!secondaryActive || yieldedIslandId == null) return false
-        return when (phase) {
-            TakeoverPhase.EXPANDING, TakeoverPhase.EXPANDED -> true
-            TakeoverPhase.COLLAPSING ->
-                !expandedFromSmallIsland || secondaryAlpha < REVEAL_TOUCH_ALPHA
-            TakeoverPhase.NATIVE -> false
-        }
-    }
-
-    fun blocksTouchFor(islandId: Int): Boolean =
-        blocksYieldedIslandTouch() && yieldedIslandId == islandId && ownerId != islandId
-
-    /** A hidden sibling is restored only when its source is still present. */
-    fun shouldRestoreYieldedIsland(): Boolean = secondaryActive && yieldedIslandId != null
-
-    /** Keep the secondary's pre-expansion X until the takeover is fully native again. */
-    fun holdsSecondaryPosition(): Boolean = secondaryActive && phase != TakeoverPhase.NATIVE
 
     /**
      * @return false when the frame belongs to a stale generation or another island.
@@ -168,7 +187,8 @@ class ExpandedTakeoverCoordinator(
     }
 
     /**
-     * One incoming expand waits while the current owner collapses.
+     * One incoming expand waits while the current owner collapses, or while an
+     * earlier candidate is already waiting. See [admitsNativeReplacement].
      * A newer candidate displaces the previous one; the caller shows the
      * displaced island compact. Returns null when nothing is expanded, so
      * the caller lets Xiaomi handle the add directly.
@@ -206,23 +226,12 @@ class ExpandedTakeoverCoordinator(
     private fun settleNative() {
         phase = TakeoverPhase.NATIVE
         ownerId = null
-        expandedFromSmallIsland = false
         publish(1f)
         if (disableRequested) allowsNewExpansion = false
     }
 
     private fun publish(alpha: Float) {
-        val resolved = if (phase == TakeoverPhase.NATIVE) 1f else alpha
-        statusBarAlpha = resolved
-        secondaryAlpha = if (secondaryActive && phase != TakeoverPhase.NATIVE) resolved else 1f
-        refreshSuppression()
-    }
-
-    private fun refreshSuppression() {
-        secondarySuppressed = suppressesSecondaryVisual()
-    }
-
-    private companion object {
-        const val REVEAL_TOUCH_ALPHA = 0.98f
+        ownerAlpha = if (phase == TakeoverPhase.NATIVE) 1f else alpha
+        statusBarAlpha = retiring.values.fold(ownerAlpha) { lowest, entry -> minOf(lowest, entry.alpha) }
     }
 }

@@ -13,6 +13,7 @@ import com.sykeptical.hyperpop.service.animation.expanded.AppCloseOverlayPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.CameraBandGeometry
 import com.sykeptical.hyperpop.service.animation.expanded.EnqueueExpansion
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedContentProfile
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedDecisionRefreshPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedFakeMirrorPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutDecision
@@ -21,9 +22,9 @@ import com.sykeptical.hyperpop.service.animation.expanded.ExpandedSurfaceStyle
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedTakeoverCoordinator
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedVisualStyle
 import com.sykeptical.hyperpop.service.animation.expanded.IslandRect
+import com.sykeptical.hyperpop.service.animation.expanded.RetiringFrame
 import com.sykeptical.hyperpop.service.animation.expanded.TakeoverPhase
-import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouch
-import com.sykeptical.hyperpop.service.animation.expanded.YieldedCompactTouchPolicy
+import com.sykeptical.hyperpop.BuildConfig
 import com.sykeptical.hyperpop.xposed.HookConfig
 import com.sykeptical.hyperpop.xposed.log
 import com.sykeptical.hyperpop.xposed.mediacard.island.IslandExpandedMediaAmbientFlowHooker
@@ -43,11 +44,10 @@ import java.util.concurrent.ConcurrentHashMap
  * that transition reads: expanded Y and height, the clip bottom (Xiaomi's
  * getter truncates height to a multiple of the compact height), and the touch
  * region. Compact ears keep Xiaomi's expanded end state (alpha 0, blur 1) so
- * their fade can finish. Whichever island is expanding owns that fade. The
- * other compact island yields: a circle plays Xiaomi's hidden Folme state at
- * its current X, and a big island fades with the same alpha as the status
- * bar. Its touch flags and compact touch region are cleared while it is
- * hidden, and the source is not cancelled.
+ * their fade can finish. Whichever island is expanding owns that fade. Any
+ * other compact island is quarantined by [SecondaryQuarantineHook] for as
+ * long as Xiaomi still has an expanded current, including while this card is
+ * still collapsing over the status bar.
  */
 object ExpandedTakeoverHook {
     private const val BASE =
@@ -58,8 +58,6 @@ object ExpandedTakeoverHook {
         "miui.systemui.dynamicisland.event.DynamicIslandEventCoordinator"
     private const val PHONE_HELPER =
         "miui.systemui.dynamicisland.window.content.helpers.DynamicIslandContentViewPhoneHelper"
-    private const val TOUCH =
-        "miui.systemui.dynamicisland.touch.domain.interactor.DynamicIslandTouchInteractor"
     private const val ADD =
         "miui.systemui.dynamicisland.event.AddEventCoordinator"
     private const val HANDOFF_REASON = "hyperpop_handoff"
@@ -69,16 +67,9 @@ object ExpandedTakeoverHook {
         "miui.systemui.dynamicisland.DynamicIslandBackgroundView"
     private const val UTILS = "miui.systemui.util.CommonUtils"
     private const val SELF_CHECK_PX = 20
-    private val SECONDARY_MOTION = setOf(
-        "smallIslandChangedAnimation",
-        "smallIslandChangedNoAnimation",
-        "smallIslandToTempHiddenAnimation",
-        "smallIslandToHiddenAnimation",
-        "smallIslandToBigIslandAnimation",
-        "bigIslandChangedAnimation",
-        "bigIslandChangedNoAnimation",
-        "bigIslandToTempHiddenAnimation",
-    )
+    /** Backstop for a replaced owner whose native compact morph stops emitting frames. */
+    private const val RETIRE_TIMEOUT_MS = 2_000L
+    private const val TRACE_TAG = "HyperPopTakeover"
     private val COLLAPSE_STATES = setOf("BigIsland", "SmallIsland")
     private val pluginLoaders = Collections.synchronizedSet(
         Collections.newSetFromMap(WeakHashMap<ClassLoader, Boolean>()),
@@ -95,6 +86,8 @@ object ExpandedTakeoverHook {
     )
     private val fakeNativeRadii = Collections.synchronizedMap(WeakHashMap<View, Float>())
     private val heldAdds = ConcurrentHashMap<Long, HeldAdd>()
+    /** Owners Xiaomi replaced in place, keyed by island id, until their compact morph lands. */
+    private val retired = ConcurrentHashMap<Int, Session>()
     private val compactReplayKey = ThreadLocal<String?>()
     private val lock = Any()
 
@@ -102,10 +95,8 @@ object ExpandedTakeoverHook {
     @Volatile private var loggedFailure = false
     @Volatile private var session: Session? = null
     @Volatile private var expandRetryUntilMs = 0L
-    @Volatile private var parkedSecondaryX: Int? = null
-    @Volatile private var parkedSecondaryId: Int? = null
-    @Volatile private var yieldedSecondaryId: Int? = null
     @Volatile private var layoutStamp: Int = 0
+    private val nativeContentVersion = java.util.concurrent.atomic.AtomicInteger()
     @Volatile private var mirroredExtension = Int.MIN_VALUE
     @Volatile private var fakeRestoreDeferred = false
     private var deferredFakeKeys: Set<View>? = null
@@ -114,6 +105,12 @@ object ExpandedTakeoverHook {
     private var tabletMethod: Method? = null
     private var tabletInstance: Any? = null
     private var tabletResolved = false
+
+    /** True while the expanded card is collapsing back over the status bar. */
+    fun holdsQuarantine(): Boolean = coordinator.phase == TakeoverPhase.COLLAPSING
+
+    /** True from arm until the takeover has fully returned to Xiaomi. */
+    fun takeoverOpen(): Boolean = coordinator.phase != TakeoverPhase.NATIVE
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         hookPlugin(module, param.defaultClassLoader)
@@ -151,7 +148,6 @@ object ExpandedTakeoverHook {
                 capClipBottom(chain.thisObject)
                 val result = chain.proceed()
                 onFrame(chain.thisObject)
-                pinSecondary(chain.thisObject)
                 result
             }
             delegate.noArgOrNull("containerClipRadius")?.let { method ->
@@ -174,29 +170,20 @@ object ExpandedTakeoverHook {
                 }
             }
             hookOwnedPlate(module, loader)
-            SECONDARY_MOTION.forEach { name ->
-                delegate.methodsNamed(name).filter { it.parameterTypes.isNotEmpty() }.forEach { method ->
-                    hook(module, loader, method) { chain ->
-                        val target = chain.args.getOrNull(0) as? View
-                        if (target != null && suppressSecondaryMotion(target)) return@hook null
-                        chain.proceed()
-                    }
-                }
-            }
             hook(module, loader, region) { chain -> narrowedRegion(chain.thisObject, chain.proceed()) }
             hook(module, loader, setState) { chain ->
                 val view = chain.thisObject as View
                 val state = chain.args.getOrNull(0)
                 val name = state?.javaClass?.simpleName
-                if (name == "Expanded") beginOrContinue(view)
-                else if (name in COLLAPSE_STATES && ownerIs(System.identityHashCode(view))) {
-                    coordinator.beginCollapse(System.identityHashCode(view), coordinator.generation)
+                val ownerId = System.identityHashCode(view)
+                if (name == "Expanded") {
+                    finishRetire(view)
+                    beginOrContinue(view)
+                } else if (name in COLLAPSE_STATES && ownerIs(ownerId)) {
+                    coordinator.beginCollapse(ownerId, coordinator.generation)
                 }
                 val result = chain.proceed()
                 onState(view, state)
-                if (name in COLLAPSE_STATES && ownerIs(System.identityHashCode(view))) {
-                    revealSecondary(view)
-                }
                 result
             }
             hook(module, loader, updateSize) { chain ->
@@ -225,12 +212,6 @@ object ExpandedTakeoverHook {
                     result
                 }
             }
-            coordinatorClass.noArgOrNull("getSmallBigIslandRegion")?.let { method ->
-                hook(module, loader, method) { chain ->
-                    withoutSecondary(chain.thisObject, chain.proceed())
-                }
-            }
-            hookYieldedTouch(module, loader)
             hookIncomingExpansion(module, loader)
             hookFakeExpandedOverlay(module, loader)
             deoptimizeCallers(module, base, delegate, coordinatorClass, loader)
@@ -247,12 +228,12 @@ object ExpandedTakeoverHook {
     }
 
     private fun overriddenY(view: View, native: Any?): Any? {
-        val takeover = activeDecision(view) ?: return native
+        val takeover = geometryDecision(view) ?: return native
         return takeover.card.top
     }
 
     private fun overriddenHeight(view: View, native: Any?): Any? {
-        val takeover = activeDecision(view) ?: return native
+        val takeover = geometryDecision(view) ?: return native
         val base = (native as? Number)?.toInt() ?: return native
         return if (takeover.tightLayout || takeover.pillEnabled) takeover.card.height else base + takeover.bodyOffsetPx
     }
@@ -260,9 +241,11 @@ object ExpandedTakeoverHook {
     private fun overriddenRadius(delegate: Any, native: Any?): Any? {
         val value = (native as? Number)?.toFloat() ?: return native
         val view = contentView(delegate) ?: return value
-        val takeover = activeDecision(view) ?: return value
+        val current = retiringSession(view)
+            ?: activeDecision(view)?.let { synchronized(lock) { session } }
+            ?: return value
+        val takeover = current.decision
         if (!takeover.pillEnabled) return value
-        val current = synchronized(lock) { session } ?: return value
         val shown = shownHeight(view, clipHeight(delegate).toInt())
         if (shown <= 0) return value
         val progress = ExpandedSurfaceStyle.morphProgress(
@@ -276,13 +259,26 @@ object ExpandedTakeoverHook {
 
     private fun overriddenBottom(delegate: Any, native: Any?): Any? {
         val view = contentView(delegate) ?: return native
-        val takeover = activeDecision(view) ?: return native
+        val takeover = geometryDecision(view) ?: return native
         return takeover.card.bottom.toFloat()
+    }
+
+    /** The owner's decision, or a replaced owner's while its native compact morph runs. */
+    private fun geometryDecision(view: View): ExpandedLayoutDecision.Takeover? =
+        retiringSession(view)?.decision ?: activeDecision(view)
+
+    private fun retiringSession(view: View): Session? {
+        if (retired.isEmpty()) return null
+        val id = System.identityHashCode(view)
+        val current = retired[id] ?: return null
+        if (current.owner.get() !== view || !coordinator.retires(id, current.generation)) return null
+        return current
     }
 
     private fun onState(view: View, state: Any?) {
         val name = state?.javaClass?.simpleName ?: return
         val id = System.identityHashCode(view)
+        if (name !in COLLAPSE_STATES) finishRetire(view)
         when {
             name == "Expanded" -> beginOrContinue(view)
             name in COLLAPSE_STATES && ownerIs(id) -> coordinator.beginCollapse(id, coordinator.generation)
@@ -292,6 +288,10 @@ object ExpandedTakeoverHook {
 
     private fun onFrame(delegate: Any) {
         val view = contentView(delegate) ?: return
+        retiringSession(view)?.let { retiring ->
+            retiringFrame(view, delegate, retiring)
+            return
+        }
         if (synchronized(lock) { session } == null &&
             SystemClock.uptimeMillis() < expandRetryUntilMs &&
             view.call("getState")?.javaClass?.simpleName == "Expanded"
@@ -326,8 +326,87 @@ object ExpandedTakeoverHook {
         }
         present(view, delegate, current, live)
         StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
-        trackSecondary(view)
-        if (coordinator.fadesUnexpandedCompact()) applyYieldedFade(view)
+    }
+
+    /**
+     * Xiaomi is morphing a replaced owner into its compact slot with its own
+     * Expanded -> Big/Small animation. Only the pill radius and the plate
+     * follow that morph here; the bounds are Xiaomi's Folme state.
+     */
+    private fun retiringFrame(view: View, delegate: Any, retiring: Session) {
+        if (blocked(view) || tempHidden(view)) {
+            finishRetire(view)
+            return
+        }
+        val live = liveRect(delegate) ?: return
+        val frame = coordinator.onRetiringFrame(
+            id = System.identityHashCode(view),
+            generation = retiring.generation,
+            live = live,
+            compact = retiring.compact,
+            target = retiring.decision.card,
+            statusGroup = StatusBarTakeoverHook.groupBounds(),
+        )
+        when (frame) {
+            RetiringFrame.SETTLED -> finishRetire(view)
+            RetiringFrame.MOVING -> {
+                presentSurface(view, delegate, retiring, live, armIfMissing = false)
+                StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
+            }
+            RetiringFrame.IGNORED -> Unit
+        }
+    }
+
+    private fun trace(message: () -> String) {
+        if (BuildConfig.DEBUG) android.util.Log.d(TRACE_TAG, message())
+    }
+
+    private fun hex(id: Int?): String = id?.let(Integer::toHexString) ?: "-"
+
+    private fun retire(view: View, retiring: Session) {
+        val id = System.identityHashCode(view)
+        trace { "retire ${hex(id)} gen=${retiring.generation} state=${view.call("getState")?.javaClass?.simpleName}" }
+        retired[id] = retiring
+        ExpandedSurfaceStyler.retire(view)
+        mainHandler.postDelayed({
+            if (retired[id] === retiring) dropRetiring(id, retiring)
+        }, RETIRE_TIMEOUT_MS)
+    }
+
+    private fun dropRetiring(id: Int, retiring: Session) {
+        val island = retiring.owner.get()
+        if (island != null) {
+            finishRetire(island)
+        } else if (retired.remove(id, retiring)) {
+            coordinator.finishRetiring(id, retiring.generation)
+        }
+    }
+
+    /** The replaced owner reached its compact slot, left it, or detached. */
+    private fun finishRetire(view: View) {
+        if (retired.isEmpty()) return
+        val id = System.identityHashCode(view)
+        val retiring = retired.remove(id) ?: return
+        trace {
+            "finishRetire ${hex(id)} state=${view.call("getState")?.javaClass?.simpleName} " +
+                "alpha=${view.alpha} at=${Throwable().stackTrace.getOrNull(1)?.methodName}"
+        }
+        coordinator.finishRetiring(id, retiring.generation)
+        val scopes = listOfNotNull(view, runCatching { view.call("getFakeView") as? View }.getOrNull())
+        realSaved.restoreWithin(scopes)
+        fakeSaved.restoreWithin(scopes)
+        runCatching { fakeLeaf(view) }.getOrNull()?.let { fakeMarkers.remove(it) }
+        ExpandedSurfaceStyler.restore(view)
+        ExpandedFlowMaskApplicator.clearWithin(scopes)
+        ExpandedMediaSurfaceApplicator.restoreWithin(scopes)
+        FocusIslandLayoutApplier.restoreTitlesWithin(scopes)
+        if (coordinator.phase == TakeoverPhase.NATIVE && !coordinator.hasRetiring()) StatusBarTakeoverHook.restore()
+        else StatusBarTakeoverHook.apply(coordinator.statusBarAlpha)
+    }
+
+    /** A global restore would undo a retiring island's layout too, so those end first. */
+    private fun finishAllRetiring() {
+        retired.entries.toList().forEach { (id, retiring) -> dropRetiring(id, retiring) }
     }
 
     private fun narrowedRegion(eventCoordinator: Any, native: Any?): Any? {
@@ -357,37 +436,12 @@ object ExpandedTakeoverHook {
         return region
     }
 
-    private fun withoutSecondary(eventCoordinator: Any, native: Any?): Any? {
-        val region = native as? Region ?: return native
-        val big = handlerCurrent(eventCoordinator, "getBigIslandStateHandler")
-        val small = handlerCurrent(eventCoordinator, "getSmallIslandStateHandler")
-        val decision = YieldedCompactTouchPolicy.decide(
-            blockTouch = coordinator.blocksYieldedIslandTouch(),
-            hasBig = big != null,
-            bigYielded = big != null && coordinator.blocksTouchFor(System.identityHashCode(big)),
-            hasSmall = small != null,
-            smallYielded = small != null && coordinator.blocksTouchFor(System.identityHashCode(small)),
-        )
-        return when (decision) {
-            YieldedCompactTouch.KEEP -> region
-            YieldedCompactTouch.DROP_ALL -> region.apply { setEmpty() }
-            YieldedCompactTouch.DROP_SMALL -> {
-                val rect = small?.let { xiaomiSmallRect(big, it) } ?: return region
-                region.op(Region(rect.left, rect.top, rect.right, rect.bottom), Region.Op.DIFFERENCE)
-                region
-            }
-            YieldedCompactTouch.DROP_BIG -> {
-                val rect = big?.let { rectOf(it.call("getBigIslandRect", java.lang.Boolean.FALSE)) }
-                    ?: return region
-                region.op(Region(rect.left, rect.top, rect.right, rect.bottom), Region.Op.DIFFERENCE)
-                region
-            }
-        }
-    }
 
     private fun beginOrContinue(view: View): ExpandedLayoutDecision.Takeover? {
         if (selfCheckFailed) return null
         val id = System.identityHashCode(view)
+        // Only a real return to Expanded (setState/onState) ends a retirement first.
+        if (retired.containsKey(id)) return null
         val existing = synchronized(lock) { session }
         if (existing != null && coordinator.accepts(id, existing.generation)) {
             if (blocked(view) || tempHidden(view)) {
@@ -396,6 +450,16 @@ object ExpandedTakeoverHook {
             }
             if (!HookConfig.expandOverStatusBarEnabled()) coordinator.requestDisable()
             uncoverRealIsland(view)
+            // Xiaomi builds the expanded target right after this call. A session
+            // armed before the template was complete reads it now, not after.
+            if (ExpandedDecisionRefreshPolicy.needsSettle(
+                    existing.provisional,
+                    nativeContentVersion.get(),
+                    existing.settledVersion,
+                ) && settle(view, existing)
+            ) {
+                applyResolved(view, existing)
+            }
             return existing.decision
         }
         if (!HookConfig.expandOverStatusBarEnabled()) {
@@ -407,7 +471,10 @@ object ExpandedTakeoverHook {
         uncoverRealIsland(view)
         val fromSmallIsland = view.call("getState")?.javaClass?.simpleName == "SmallIsland"
         val content = realContent(view)
-        val profile = content?.let { runCatching { ExpandedContentProbe.capture(it) }.getOrNull() }
+        val readVersion = nativeContentVersion.get()
+        val profile = content?.let {
+            runCatching { ExpandedContentProbe.capture(it, expandedWidthHint(view)) }.getOrNull()
+        }
         val style = ExpandedVisualStyle(
             blackBackground = HookConfig.expandedBlackBackground(),
             roundedPill = HookConfig.expandedRoundedPill(),
@@ -416,11 +483,18 @@ object ExpandedTakeoverHook {
         val resolved = resolveLayout(request)
         val decision = resolved.second
         if (decision !is ExpandedLayoutDecision.Takeover) return rejectExpand(view)
-        val generation = coordinator.arm(
-            id,
-            SystemClock.uptimeMillis(),
-            fromSmallIsland = fromSmallIsland,
-        )
+        val now = SystemClock.uptimeMillis()
+        val outgoing = existing?.owner?.get()?.takeIf {
+            it !== view && it.isAttachedToWindow && coordinator.ownerId == System.identityHashCode(it)
+        }
+        // Xiaomi's handleReplacedState is moving the current owner to a compact
+        // slot in this same operation. It keeps its geometry until it lands.
+        val replacement = if (outgoing != null) coordinator.replace(id, now) else null
+        val generation = replacement?.generation ?: coordinator.arm(id, now)
+        trace {
+            "arm ${hex(id)} gen=$generation outgoing=${hex(outgoing?.let(System::identityHashCode))} " +
+                "replacement=${replacement != null} phase=${coordinator.phase}"
+        }
         if (generation < 0) return rejectExpand(view)
         expandRetryUntilMs = 0L
         val previous = synchronized(lock) {
@@ -433,15 +507,22 @@ object ExpandedTakeoverHook {
                 fromSmallIsland,
                 profile?.nativeTopMarginPx ?: 0,
                 style,
+                provisional = profile == null,
+                settledVersion = readVersion,
             )
             old
         }
         previous?.owner?.get()?.takeIf { it !== view }?.let { old ->
-            val deferred = restoreOffsets(old)
-            ExpandedSurfaceStyler.restore(old)
-            ExpandedFlowMaskApplicator.clear()
-            ExpandedMediaSurfaceApplicator.restoreReal(endDrag = !deferred)
-            if (!deferred) ExpandedMediaSurfaceApplicator.restoreShown()
+            if (replacement?.retired?.id == System.identityHashCode(old)) {
+                retire(old, previous)
+            } else {
+                finishAllRetiring()
+                val deferred = restoreOffsets(old)
+                ExpandedSurfaceStyler.restore(old)
+                ExpandedFlowMaskApplicator.clear()
+                ExpandedMediaSurfaceApplicator.restoreReal(endDrag = !deferred)
+                if (!deferred) ExpandedMediaSurfaceApplicator.restoreShown()
+            }
             mirroredExtension = Int.MIN_VALUE
         }
         layoutStamp = ExpandedFakeMirrorPolicy.stamp(
@@ -462,7 +543,6 @@ object ExpandedTakeoverHook {
             ExpandedSurfaceStyler.frame(view, 1f, radius)
         }
         scheduleWatchdog(view, generation)
-        yieldSecondary(view)
         return decision
     }
 
@@ -479,6 +559,10 @@ object ExpandedTakeoverHook {
 
     private fun abandon(view: View) {
         val id = System.identityHashCode(view)
+        if (retired.containsKey(id)) {
+            finishRetire(view)
+            return
+        }
         val current = synchronized(lock) { session } ?: return
         if (current.owner.get() !== view && coordinator.ownerId != id) return
         coordinator.abandon(id, current.generation)
@@ -490,6 +574,8 @@ object ExpandedTakeoverHook {
 
     private fun restore(view: View) {
         val pending = if (coordinator.phase == TakeoverPhase.NATIVE) coordinator.takePendingExpansion() else null
+        trace { "restore ${hex(System.identityHashCode(view))} pending=${pending != null} retiring=${retired.keys.map(::hex)}" }
+        finishAllRetiring()
         restoreOffsets(view)
         FocusIslandLayoutApplier.restoreTitles()
         ExpandedVisualSession.clear()
@@ -498,30 +584,24 @@ object ExpandedTakeoverHook {
         ExpandedMediaSurfaceApplicator.restoreReal(endDrag = !fakeRestoreDeferred)
         if (!fakeRestoreDeferred) ExpandedMediaSurfaceApplicator.restoreShown()
         mirroredExtension = Int.MIN_VALUE
-        parkedSecondaryX = null
-        parkedSecondaryId = null
-        yieldedSecondaryId = null
         StatusBarTakeoverHook.restore()
-        revealSecondary(view)
         synchronized(lock) {
             if (coordinator.phase == TakeoverPhase.NATIVE) session = null
         }
         releaseHeld(pending, expand = true)
+        if (coordinator.phase == TakeoverPhase.NATIVE) SecondaryQuarantineHook.onTakeoverSettled()
     }
 
     private fun reapplyOffset(view: View) {
         val current = synchronized(lock) { session } ?: return
         if (!coordinator.accepts(System.identityHashCode(view), current.generation)) return
-        if (current.decision.tightLayout) {
-            val refreshed = refreshDecision(view, current)
-            if (refreshed != null && (
-                    refreshed.bodyOffsetPx > current.decision.bodyOffsetPx + 2 ||
-                    kotlin.math.abs(refreshed.card.height - current.decision.card.height) > 8
-                )
-            ) {
-                current.decision = refreshed
-            }
+        if (ExpandedDecisionRefreshPolicy.shouldRefresh(current.decision.tightLayout, current.provisional)) {
+            settle(view, current)
         }
+        applyResolved(view, current)
+    }
+
+    private fun applyResolved(view: View, current: Session) {
         ExpandedFlowMaskApplicator.invalidateStructure()
         layoutStamp = ExpandedFakeMirrorPolicy.stamp(
             current.decision.bodyOffsetPx,
@@ -530,6 +610,45 @@ object ExpandedTakeoverHook {
         )
         applyOffset(view, current.decision.bodyOffsetPx)
         tuneRoots(view, current.decision)
+    }
+
+    /**
+     * Re-reads Xiaomi's content for an armed session and keeps the session, its
+     * generation, and its phase. Only the resolved decision changes, so no second
+     * expansion starts. Returns whether the decision was replaced.
+     */
+    private fun settle(view: View, current: Session): Boolean {
+        current.settledVersion = nativeContentVersion.get()
+        val refreshed = refreshDecision(view, current) ?: return false
+        if (!ExpandedDecisionRefreshPolicy.adopt(current.decision, refreshed.decision, current.provisional)) {
+            return false
+        }
+        current.decision = refreshed.decision
+        current.nativeTopMargin = refreshed.topMargin
+        current.provisional = false
+        return true
+    }
+
+    /** Xiaomi bound a Focus module. The next expanded target re-reads the session. */
+    fun noteNativeBind() {
+        nativeContentVersion.incrementAndGet()
+    }
+
+    /**
+     * `updateExpandedView` has placed the template. A takeover armed before the
+     * template existed or could be measured resolves from it now, in the same
+     * call chain that Xiaomi then sizes and animates from.
+     */
+    fun onNativeContentInstalled(view: View) {
+        nativeContentVersion.incrementAndGet()
+        val current = synchronized(lock) { session }
+        if (current == null) {
+            if (view.call("getState")?.javaClass?.simpleName == "Expanded") beginOrContinue(view)
+            return
+        }
+        if (!current.provisional || current.owner.get() !== view) return
+        if (!coordinator.accepts(System.identityHashCode(view), current.generation)) return
+        if (settle(view, current)) applyResolved(view, current)
     }
 
     private fun layoutRequest(
@@ -627,140 +746,23 @@ object ExpandedTakeoverHook {
         )
     }
 
-    private fun suppressSecondaryMotion(view: View): Boolean {
-        val phase = coordinator.phase
-        if (phase != TakeoverPhase.EXPANDING && phase != TakeoverPhase.EXPANDED) return false
-        if (System.identityHashCode(view) == coordinator.ownerId) return false
-        noteYielded(view)
-        if (coordinator.fadesUnexpandedCompact()) return true
-        if (yieldedSecondaryId != System.identityHashCode(view)) playSecondaryHide(view)
-        return true
-    }
 
-    private fun pinSecondary(delegate: Any) {
-        if (!coordinator.suppressesSecondaryVisual()) return
-        val view = contentView(delegate) ?: return
-        if (System.identityHashCode(view) != parkedSecondaryId) return
-        val parked = parkedSecondaryX?.toFloat() ?: return
-        setFloatField(delegate, "containerX", parked)
-        view.translationX = parked
-    }
 
-    private fun retarget(delegate: Any, state: Any, propertyName: String, value: Float) {
-        val target = property(delegate, propertyName) ?: return
-        state.addProperty(target, value)
-    }
 
-    private fun yieldSecondary(expanded: View) {
-        parkedSecondaryX = null
-        parkedSecondaryId = null
-        yieldedSecondaryId = null
-        val secondary = secondaryView(expanded) ?: run {
-            coordinator.onSecondaryPresence(false)
-            return
-        }
-        noteYielded(secondary)
-        if (coordinator.fadesUnexpandedCompact()) return
-        playSecondaryHide(secondary)
-    }
 
-    private fun trackSecondary(expanded: View) {
-        val secondary = secondaryView(expanded) ?: run {
-            coordinator.onSecondaryPresence(false)
-            return
-        }
-        noteYielded(secondary)
-        if (coordinator.fadesUnexpandedCompact()) return
-        if (coordinator.suppressesSecondaryVisual() &&
-            yieldedSecondaryId != System.identityHashCode(secondary)
-        ) {
-            playSecondaryHide(secondary)
-        }
-    }
 
-    private fun noteYielded(secondary: View) {
-        coordinator.onSecondaryPresence(true, System.identityHashCode(secondary))
-    }
 
-    private fun applyYieldedFade(expanded: View) {
-        val sibling = secondaryView(expanded) ?: return
-        if (System.identityHashCode(sibling) == coordinator.ownerId) return
-        val alpha = coordinator.secondaryAlpha
-        sibling.alpha = alpha
-        (sibling.call("getBigIslandView") as? View)?.alpha = alpha
-        (sibling.call("getSmallIslandView") as? View)?.alpha = alpha
-    }
 
-    private fun playSecondaryHide(secondary: View) {
-        val delegate = secondary.call("getAnimatorDelegate") ?: return
-        val id = System.identityHashCode(secondary)
-        yieldedSecondaryId = id
-        val current = delegate.floatField("containerX")
-        if (current != null) {
-            parkedSecondaryId = id
-            parkedSecondaryX = current.toInt()
-        }
-        val state = delegate.call("getHiddenAnimState") ?: return
-        parkedSecondaryX?.let { retarget(delegate, state, "CONTAINER_X", it.toFloat()) }
-        retarget(delegate, state, "CONTAINER_ALPHA", 0f)
-        if (folmeTo(delegate, state)) return
-        parkedSecondaryX?.toFloat()?.let { secondary.translationX = it }
-        secondary.alpha = 0f
-    }
 
-    private fun folmeTo(delegate: Any, state: Any): Boolean {
-        val loader = delegate.javaClass.classLoader ?: return false
-        val folmeKt = runCatching { loader.loadClass("miui.systemui.animation.FolmeKt") }.getOrNull() ?: return false
-        val getFolme = folmeKt.declaredMethods.firstOrNull { method ->
-            method.name == "getFolme" &&
-                method.parameterTypes.size == 1 &&
-                method.parameterTypes[0].isInstance(delegate)
-        } ?: return false
-        getFolme.isAccessible = true
-        val folme = runCatching { getFolme.invoke(null, delegate) }.getOrNull() ?: return false
-        val configClass = runCatching { loader.loadClass("miuix.animation.base.AnimConfig") }.getOrNull() ?: return false
-        val configs = java.lang.reflect.Array.newInstance(configClass, 0)
-        val to = folme.javaClass.methods.firstOrNull { method ->
-            method.name == "to" &&
-                method.parameterTypes.size == 2 &&
-                !method.parameterTypes[0].isArray &&
-                method.parameterTypes[1].isArray &&
-                method.parameterTypes[0].isAssignableFrom(state.javaClass)
-        } ?: return false
-        to.isAccessible = true
-        return runCatching { to.invoke(folme, state, configs) }.isSuccess
-    }
 
-    private fun revealSecondary(expanded: View) {
-        val secondary = secondaryView(expanded) ?: run {
-            coordinator.onSecondaryPresence(false)
-            return
-        }
-        val id = System.identityHashCode(secondary)
-        coordinator.onSecondaryPresence(true, id)
-        if (!coordinator.shouldRestoreYieldedIsland()) return
-        val fromSmallIsland = synchronized(lock) { session }?.fromSmallIsland == true
-        if (fromSmallIsland && coordinator.phase != TakeoverPhase.NATIVE) return
-        secondary.alpha = 1f
-        (secondary.call("getBigIslandView") as? View)?.alpha = 1f
-        (secondary.call("getSmallIslandView") as? View)?.alpha = 1f
-        if (fromSmallIsland) return
-        val delegate = secondary.call("getAnimatorDelegate") ?: return
-        if (secondary.call("getState")?.javaClass?.simpleName == "BigIsland") {
-            delegate.call("bigIslandChangedAnimation", secondary)
-            return
-        }
-        delegate.call("smallIslandChangedAnimation", secondary)
-    }
 
-    private fun secondaryView(expanded: View): View? {
-        val coordinatorView = expanded.call("getDynamicIslandEventCoordinator") ?: return null
-        listOf("getSmallIslandStateHandler", "getBigIslandStateHandler").forEach { name ->
-            val current = coordinatorView.call(name)?.call("getCurrent") as? View ?: return@forEach
-            if (current !== expanded) return current
-        }
-        return null
-    }
+
+
+
+
+
+
+
 
     private fun smallCompactRect(view: View): IslandRect? {
         viewRect(view.call("getSmallIslandView") as? View)?.let { return it }
@@ -785,9 +787,6 @@ object ExpandedTakeoverHook {
         return rectOf(small.call("getSmallIslandRect", x))
             ?: viewRect(small.call("getSmallIslandView") as? View)
     }
-
-    private fun handlerCurrent(host: Any, accessor: String): View? =
-        host.call(accessor)?.call("getCurrent") as? View
 
     private fun hookIncomingExpansion(module: XposedModule, loader: ClassLoader) {
         runCatching {
@@ -826,7 +825,20 @@ object ExpandedTakeoverHook {
         val focus = data.call("getView")
         val can = chain.thisObject.call("canExpanded", true, focus, key) as? Boolean ?: false
         if (!can) return false
-        val queued = coordinator.enqueueExpansion(System.identityHashCode(content), key)
+        val incomingId = System.identityHashCode(content)
+        val owner = synchronized(lock) { session }?.owner?.get()
+        if (owner != null) {
+            val xiaomiExpanded = chain.thisObject.call("getExpandedStateHandler")?.call("getCurrent")
+            val ownerTempShow = owner.call("getState")?.call("getTempShow") == true
+            // Let Xiaomi's handleReplacedState expand the incoming island and morph
+            // the owner into its compact slot in one native operation.
+            if (coordinator.admitsNativeReplacement(incomingId, xiaomiExpanded === owner, ownerTempShow)) {
+                trace { "incoming ${hex(incomingId)} native replacement of ${hex(System.identityHashCode(owner))}" }
+                return false
+            }
+        }
+        val queued = coordinator.enqueueExpansion(incomingId, key)
+        trace { "incoming ${hex(incomingId)} ${queued.javaClass.simpleName} phase=${coordinator.phase} owner=${hex(coordinator.ownerId)}" }
         if (queued !is EnqueueExpansion.Queued) return false
         heldAdds[queued.pending.token] = HeldAdd(
             host = chain.thisObject,
@@ -849,6 +861,7 @@ object ExpandedTakeoverHook {
 
     private fun collapseForHandoff() {
         val owner = synchronized(lock) { session }?.owner?.get()
+        trace { "collapseForHandoff owner=${hex(owner?.let(System::identityHashCode))}" }
         val eventCoordinator = owner?.call("getDynamicIslandEventCoordinator")
         val window = eventCoordinator?.call("getWindowView")
         if (window == null) {
@@ -896,21 +909,18 @@ object ExpandedTakeoverHook {
     )
 
     /**
-     * updateMedianLuma installs a fresh native drawable on every luma pass.
-     * While the takeover owns the plate, that call must not put Xiaomi's
-     * card back.
+     * updateMedianLuma and updateDarkLightMode install Xiaomi's stroked plate.
+     * Let that plate through, then aim its corner radius at the pill. The
+     * stroke and the outset stay Xiaomi's.
      */
     private fun hookOwnedPlate(module: XposedModule, loader: ClassLoader) {
         runCatching {
             val background = loader.loadClass(BACKGROUND_VIEW)
             background.methodsNamed("setDrawable").forEach { method ->
                 hook(module, loader, method) { chain ->
-                    val view = chain.thisObject as? View
-                    if (view != null && ExpandedSurfaceStyler.blocksReplacement(view)) {
-                        ExpandedSurfaceStyler.reassert(view)
-                        return@hook null
-                    }
-                    chain.proceed()
+                    val result = chain.proceed()
+                    (chain.thisObject as? View)?.let(ExpandedSurfaceStyler::alignNativeOutline)
+                    result
                 }
             }
         }.onFailure {
@@ -995,46 +1005,8 @@ object ExpandedTakeoverHook {
         }
     }
 
-    private fun hookYieldedTouch(module: XposedModule, loader: ClassLoader) {
-        runCatching {
-            val touch = loader.loadClass(TOUCH)
-            val names = setOf(
-                "performClick",
-                "onInterceptTouchEvent",
-                "access$" + "onInterceptTouchEvent",
-            )
-            touch.methodsNamedIn(names).forEach { method ->
-                hook(module, loader, method) { chain ->
-                    val host = runCatching { chain.thisObject }.getOrNull()
-                    if (host != null && method.name == "performClick") clearYieldedPress(host)
-                    val result = chain.proceed()
-                    if (host != null && method.name != "performClick") clearYieldedPress(host)
-                    result
-                }
-            }
-            deoptimizeNamed(module, touch, names)
-        }.onFailure {
-            module.log("HyperPop: yielded-island touch hook unavailable: ${it.message}")
-        }
-    }
 
-    private fun clearYieldedPress(interactor: Any) {
-        if (!coordinator.blocksYieldedIslandTouch()) return
-        val big = lazyCurrent(interactor, "bigIslandStateHandler")
-        val small = lazyCurrent(interactor, "smallIslandStateHandler")
-        if (big != null && coordinator.blocksTouchFor(System.identityHashCode(big))) {
-            setBooleanField(interactor, "downInBigIsland", false)
-        }
-        if (small != null && coordinator.blocksTouchFor(System.identityHashCode(small))) {
-            setBooleanField(interactor, "downInSmallIsland", false)
-        }
-    }
 
-    private fun lazyCurrent(host: Any, fieldName: String): View? {
-        val lazy = host.field(fieldName) ?: return null
-        val handler = lazy.call("get") ?: return null
-        return handler.call("getCurrent") as? View
-    }
 
     private fun present(
         view: View,
@@ -1042,6 +1014,28 @@ object ExpandedTakeoverHook {
         current: Session,
         live: IslandRect,
     ) {
+        val decision = current.decision
+        val progress = presentSurface(view, delegate, current, live, armIfMissing = true)
+        realContent(view)?.let { root ->
+            if (decision.blackBackground) {
+                ExpandedFlowMaskApplicator.apply(root, decision.flowMask, progress)
+            }
+            val extension = ExpandedMediaSurfaceApplicator.apply(root, decision.card.bottom)
+            if (extension != mirroredExtension) {
+                fakeLeaf(view)?.let { ExpandedMediaSurfaceApplicator.mirror(it) }
+                mirroredExtension = extension
+            }
+        }
+    }
+
+    /** Plate and pill radius for the shown height. Returns the morph progress. */
+    private fun presentSurface(
+        view: View,
+        delegate: Any,
+        current: Session,
+        live: IslandRect,
+        armIfMissing: Boolean,
+    ): Float {
         val decision = current.decision
         val clip = clipHeight(delegate).takeIf { it > 0f } ?: live.height.toFloat()
         val shown = shownHeight(view, maxOf(live.height, clip.toInt()))
@@ -1055,21 +1049,12 @@ object ExpandedTakeoverHook {
             progress,
         )
         if (decision.blackBackground || decision.pillEnabled) {
-            if (!ExpandedSurfaceStyler.owns(view)) {
+            if (armIfMissing && !ExpandedSurfaceStyler.owns(view)) {
                 ExpandedSurfaceStyler.arm(view, decision.blackBackground)
             }
             ExpandedSurfaceStyler.frame(view, progress, radius)
         }
-        realContent(view)?.let { root ->
-            if (decision.blackBackground) {
-                ExpandedFlowMaskApplicator.apply(root, decision.flowMask, progress)
-            }
-            val extension = ExpandedMediaSurfaceApplicator.apply(root, decision.card.bottom)
-            if (extension != mirroredExtension) {
-                fakeLeaf(view)?.let { ExpandedMediaSurfaceApplicator.mirror(it) }
-                mirroredExtension = extension
-            }
-        }
+        return progress
     }
 
     private fun resolveLayout(
@@ -1083,13 +1068,28 @@ object ExpandedTakeoverHook {
         return request to ExpandedIslandLayoutPolicy.decide(request)
     }
 
-    private fun refreshDecision(view: View, current: Session): ExpandedLayoutDecision.Takeover? {
+    private class Refreshed(val decision: ExpandedLayoutDecision.Takeover, val topMargin: Int)
+
+    private fun refreshDecision(view: View, current: Session): Refreshed? {
         val content = realContent(view) ?: return null
-        val probed = runCatching { ExpandedContentProbe.capture(content) }.getOrNull() ?: return null
-        val profile = probed.copy(nativeTopMarginPx = current.nativeTopMargin)
+        val probed = runCatching { ExpandedContentProbe.capture(content, expandedWidthHint(view)) }
+            .getOrNull() ?: return null
+        // A session armed without a profile never recorded the content's own top
+        // margin. The margin saved before any offset is the native one; a view
+        // not offset yet still carries it.
+        val topMargin = if (current.provisional) {
+            realSaved.margins[content] ?: probed.nativeTopMarginPx
+        } else {
+            current.nativeTopMargin
+        }
+        val profile = probed.copy(nativeTopMarginPx = topMargin)
         val request = layoutRequest(view, current.fromSmallIsland, profile, current.style) ?: return null
-        return resolveLayout(request).second as? ExpandedLayoutDecision.Takeover
+        val decision = resolveLayout(request).second as? ExpandedLayoutDecision.Takeover ?: return null
+        return Refreshed(decision, topMargin)
     }
+
+    private fun expandedWidthHint(view: View): Int =
+        (view.call("getExpandedViewWidth") as? Number)?.toInt() ?: 0
 
     private fun applyPresentation(
         content: View,
@@ -1161,6 +1161,7 @@ object ExpandedTakeoverHook {
 
     private fun rejectExpand(view: View): ExpandedLayoutDecision.Takeover? {
         val name = view.call("getState")?.javaClass?.simpleName
+        trace { "rejectExpand ${hex(System.identityHashCode(view))} state=$name phase=${coordinator.phase}" }
         val now = SystemClock.uptimeMillis()
         if ((name == "Expanded" || name == "BigIsland" || name == "AppExpanded") &&
             expandRetryUntilMs < now
@@ -1459,17 +1460,8 @@ object ExpandedTakeoverHook {
             "initToExpandedAnimation",
             "expandedChangedAnimation",
             "resetToExpanded",
-            "resetPress",
             "containerScheduleUpdate",
             "containerClipRadius",
-            "smallIslandChangedAnimation",
-            "smallIslandChangedNoAnimation",
-            "smallIslandToTempHiddenAnimation",
-            "smallIslandToHiddenAnimation",
-            "smallIslandToBigIslandAnimation",
-            "bigIslandChangedAnimation",
-            "bigIslandChangedNoAnimation",
-            "bigIslandToTempHiddenAnimation",
         )
         val coordinatorNames = setOf(
             "getExpandedIslandRegion",
@@ -1523,19 +1515,6 @@ object ExpandedTakeoverHook {
         module.log("HyperPop: expand-over-status-bar $message")
     }
 
-    private fun property(delegate: Any, name: String): Any? = delegate.field(name)
-
-    private fun Any.addProperty(property: Any, value: Float) {
-        val add = javaClass.methods.firstOrNull { method ->
-            method.name == "add" &&
-                method.parameterTypes.size >= 2 &&
-                method.parameterTypes[1] == Float::class.javaPrimitiveType &&
-                method.parameterTypes[0].isAssignableFrom(property.javaClass)
-        } ?: return
-        add.isAccessible = true
-        if (add.parameterTypes.size == 2) add.invoke(this, property, value)
-        else add.invoke(this, property, value, LongArray(0))
-    }
 
     private fun rectOf(value: Any?): IslandRect? {
         val rect = value as? Rect ?: return null
@@ -1567,6 +1546,11 @@ object ExpandedTakeoverHook {
         }
 
         fun restoreAll() = restoreOnly(null)
+
+        fun restoreWithin(scopes: List<View>) {
+            val owned = keys().filterTo(HashSet()) { key -> scopes.any { key.isWithin(it) } }
+            if (owned.isNotEmpty()) restoreOnly(owned)
+        }
 
         fun restoreOnly(keys: Set<View>?) {
             restoreInts(margins, keys) { view, margin ->
@@ -1619,8 +1603,12 @@ object ExpandedTakeoverHook {
         var decision: ExpandedLayoutDecision.Takeover,
         val compact: IslandRect,
         val fromSmallIsland: Boolean,
-        val nativeTopMargin: Int,
+        var nativeTopMargin: Int,
         val style: ExpandedVisualStyle,
+        /** Armed without a content profile, before Xiaomi's template was complete. */
+        @Volatile var provisional: Boolean = false,
+        /** [nativeContentVersion] when the session last read the content. */
+        @Volatile var settledVersion: Int = 0,
     ) {
         val owner = java.lang.ref.WeakReference(view)
         @Volatile var selfCheckDone: Boolean = false
@@ -1682,9 +1670,4 @@ private fun Any.floatField(name: String): Float? = (field(name) as? Number)?.toF
 private fun setFloatField(target: Any, name: String, value: Float) {
     val found = reflect.field(target.javaClass, name) ?: return
     found.setFloat(target, value)
-}
-
-private fun setBooleanField(target: Any, name: String, value: Boolean) {
-    val found = reflect.field(target.javaClass, name) ?: return
-    found.setBoolean(target, value)
 }

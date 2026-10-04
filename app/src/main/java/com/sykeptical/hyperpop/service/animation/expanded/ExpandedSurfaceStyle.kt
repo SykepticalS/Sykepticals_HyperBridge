@@ -57,16 +57,11 @@ object ExpandedSurfaceStyle {
     }
 
     /**
-     * While HyperPop owns the drawable, the outset ring and the stroke are
-     * both gone, so the fill radius is the clip radius.
+     * Corner radius applied to Xiaomi's own plate so its stroke follows the
+     * pill. The stroke width, stroke color, and `stokeWidth` outset stay
+     * Xiaomi's; HyperPop does not draw or clear them.
      */
-    data class OwnedEdge(
-        val strokeWidthPx: Int = 0,
-        val outsetPx: Int = 0,
-        val cornerRadiusPx: Float,
-    )
-
-    fun ownedEdge(clipRadiusPx: Float): OwnedEdge = OwnedEdge(cornerRadiusPx = clipRadiusPx.coerceAtLeast(0f))
+    fun plateCornerRadius(clipRadiusPx: Float): Float = clipRadiusPx.coerceAtLeast(0f)
 
     fun morphProgress(liveHeight: Int, compactHeight: Int, cardHeight: Int): Float {
         val span = cardHeight - compactHeight

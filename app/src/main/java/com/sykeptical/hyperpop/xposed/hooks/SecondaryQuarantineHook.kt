@@ -31,6 +31,7 @@ import java.util.WeakHashMap
 object SecondaryQuarantineHook {
     private const val STATE_HANDLER = "miui.systemui.dynamicisland.event.handler.StateHandler"
     private const val DELEGATE = "miui.systemui.dynamicisland.anim.DynamicIslandAnimationDelegate"
+    private const val ANIM_LISTENER = "miui.systemui.dynamicisland.anim.DynamicIslandAnimListener"
     private const val CONTENT = "miui.systemui.dynamicisland.window.content.DynamicIslandContentView"
     private const val COORDINATOR = "miui.systemui.dynamicisland.event.DynamicIslandEventCoordinator"
     private const val TOUCH = "miui.systemui.dynamicisland.touch.domain.interactor.DynamicIslandTouchInteractor"
@@ -44,6 +45,11 @@ object SecondaryQuarantineHook {
     private const val REVEAL_ALPHA_RESPONSE = 0.18f
     private val BLOCKED_EVENTS = setOf("ClickDynamicIsland", "IslandLongPressed")
     private val GONE_STATES = setOf("Hidden", "Deleted", "Empty")
+    /** Xiaomi's animated Expanded -> compact morphs that a replaced owner runs. */
+    private val REPLACEMENT_MOTIONS = setOf("expandedToBigIslandAnimation", "expandedToSmallIslandAnimation")
+    /** Backstop if neither listener callback of the native morph arrives. */
+    private const val HANDOFF_TIMEOUT_MS = 1_500L
+    private const val TRACE_TAG = "HyperPopQuarantine"
 
     private val policy = SecondaryUiQuarantine()
     private val reflect = ReflectionLookup()
@@ -56,6 +62,7 @@ object SecondaryQuarantineHook {
     private var loggedFailure = false
     private var lastViolations = emptySet<Int>()
     private val pendingReveal = mutableSetOf<Int>()
+    private val watchedHandoffs = mutableSetOf<Int>()
 
     fun install(module: XposedModule, param: PackageLoadedParam) {
         hookLoader(module, param.defaultClassLoader)
@@ -80,6 +87,7 @@ object SecondaryQuarantineHook {
         if (!pluginLoaders.add(loader)) return
         hookFlush(module, loader)
         val guarded = hookMotion(module, loader)
+        hookReplacementEnd(module, loader)
         hookBurnIn(module, loader)
         hookTouch(module, loader)
         hookRegion(module, loader)
@@ -106,6 +114,13 @@ object SecondaryQuarantineHook {
         coordinatorRef = java.lang.ref.WeakReference(eventCoordinator)
         val slots = readSlots(eventCoordinator, pending) ?: return chain.proceed()
         val decision = policy.onFlushStart(slots.snapshot)
+        trace {
+            "flush ${decision.javaClass.simpleName} owner=${hex(policy.ownerId)} ${describe(slots.snapshot)} " +
+                "pending=${pending.joinToString { hex(System.identityHashCode(it)) + ":" + it.call("getState")?.javaClass?.simpleName }} " +
+                "handoff=${slots.views.keys.filter { policy.inHandoff(it) }.map(::hex)} " +
+                "hidden=${policy.hiddenIds().map(::hex)}"
+        }
+        watchHandoffs(slots)
         when (decision) {
             is QuarantineFlush.Activate -> sweep(slots, decision.sweepIds)
             is QuarantineFlush.Hold -> sweep(slots, decision.sweepIds)
@@ -122,6 +137,7 @@ object SecondaryQuarantineHook {
 
     private fun finishRelease(coordinator: Any, slots: IslandSlots, generation: Long) {
         val refresh = policy.onFlushEnd(slots.snapshot)
+        trace { "release gen=$generation ${describe(slots.snapshot)} refresh=${refresh.map(::hex)}" }
         if (refresh.isEmpty()) return
         pendingReveal += refresh
         mainHandler.post {
@@ -150,6 +166,7 @@ object SecondaryQuarantineHook {
             view.call("getAnimatorDelegate")?.let { cancelFolme(it) }
             val handler = slots.handlers[id] ?: return@forEach
             val state = view.call("getState") ?: return@forEach
+            trace { "redraw ${hex(id)} state=$stateName ${alphaOf(view)}" }
             if (!invoked(handler, "addState", view, state)) return@forEach
             handlers[System.identityHashCode(handler)] = handler
         }
@@ -159,6 +176,7 @@ object SecondaryQuarantineHook {
     private fun sweep(slots: IslandSlots, ids: Set<Int>) {
         ids.forEach { id ->
             val view = slots.views[id] ?: return@forEach
+            trace { "sweep ${hex(id)} state=${view.call("getState")?.javaClass?.simpleName} ${alphaOf(view)}" }
             hide(view, repeat = true)
             policy.markHidden(id)
         }
@@ -180,15 +198,27 @@ object SecondaryQuarantineHook {
                 hook(module, loader, method) { chain ->
                     val view = chain.args.getOrNull(0) as? View ?: return@hook chain.proceed()
                     val id = System.identityHashCode(view)
+                    if (policy.inHandoff(id)) {
+                        if (method.name in REPLACEMENT_MOTIONS) {
+                            trace { "motion ${method.name} ${hex(id)} handoff-native ${alphaOf(view)}" }
+                            return@hook chain.proceed()
+                        }
+                        policy.endHandoff(id)
+                        trace { "motion ${method.name} ${hex(id)} ends handoff" }
+                    }
                     if (!policy.blocks(id)) {
                         val fromHidden = policy.wasHidden(id)
                         if (fromHidden && isSlotRender(method.name)) policy.markRendered(id)
                         val result = chain.proceed()
-                        if (isSlotRender(method.name) && (fromHidden || pendingReveal.remove(id))) {
-                            slowReveal(view)
+                        val reveal = isSlotRender(method.name) && (fromHidden || pendingReveal.remove(id))
+                        if (reveal) slowReveal(view)
+                        if (!method.name.startsWith("onSwipe")) trace {
+                            "motion ${method.name} ${hex(id)} native fromHidden=$fromHidden reveal=$reveal " +
+                                "state=${view.call("getState")?.javaClass?.simpleName} ${alphaOf(view)}"
                         }
                         return@hook result
                     }
+                    trace { "motion ${method.name} ${hex(id)} blocked owner=${hex(policy.ownerId)}" }
                     hide(view, repeat = false)
                     policy.markHidden(id)
                     null
@@ -199,6 +229,52 @@ object SecondaryQuarantineHook {
             module.log("HyperPop: secondary quarantine motion unavailable: ${it.message}")
             0
         }
+    }
+
+    /**
+     * The listener Xiaomi attaches to each native Expanded -> compact morph
+     * captures the island as `$view`. Its finish or cancel is where the replaced
+     * owner stops being a handoff and joins the settled quarantine.
+     */
+    private fun hookReplacementEnd(module: XposedModule, loader: ClassLoader) {
+        REPLACEMENT_MOTIONS.forEach { motion ->
+            runCatching {
+                val listener = loader.loadClass("$DELEGATE\$$motion\$1")
+                val view = listener.getDeclaredField("\$view").apply { isAccessible = true }
+                listener.declaredMethods
+                    .filter { (it.name == "onComplete" || it.name == "onCancel") && it.parameterTypes.size == 1 }
+                    .forEach { method ->
+                        hook(module, loader, method) { chain ->
+                            val result = chain.proceed()
+                            runCatching { view.get(chain.thisObject) as? View }.getOrNull()?.let { island ->
+                                mainHandler.post { runCatching { settleHandoff(island) } }
+                            }
+                            result
+                        }
+                    }
+            }.onFailure { module.log("HyperPop: secondary quarantine $motion end unavailable: ${it.message}") }
+        }
+    }
+
+    private fun watchHandoffs(slots: IslandSlots) {
+        watchedHandoffs.retainAll { policy.inHandoff(it) }
+        slots.views.forEach { (id, view) ->
+            if (!policy.inHandoff(id) || !watchedHandoffs.add(id)) return@forEach
+            val ref = java.lang.ref.WeakReference(view)
+            mainHandler.postDelayed({
+                watchedHandoffs.remove(id)
+                ref.get()?.let { runCatching { settleHandoff(it) } }
+            }, HANDOFF_TIMEOUT_MS)
+        }
+    }
+
+    private fun settleHandoff(view: View) {
+        val id = System.identityHashCode(view)
+        val ended = policy.endHandoff(id)
+        trace { "settle ${hex(id)} ended=$ended blocks=${policy.blocks(id)} ${alphaOf(view)}" }
+        if (!ended || !policy.blocks(id)) return
+        hide(view, repeat = false)
+        policy.markHidden(id)
     }
 
     private fun hookBurnIn(module: XposedModule, loader: ClassLoader) {
@@ -347,6 +423,21 @@ object SecondaryQuarantineHook {
 
     private var violationLogger: ((String) -> Unit)? = null
 
+    private fun trace(message: () -> String) {
+        if (BuildConfig.DEBUG) android.util.Log.d(TRACE_TAG, message())
+    }
+
+    private fun hex(id: Int?): String = id?.let(Integer::toHexString) ?: "-"
+
+    private fun describe(snapshot: QuarantineSnapshot): String =
+        "exp=${hex(snapshot.expandedId)} big=${hex(snapshot.bigId)} small=${hex(snapshot.smallId)} " +
+            "once=${hex(snapshot.showOnceId)} temp=${hex(snapshot.bigTempId)} hold=${snapshot.takeoverHolding}"
+
+    private fun alphaOf(view: View): String {
+        val container = view.call("getAnimatorDelegate")?.floatField("containerAlpha")
+        return "view=${view.alpha} container=$container"
+    }
+
     private fun logViolations(found: Set<Int>) {
         violationLogger?.invoke("HyperPop: secondary quarantine invariant missing hide $found")
     }
@@ -442,10 +533,12 @@ object SecondaryQuarantineHook {
         val delegate = view.call("getAnimatorDelegate")
         if (policy.wasHidden(id) && (!repeat || delegate == null || !stillVisible(view, delegate))) return
         if (delegate == null) {
+            trace { "hide ${hex(id)} no delegate: view alpha 0" }
             view.alpha = 0f
             return
         }
         val state = runCatching { delegate.call("getHiddenAnimState") }.getOrNull() ?: run {
+            trace { "hide ${hex(id)} no hidden state: view alpha 0" }
             view.alpha = 0f
             return
         }
@@ -457,6 +550,10 @@ object SecondaryQuarantineHook {
         val last = view.call("getLastState")?.javaClass?.simpleName
         val instant = policy.wasHidden(id) || last == null || last == "Init" || last == "Empty"
         val played = if (instant) folmeSetTo(delegate, state) else folmeTo(delegate, state)
+        trace {
+            "hide ${hex(id)} state=${view.call("getState")?.javaClass?.simpleName} last=$last " +
+                "instant=$instant played=$played"
+        }
         if (!played) view.alpha = 0f
     }
 
@@ -595,12 +692,40 @@ object SecondaryQuarantineHook {
         else add.invoke(state, target, value, LongArray(0))
     }
 
+    /**
+     * Folme only moves the delegate's fields. Xiaomi pushes them to the views in
+     * [ANIM_LISTENER]'s onUpdate, so every transition started here carries it.
+     */
     private fun folmeTo(delegate: Any, state: Any, config: Any? = null): Boolean =
-        folmeInvoke(delegate, state, "to", config = config)
+        folmeInvoke(delegate, state, "to", config = withViewUpdates(delegate, config))
 
     private fun folmeSetTo(delegate: Any, state: Any): Boolean {
-        if (folmeInvoke(delegate, state, "setTo")) return true
-        return folmeInvoke(delegate, state, "setTo", withConfigs = false)
+        val set = folmeInvoke(delegate, state, "setTo") ||
+            folmeInvoke(delegate, state, "setTo", withConfigs = false)
+        if (set) invoked(delegate, "scheduleUpdate")
+        return set
+    }
+
+    private fun withViewUpdates(delegate: Any, config: Any?): Any? {
+        val loader = delegate.javaClass.classLoader ?: return config
+        return runCatching {
+            val configClass = loader.loadClass("miuix.animation.base.AnimConfig")
+            val target = config ?: configClass.getDeclaredConstructor().newInstance()
+            val listener = loader.loadClass(ANIM_LISTENER).declaredConstructors
+                .first { it.parameterTypes.size == 1 && it.parameterTypes[0].isInstance(delegate) }
+                .apply { isAccessible = true }
+                .newInstance(delegate)
+            val add = configClass.methods.first { method ->
+                method.name == "addListeners" &&
+                    method.parameterTypes.size == 1 &&
+                    method.parameterTypes[0].isArray &&
+                    method.parameterTypes[0].componentType!!.isInstance(listener)
+            }
+            val listeners = java.lang.reflect.Array.newInstance(add.parameterTypes[0].componentType!!, 1)
+            java.lang.reflect.Array.set(listeners, 0, listener)
+            add.invoke(target, listeners)
+            target
+        }.getOrDefault(config)
     }
 
     private fun cancelFolme(delegate: Any): Boolean {
