@@ -164,6 +164,14 @@ object ExpandedTakeoverHook {
                     result
                 }
             }
+            base.methodsNamed("updateMedianLuma").filter { it.parameterTypes.size == 1 }.forEach { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    val view = chain.thisObject as View
+                    if (ExpandedSurfaceStyler.owns(view)) ExpandedSurfaceStyler.onDrawableReplaced(view)
+                    result
+                }
+            }
             base.methodsNamed("updateBackgroundBg").filter { it.parameterTypes.size == 2 }.forEach { method ->
                 hook(module, loader, method) { chain ->
                     val result = chain.proceed()
@@ -402,6 +410,13 @@ object ExpandedTakeoverHook {
             }
             if (!HookConfig.expandOverStatusBarEnabled()) coordinator.requestDisable()
             uncoverRealIsland(view)
+            if ((existing.decision.blackBackground || existing.decision.pillEnabled) &&
+                !ExpandedSurfaceStyler.owns(view)
+            ) {
+                ExpandedSurfaceStyler.arm(view, existing.decision.blackBackground)
+                val radius = if (existing.decision.pillEnabled) existing.decision.radiusPx else 0f
+                ExpandedSurfaceStyler.frame(view, 1f, radius)
+            }
             return existing.decision
         }
         if (!HookConfig.expandOverStatusBarEnabled()) {
@@ -411,7 +426,7 @@ object ExpandedTakeoverHook {
         coordinator.requestEnable()
         if (blocked(view)) return null
         uncoverRealIsland(view)
-        val fromSmallIsland = view.call("getState")?.javaClass?.simpleName == "SmallIsland"
+        val fromSmallIsland = cameFromSmallIsland(view)
         val content = realContent(view)
         val profile = content?.let { runCatching { ExpandedContentProbe.capture(it) }.getOrNull() }
         val style = ExpandedVisualStyle(
@@ -490,7 +505,11 @@ object ExpandedTakeoverHook {
 
     private fun restore(view: View) {
         val pending = if (coordinator.phase == TakeoverPhase.NATIVE) coordinator.takePendingExpansion() else null
+        val fromSmallIsland = synchronized(lock) { session }?.fromSmallIsland == true
         restoreOffsets()
+        if (fromSmallIsland) {
+            (view.call("getSmallIslandView") as? View)?.alpha = 1f
+        }
         FocusIslandLayoutApplier.restoreTitles()
         ExpandedVisualSession.clear()
         ExpandedSurfaceStyler.restore(view)
@@ -539,6 +558,19 @@ object ExpandedTakeoverHook {
         if (!current.tightLayout && refreshed.bottomReserved == null) return false
         return refreshed.bodyOffsetPx > current.bodyOffsetPx + 2 ||
             kotlin.math.abs(refreshed.card.height - current.card.height) > 8
+    }
+
+    /**
+     * The click path asks for the expanded state before [setState] returns,
+     * while the view is still [SmallIsland]. A later retry sees [Expanded]
+     * and would otherwise treat the circle as the big island, skipping the
+     * compact-layer hide that keeps the square plate off the pill.
+     */
+    private fun cameFromSmallIsland(view: View): Boolean {
+        val state = view.call("getState")?.javaClass?.simpleName
+        if (state == "SmallIsland") return true
+        if (state != "Expanded") return false
+        return view.call("getLastState")?.javaClass?.simpleName == "SmallIsland"
     }
 
     private fun layoutRequest(
@@ -1060,6 +1092,17 @@ object ExpandedTakeoverHook {
                 ExpandedSurfaceStyler.arm(view, decision.blackBackground)
             }
             ExpandedSurfaceStyler.frame(view, progress, radius)
+        }
+        view.clipToOutline = true
+        view.invalidateOutline()
+        if (coordinator.hidesOwnedBigIslandLayer()) {
+            (view.call("getBigIslandView") as? View)?.let { big ->
+                big.visibility = View.INVISIBLE
+                big.alpha = 0f
+            }
+        }
+        if (coordinator.hidesSettledSmallIslandLayer()) {
+            (view.call("getSmallIslandView") as? View)?.alpha = 0f
         }
         if (decision.blackBackground) {
             realContent(view)?.let { root ->

@@ -37,11 +37,24 @@ object ExpandedSurfaceStyler {
         val expandedBackground: Drawable? = null,
         val expandedHadClip: Boolean = false,
         val cleared: List<SavedBackground> = emptyList(),
+        val hostFills: MutableList<HostFill> = mutableListOf(),
     )
 
     private class SavedBackground(
         val view: java.lang.ref.WeakReference<View>,
         val background: Drawable?,
+    )
+
+    /**
+     * The container and the expanded view paint Xiaomi's square black shape.
+     * The content outline is supposed to clip it. A circle that expands does
+     * not keep that clip lined up with the plate, so the square corners read
+     * as a black outline. The copy follows the clip radius instead.
+     */
+    private class HostFill(
+        val view: java.lang.ref.WeakReference<View>,
+        val original: Drawable?,
+        val copy: GradientDrawable,
     )
 
     fun arm(view: View, black: Boolean) {
@@ -115,6 +128,8 @@ object ExpandedSurfaceStyler {
         current.progress = progress
         current.radiusPx = radiusPx
         applyPlate(current)
+        background?.let { setOutset(it, 0) }
+        roundHostFills(view, current)
         if (current.black && !current.blurStripped) stripBlur(view, current)
         background?.invalidate()
     }
@@ -128,6 +143,8 @@ object ExpandedSurfaceStyler {
         val plate = current.copy ?: return
         installDrawable(background, plate)
         applyPlate(current)
+        setOutset(background, 0)
+        roundHostFills(view, current)
     }
 
     fun onBlurReapplied(view: View) {
@@ -149,6 +166,7 @@ object ExpandedSurfaceStyler {
         expanded?.background = current.expandedBackground
         expanded?.clipToOutline = current.expandedHadClip
         current.cleared.forEach { saved -> saved.view.get()?.background = saved.background }
+        current.hostFills.forEach { saved -> saved.view.get()?.background = saved.original }
         active = null
         if (activeView.get() === view) activeView = java.lang.ref.WeakReference(null)
     }
@@ -264,6 +282,37 @@ object ExpandedSurfaceStyler {
             val target = saved.view.get() ?: return@forEach
             if (target.background != null) target.background = null
         }
+        current.background.get()?.let { setOutset(it, 0) }
+        current.hostFills.forEach { saved ->
+            saved.copy.setStroke(edge.strokeWidthPx, Color.TRANSPARENT)
+            saved.copy.cornerRadius = edge.cornerRadiusPx
+        }
+    }
+
+    private fun roundHostFills(view: View, current: Active) {
+        val radius = ExpandedSurfaceStyle.ownedEdge(current.radiusPx).cornerRadiusPx
+        roundHost(current, invoke(view, "getContainer") as? View, radius)
+        if (current.expandedPlate == null) {
+            roundHost(current, invoke(view, "getExpandedView") as? View, radius)
+        }
+    }
+
+    private fun roundHost(current: Active, host: View?, radius: Float) {
+        if (host == null) return
+        val saved = current.hostFills.firstOrNull { it.view.get() === host }
+        if (saved != null && host.background === saved.copy) return
+        val background = host.background as? GradientDrawable ?: return
+        if (background === current.copy || background === current.expandedPlate) return
+        val copy = background.constantState?.newDrawable()?.mutate() as? GradientDrawable ?: return
+        copy.setStroke(0, Color.TRANSPARENT)
+        copy.cornerRadius = radius
+        if (saved == null) {
+            current.hostFills.add(HostFill(java.lang.ref.WeakReference(host), background, copy))
+        } else {
+            current.hostFills.remove(saved)
+            current.hostFills.add(HostFill(saved.view, saved.original, copy))
+        }
+        host.background = copy
     }
 
     private fun newPlate(): GradientDrawable = GradientDrawable().apply {
