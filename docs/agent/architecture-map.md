@@ -68,6 +68,7 @@ Installed from `HyperPopModule` when `packageName == IslandProtocol.SYSTEM_UI_PA
 | `xposed/hooks/IslandTextUpdateAnimationHook.kt` | Text update animation |
 | `xposed/hooks/BetterAnimationsHook.kt` | Better animations |
 | `xposed/hooks/ExpandedTakeoverHook.kt` | Portrait expanded island over the status bar. Pill mode seats clippable text in the camera band via `CutoutSafeLayout`; `FocusIslandLayoutApplier` retunes both the real expanded copy and Xiaomi's drag copy (`DynamicIslandData.fakeView`) and leaves titles untruncated. `ExpandedFakeMirrorPolicy` skips that second write when the drag copy is already in sync. Media backgrounds extend to the handle-aware card bottom via `ExpandedMediaSurfaceApplicator`, and the drag copy reuses that resolved extension. Hosts inside Xiaomi's expanded view are pinned to the card from their params (a media refresh resets them while their laid-out bounds are stale). `ExpandedLayoutProbe` logs only when `debug.hyperpop.layoutprobe=1` |
+| `xposed/hooks/SecondaryQuarantineHook.kt` | Hides other compact islands while one is expanded. A primary collapse may reveal the sibling with the status-bar fade. A secondary collapse keeps the main island hidden until the expand-over-status-bar card is compact, so its ear icons stay behind the shrink |
 | `xposed/hooks/StatusBarTakeoverHook.kt` | Status-bar fade for that takeover |
 | `xposed/mediacard/MediaCardHook.kt` | Media card orchestration + `DynamicClassLoaderHooks` |
 
@@ -210,7 +211,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | `MessagePresentationFamilyTracker` | `service/message/` |
 | `ReplyComposerHoldRegistry` | `service/` |
 | `BetterAnimationsPolicy` | `service/animation/` |
-| `ExpandedIslandLayoutPolicy`, `CutoutSafeLayout`, `ExpandedPillPolicy`, `ExpandedSurfaceStyle`, `ExpandedTakeoverCoordinator` (including one pending expansion), `TakeoverFadePolicy`, `YieldedCompactTouchPolicy` | `service/animation/expanded/` |
+| `ExpandedIslandLayoutPolicy`, `CutoutSafeLayout`, `ExpandedPillPolicy`, `ExpandedSurfaceStyle`, `ExpandedTakeoverCoordinator` (including one pending expansion), `TakeoverFadePolicy`, `YieldedCompactTouchPolicy`, `SecondaryUiQuarantine` | `service/animation/expanded/` |
 
 ---
 
@@ -244,7 +245,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 | Protocol / ownership | `integration/xiaomi/HyperIslandProtocolExtensionsTest.kt`, `island/backend/IslandOwnershipTest.kt`, `models/IslandPresentationTest.kt` |
 | Heads-up / focus shade | `xposed/SourceHeadsUpReplacementPolicyTest.kt`, `xposed/FocusShadeBackgroundPolicyTest.kt` |
 | Channels / prefs | `service/BridgeNotificationChannelsTest.kt`, `data/AppPreferencesCacheTest.kt` (if present) |
-| Animation | `service/animation/BetterAnimationsPolicyTest.kt`, `service/animation/expanded/ExpandedIslandLayoutPolicyTest.kt`, `ExpandedPillPolicyTest.kt`, `ExpandedSurfaceStyleTest.kt`, `ExpandedTakeoverCoordinatorTest.kt`, `TakeoverFadePolicyTest.kt`, `YieldedCompactTouchPolicyTest.kt` |
+| Animation | `service/animation/BetterAnimationsPolicyTest.kt`, `service/animation/expanded/ExpandedIslandLayoutPolicyTest.kt`, `ExpandedPillPolicyTest.kt`, `ExpandedSurfaceStyleTest.kt`, `ExpandedTakeoverCoordinatorTest.kt`, `TakeoverFadePolicyTest.kt`, `YieldedCompactTouchPolicyTest.kt`, `SecondaryUiQuarantineTest.kt` |
 
 ---
 

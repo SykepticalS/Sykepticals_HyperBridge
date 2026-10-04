@@ -11,6 +11,7 @@ import com.sykeptical.hyperpop.xposed.hooks.IslandWindowImeHook
 import com.sykeptical.hyperpop.xposed.hooks.OuterGlowHook
 import com.sykeptical.hyperpop.xposed.hooks.BetterAnimationsHook
 import com.sykeptical.hyperpop.xposed.hooks.ExpandedTakeoverHook
+import com.sykeptical.hyperpop.xposed.hooks.SecondaryQuarantineHook
 import com.sykeptical.hyperpop.xposed.hooks.StatusBarTakeoverHook
 import com.sykeptical.hyperpop.xposed.hooks.ExpandedProgressAnimationHook
 import com.sykeptical.hyperpop.xposed.hooks.MarqueeHook
@@ -46,6 +47,7 @@ class HyperPopModule : XposedModule() {
                 IslandTextUpdateAnimationHook.install(this, param)
                 BetterAnimationsHook.install(this, param)
                 ExpandedTakeoverHook.install(this, param)
+                SecondaryQuarantineHook.install(this, param)
                 StatusBarTakeoverHook.install(this, param)
                 MediaCardHook.install(this, param)
             }
