@@ -4,6 +4,7 @@ import android.content.res.ColorStateList
 import android.graphics.BlendMode
 import android.graphics.BlendModeColorFilter
 import android.graphics.ColorFilter
+import android.text.TextUtils
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -63,6 +64,7 @@ internal object IslandExpandedMediaForegroundStyler {
                 originalHeadGlowAlpha = access.getSeekBarHeadGlowAlpha(seekBar)
             )
         }
+        truncateSongText(access, holder)
         access.getTitleText(holder).setTextColor(colors.primary)
         access.getArtistText(holder).setTextColor(colors.secondary)
         access.getElapsedTime(holder).setTextColor(colors.secondary)
@@ -98,6 +100,7 @@ internal object IslandExpandedMediaForegroundStyler {
                 originalHeadGlowAlpha = access.getSeekBarHeadGlowAlpha(seekBar)
             )
         }
+        truncateSongText(access, holder)
         access.getTitleText(holder).setTextColor(colors.primary)
         access.getArtistText(holder).setTextColor(colors.secondary)
         access.getElapsedTime(holder).setTextColor(colors.secondary)
@@ -123,6 +126,7 @@ internal object IslandExpandedMediaForegroundStyler {
     fun appliedPalette(holder: Any): MediaCardForegroundPalette? = appliedPalettes[holder]
 
     fun restore(access: IslandExpandedMediaForegroundAccess, holder: Any) {
+        truncateSongText(access, holder)
         appliedPalettes.remove(holder)
         val seekBar = access.getSeekBar(holder)
         if (seekBar is SquigglySeekBar) {
@@ -143,6 +147,19 @@ internal object IslandExpandedMediaForegroundStyler {
     }
 
     fun isTracked(seekBar: View): Boolean = islandSeekBars.contains(seekBar)
+
+    /** Xiaomi's island title and artist are one line, cut at the end. */
+    private fun truncateSongText(access: IslandExpandedMediaForegroundAccess, holder: Any) {
+        runCatching {
+            access.getTitleText(holder).truncateEnd()
+            access.getArtistText(holder).truncateEnd()
+        }
+    }
+
+    private fun TextView.truncateEnd() {
+        if (maxLines != 1) maxLines = 1
+        if (ellipsize != TextUtils.TruncateAt.END) ellipsize = TextUtils.TruncateAt.END
+    }
 
     private data class SeekBarThemeState(
         val originalColorFilter: ColorFilter?,

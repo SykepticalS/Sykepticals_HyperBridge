@@ -58,7 +58,8 @@ Installed from `HyperPopModule` when `packageName == IslandProtocol.SYSTEM_UI_PA
 | `xposed/hooks/IslandInlineReplyHook.kt` | Inline reply |
 | `xposed/hooks/IslandWindowImeHook.kt` | IME / island window |
 | `xposed/hooks/FocusWhitelistHook.kt` | Focus whitelist |
-| `xposed/hooks/FocusShadeBackgroundHook.kt` | Focus shade background |
+| `xposed/hooks/FocusShadeBackgroundHook.kt` | Focus shade background (gated by `regular_shade_background`) |
+| `xposed/hooks/MediaShadeBackgroundHook.kt` | Media card shade background, same toggle |
 | `xposed/hooks/HeadsUpSuppressionHook.kt` | Heads-up suppression (uses `IncomingCallBannerPolicy`) |
 | `xposed/hooks/CallIslandPresenceHook.kt` | Call island presence |
 | `xposed/hooks/OuterGlowHook.kt` | Outer glow |
@@ -225,7 +226,7 @@ Live calls use `CallIslandTimeoutPolicy.PERSISTENT_TIMEOUT_MILLIS` (`Int.MAX_VAL
 
 **Apply semantics:** `ApplyRequirement.forSetting` — hot reload vs `RestartTarget.SYSTEM_UI` / XMSF.
 
-**UI entry points:** Home (`OverviewPage`, `LibraryPage`, `SettingsRootScreen`), onboarding (`OnboardingScreen`), hubs in `SettingsHubs.kt`, and section screens under `ui/screens/settings/`. Design tokens live in `ui/system/`.
+**UI entry points:** Home (`OverviewPage`, `LibraryPage`, `SettingsRootScreen`), onboarding (`OnboardingScreen`), hubs in `SettingsHubs.kt`, and section screens under `ui/screens/settings/`. Tweaks (better animations, expanded island, regular shade background) is a root settings row, `SettingsPlace.TWEAKS`. Design tokens live in `ui/system/`.
 
 ---
 

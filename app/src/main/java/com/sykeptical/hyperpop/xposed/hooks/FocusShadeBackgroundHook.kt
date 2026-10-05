@@ -2,6 +2,7 @@ package com.sykeptical.hyperpop.xposed.hooks
 
 import android.service.notification.StatusBarNotification
 import com.sykeptical.hyperpop.xposed.FocusShadeBackgroundPolicy
+import com.sykeptical.hyperpop.xposed.HookConfig
 import com.sykeptical.hyperpop.xposed.log
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
@@ -30,7 +31,11 @@ object FocusShadeBackgroundHook {
                 val focusField = findField(sbn.javaClass, FOCUS_FIELD)
                     ?: return@intercept chain.proceed()
                 val isFocus = runCatching { focusField.getBoolean(sbn) }.getOrDefault(false)
-                if (!FocusShadeBackgroundPolicy.shouldUseRegularRowSelector(isFocus)) {
+                if (!FocusShadeBackgroundPolicy.shouldUseRegularRowSelector(
+                        HookConfig.regularShadeBackground(),
+                        isFocus,
+                    )
+                ) {
                     return@intercept chain.proceed()
                 }
 

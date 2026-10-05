@@ -873,7 +873,7 @@
     <string name="islands_text">Text and content</string>
     <string name="islands_glow">Glow</string>
     <string name="islands_scenes">Fullscreen and landscape</string>
-    <string name="islands_motion">Motion</string>
+    <string name="settings_tweaks">Tweaks</string>
     <string name="notifications_title">Notifications</string>
     <string name="notifications_media">Media</string>
     <string name="advanced_experiments">Island experiments</string>
@@ -909,6 +909,8 @@
     <string name="expanded_black_background_desc">The expanded surface is black. Media color fades in below the camera.</string>
     <string name="expanded_rounded_pill">Rounded pill</string>
     <string name="expanded_rounded_pill_desc">Expanded islands use a rounder, tighter shape that still fits their content.</string>
+    <string name="regular_shade_background">Regular notification background</string>
+    <string name="regular_shade_background_desc">Focus and media notifications use the same shade background as other notifications.</string>
     <string name="onboarding_look_title">A little glow</string>
     <string name="onboarding_look_body">Choose how the island is lit. You can refine this later.</string>
     <string name="glow_off">Off</string>

@@ -284,6 +284,22 @@ of extrapolating from an unrelated build.
   - `removeViewFromWindow` detaches the content parent unless the view is still listed and is a media island. `preRemoveDynamicIsland` only deletes the island data when the state is already `Deleted` and `deleteByAddNew` is set.
 - HyperPop implication: a replaced expanded owner can play `expandedToDeletedAnimation` while its handler state is still compact. Skip `removeViewFromWindow` for that play unless the state is `Deleted`, so the slot remains and can be redrawn after the takeover. Let the animation's Folme run; do not replace it with `getHiddenAnimState`.
 
+## Shade row and media-card backgrounds
+
+### Finding
+
+- Date: 2026-10-05
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the SystemUI entry above.
+- SystemUI/plugin version: `com.android.systemui` versionName `16.03.251211.r`.
+- APK SHA-256: `MiuiSystemUI.apk` `A423B9805823B93301A0094732274F4E5EA951F86F333C7B94D9730715576E06`.
+- Class/method/event: `ExpandableNotificationRowInjector.updateBackground$1` / `updateBlurBg`; `MiuiMediaViewControllerImpl.updateMediaBackground`; layout `miui_media_session_island`.
+- Evidence source: JADX and `aapt dump xmltree` on the pulled SystemUI APK. No new phone trace.
+- Observation:
+  - Shade row backgrounds branch only on `StatusBarNotification.mIsFocusNotification`. Focus rows use `notification_focus_item_bg` (or the focus full-AOD / heads-up drawables) and the three-stop `focus_notification_element_blend_*` colors. Other rows use `notification_item_bg` / `notification_fullaod_item_bg` and the two-stop `notification_element_blend_shade_*` or `notification_element_blend_keyguard_*` colors. Keyguard is `statusBarState == 1`.
+  - The shade media card does not read that flag. `updateMediaBackground` always paints `notification_media_item_bg`, `notification_media_fullaod_item_bg`, or the three-stop `media_notification_element_blend_*` colors on `MiuiMediaViewHolder.mediaBg`.
+  - `miui_media_session_island` title and artist `TextView`s are `singleLine` with `ellipsize` end (`0x3`).
+- HyperPop implication: clearing `mIsFocusNotification` only for `updateBackground$1` selects the ordinary row background. The media card needs its own restyle onto those ordinary drawable and blend names. Island song titles should end-truncate the same way.
+
 ## Entry template
 
 ### Finding

@@ -3,6 +3,7 @@ package com.sykeptical.hyperpop.xposed
 import com.sykeptical.hyperpop.island.backend.IslandProtocol
 import com.sykeptical.hyperpop.xposed.hooks.FocusWhitelistHook
 import com.sykeptical.hyperpop.xposed.hooks.FocusShadeBackgroundHook
+import com.sykeptical.hyperpop.xposed.hooks.MediaShadeBackgroundHook
 import com.sykeptical.hyperpop.xposed.hooks.CallIslandPresenceHook
 import com.sykeptical.hyperpop.xposed.hooks.HeadsUpSuppressionHook
 import com.sykeptical.hyperpop.xposed.hooks.IslandClickCleanupHook
@@ -38,6 +39,7 @@ class HyperPopModule : XposedModule() {
                 IslandWindowImeHook.install(this, param)
                 FocusWhitelistHook.install(this, param)
                 FocusShadeBackgroundHook.install(this, param)
+                MediaShadeBackgroundHook.install(this, param)
                 HeadsUpSuppressionHook.install(this, param)
                 CallIslandPresenceHook.install(this, param)
                 OuterGlowHook.install(this, param)

@@ -54,6 +54,7 @@ fun SettingsRootScreen(
         Spacer(Modifier.height(HyperPopSpace.groupGap))
         HpGroup {
             HpNavRow(stringResource(R.string.islands_title), onClick = { onPlace(SettingsPlace.ISLANDS) })
+            HpNavRow(stringResource(R.string.settings_tweaks), onClick = { onPlace(SettingsPlace.TWEAKS) })
             HpNavRow(stringResource(R.string.notifications_title), onClick = { onPlace(SettingsPlace.NOTIFICATIONS) })
             HpNavRow(stringResource(R.string.settings_system), onClick = { onPlace(SettingsPlace.SYSTEM) })
             HpNavRow(stringResource(R.string.settings_advanced), onClick = { onPlace(SettingsPlace.ADVANCED) })
@@ -70,7 +71,6 @@ fun IslandsHubScreen(onBack: () -> Unit, onPlace: (SettingsPlace) -> Unit) {
         HpNavRow(stringResource(R.string.islands_text), onClick = { onPlace(SettingsPlace.TEXT) })
         HpNavRow(stringResource(R.string.islands_glow), onClick = { onPlace(SettingsPlace.GLOW) })
         HpNavRow(stringResource(R.string.islands_scenes), onClick = { onPlace(SettingsPlace.SCENES) })
-        HpNavRow(stringResource(R.string.islands_motion), onClick = { onPlace(SettingsPlace.MOTION) })
     }
 }
 

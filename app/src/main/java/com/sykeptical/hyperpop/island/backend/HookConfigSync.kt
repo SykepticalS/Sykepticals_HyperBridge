@@ -26,6 +26,7 @@ object HookConfigSync {
     const val KEY_EXPAND_OVER_STATUS_BAR_ENABLED = "expand_over_status_bar_enabled"
     const val KEY_EXPANDED_BLACK_BACKGROUND = "expanded_black_background"
     const val KEY_EXPANDED_ROUNDED_PILL = "expanded_rounded_pill"
+    const val KEY_REGULAR_SHADE_BACKGROUND = "regular_shade_background"
     private const val LEGACY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
 
     private fun local(context: Context) = context.getSharedPreferences(
@@ -55,6 +56,10 @@ object HookConfigSync {
             .putBoolean(
                 KEY_EXPANDED_ROUNDED_PILL,
                 local(context).getBoolean(KEY_EXPANDED_ROUNDED_PILL, false),
+            )
+            .putBoolean(
+                KEY_REGULAR_SHADE_BACKGROUND,
+                local(context).getBoolean(KEY_REGULAR_SHADE_BACKGROUND, true),
             )
             .remove("expanded_title_scroll_mode")
             .remove("expanded_title_scroll_speed")
@@ -174,6 +179,14 @@ object HookConfigSync {
 
     fun setExpandedRoundedPill(context: Context, enabled: Boolean) {
         local(context).edit().putBoolean(KEY_EXPANDED_ROUNDED_PILL, enabled).apply()
+        sync(context)
+    }
+
+    fun regularShadeBackground(context: Context): Boolean =
+        local(context).getBoolean(KEY_REGULAR_SHADE_BACKGROUND, true)
+
+    fun setRegularShadeBackground(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_REGULAR_SHADE_BACKGROUND, enabled).apply()
         sync(context)
     }
 

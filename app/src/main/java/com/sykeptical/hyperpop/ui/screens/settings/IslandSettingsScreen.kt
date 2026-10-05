@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.RoundedCorner
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -112,7 +113,7 @@ fun IslandSettingsContent(
         "text" -> stringResource(R.string.islands_text)
         "glow" -> stringResource(R.string.islands_glow)
         "scenes" -> stringResource(R.string.islands_scenes)
-        "motion" -> stringResource(R.string.islands_motion)
+        "tweaks", "motion" -> stringResource(R.string.settings_tweaks)
         "experiments" -> stringResource(R.string.advanced_experiments)
         else -> stringResource(R.string.islands_title)
     }
@@ -156,7 +157,7 @@ fun IslandSettingsContent(
                     )
                 }
             }
-            if (section == "motion") MotionSection()
+            if (section == "tweaks" || section == "motion") TweaksSection()
             if (section == "experiments") {
                 Text(
                     stringResource(R.string.experiments_warning),
@@ -173,14 +174,14 @@ fun IslandSettingsContent(
 }
 
 @Composable
-private fun MotionSection() {
+private fun TweaksSection() {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(HookConfigSync.betterAnimationsEnabled(context)) }
     var expandOverStatusBar by remember { mutableStateOf(HookConfigSync.expandOverStatusBarEnabled(context)) }
     var blackBackground by remember { mutableStateOf(HookConfigSync.expandedBlackBackground(context)) }
     var roundedPill by remember { mutableStateOf(HookConfigSync.expandedRoundedPill(context)) }
+    var regularShadeBackground by remember { mutableStateOf(HookConfigSync.regularShadeBackground(context)) }
     var pending by remember { mutableStateOf(false) }
-    var speed by remember { mutableFloatStateOf(HookConfigSync.marqueeSpeed(context).toFloat()) }
 
     if (pending) {
         HpApplyBanner(
@@ -193,7 +194,7 @@ private fun MotionSection() {
             modifier = Modifier.padding(bottom = 12.dp),
         )
     }
-    SectionLabel(stringResource(R.string.islands_motion), first = true)
+    Spacer(Modifier.height(4.dp))
     SettingsStack {
         SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
             SettingsRow(
@@ -269,28 +270,23 @@ private fun MotionSection() {
             )
         }
     }
-    SectionLabel(stringResource(R.string.islands_text))
-    SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
-        Column(modifier = Modifier.padding(bottom = 12.dp)) {
+    SectionLabel(stringResource(R.string.notifications_title))
+    SettingsStack {
+        SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
             SettingsRow(
-                icon = Icons.Default.Speed,
-                title = "Scrolling speed",
-                subtitle = "${speed.toInt()} px/sec"
-            )
-            HpSlider(
-                value = speed,
-                onValueChange = { speed = it },
-                onValueChangeFinished = {
-                    HookConfigSync.setVisualTuning(
-                        context,
-                        speed.toInt(),
-                        HookConfigSync.glowRange(context),
-                        HookConfigSync.singleColorGlow(context),
-                        HookConfigSync.glowBaseColor(context),
+                icon = Icons.Default.Notifications,
+                title = stringResource(R.string.regular_shade_background),
+                subtitle = stringResource(R.string.regular_shade_background_desc),
+                trailing = {
+                    HpSwitch(
+                        checked = regularShadeBackground,
+                        onCheckedChange = { next ->
+                            regularShadeBackground = next
+                            HookConfigSync.setRegularShadeBackground(context, next)
+                            pending = true
+                        },
                     )
                 },
-                valueRange = 20f..500f,
-                modifier = Modifier.padding(horizontal = 20.dp)
             )
         }
     }

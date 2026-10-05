@@ -74,6 +74,10 @@ object HookConfig {
         expandOverStatusBarEnabled() &&
             prefs?.getBoolean(HookConfigSync.KEY_EXPANDED_ROUNDED_PILL, false) == true
 
+    /** Ordinary shade backgrounds for Focus rows and the media card. On unless turned off. */
+    fun regularShadeBackground(): Boolean =
+        prefs?.getBoolean(HookConfigSync.KEY_REGULAR_SHADE_BACKGROUND, true) ?: true
+
     /** Fast, local and fail-open prediction used before SystemUI evaluates heads-up state. */
     fun expectsReplacement(sbn: StatusBarNotification): Boolean {
         val p = prefs ?: return false

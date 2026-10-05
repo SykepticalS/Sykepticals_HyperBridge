@@ -217,7 +217,7 @@ private fun Navigator<Screen>.open(place: SettingsPlace) {
         SettingsPlace.TEXT -> Screen.IslandSection("text")
         SettingsPlace.GLOW -> Screen.IslandSection("glow")
         SettingsPlace.SCENES -> Screen.IslandSection("scenes")
-        SettingsPlace.MOTION -> Screen.IslandSection("motion")
+        SettingsPlace.TWEAKS -> Screen.IslandSection("tweaks")
         SettingsPlace.EXPERIMENTS -> Screen.IslandSection("experiments")
         SettingsPlace.LOGIN_CODES -> Screen.LoginCodeSettings
         SettingsPlace.DND -> Screen.DndSettings
