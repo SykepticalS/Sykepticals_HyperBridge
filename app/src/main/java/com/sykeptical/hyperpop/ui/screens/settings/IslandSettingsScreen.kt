@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.RoundedCorner
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -181,6 +183,8 @@ private fun TweaksSection() {
     var blackBackground by remember { mutableStateOf(HookConfigSync.expandedBlackBackground(context)) }
     var roundedPill by remember { mutableStateOf(HookConfigSync.expandedRoundedPill(context)) }
     var regularShadeBackground by remember { mutableStateOf(HookConfigSync.regularShadeBackground(context)) }
+    var fingerprintIsland by remember { mutableStateOf(HookConfigSync.fingerprintIslandEnabled(context)) }
+    var fingerprintLockPill by remember { mutableStateOf(HookConfigSync.fingerprintLockPill(context)) }
     var pending by remember { mutableStateOf(false) }
 
     if (pending) {
@@ -283,6 +287,44 @@ private fun TweaksSection() {
                         onCheckedChange = { next ->
                             regularShadeBackground = next
                             HookConfigSync.setRegularShadeBackground(context, next)
+                            pending = true
+                        },
+                    )
+                },
+            )
+        }
+    }
+    SectionLabel(stringResource(R.string.fingerprint_island_section))
+    SettingsStack {
+        SettingsCard(shape = getExpressiveShape(1, 0, ShapeStyle.Large)) {
+            SettingsRow(
+                icon = Icons.Default.Fingerprint,
+                title = stringResource(R.string.fingerprint_island),
+                subtitle = stringResource(R.string.fingerprint_island_desc),
+                trailing = {
+                    HpSwitch(
+                        checked = fingerprintIsland,
+                        onCheckedChange = { next ->
+                            fingerprintIsland = next
+                            HookConfigSync.setFingerprintIslandEnabled(context, next)
+                            pending = true
+                        },
+                    )
+                },
+            )
+            SettingsRow(
+                icon = Icons.Default.Lock,
+                title = stringResource(R.string.fingerprint_lock_pill),
+                subtitle = stringResource(R.string.fingerprint_lock_pill_desc),
+                enabled = fingerprintIsland,
+                trailing = {
+                    HpSwitch(
+                        checked = fingerprintLockPill,
+                        enabled = fingerprintIsland,
+                        onCheckedChange = { next ->
+                            if (!fingerprintIsland) return@HpSwitch
+                            fingerprintLockPill = next
+                            HookConfigSync.setFingerprintLockPill(context, next)
                             pending = true
                         },
                     )

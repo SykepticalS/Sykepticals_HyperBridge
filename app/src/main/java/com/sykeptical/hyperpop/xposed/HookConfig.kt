@@ -74,6 +74,13 @@ object HookConfig {
         expandOverStatusBarEnabled() &&
             prefs?.getBoolean(HookConfigSync.KEY_EXPANDED_ROUNDED_PILL, false) == true
 
+    fun fingerprintIslandEnabled(): Boolean =
+        prefs?.getBoolean(HookConfigSync.KEY_FINGERPRINT_ISLAND_ENABLED, false) ?: false
+
+    /** Lock pill beside the camera. Ignored unless the fingerprint island is on. */
+    fun fingerprintLockPill(): Boolean =
+        prefs?.getBoolean(HookConfigSync.KEY_FINGERPRINT_LOCK_PILL, true) ?: true
+
     /** Ordinary shade backgrounds for Focus rows and the media card. On unless turned off. */
     fun regularShadeBackground(): Boolean =
         prefs?.getBoolean(HookConfigSync.KEY_REGULAR_SHADE_BACKGROUND, true) ?: true

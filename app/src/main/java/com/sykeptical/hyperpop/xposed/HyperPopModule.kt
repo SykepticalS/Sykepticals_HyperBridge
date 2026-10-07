@@ -22,6 +22,7 @@ import com.sykeptical.hyperpop.xposed.hooks.SystemUiBootstrapHook
 import com.sykeptical.hyperpop.xposed.hooks.SystemUiNotificationIngressHook
 import com.sykeptical.hyperpop.xposed.hooks.XmsfFocusAuthHook
 import com.sykeptical.hyperpop.xposed.hooks.XmsfHandshakeHook
+import com.sykeptical.hyperpop.xposed.hooks.fingerprint.FingerprintSignalBridge
 import com.sykeptical.hyperpop.xposed.hooks.screenrecorder.ScreenRecorderHook
 import com.sykeptical.hyperpop.xposed.mediacard.MediaCardHook
 import io.github.libxposed.api.XposedModule
@@ -51,6 +52,7 @@ class HyperPopModule : XposedModule() {
                 ExpandedTakeoverHook.install(this, param)
                 SecondaryQuarantineHook.install(this, param)
                 StatusBarTakeoverHook.install(this, param)
+                FingerprintSignalBridge.install(this, param)
                 MediaCardHook.install(this, param)
             }
             IslandProtocol.XMSF_PACKAGE -> {

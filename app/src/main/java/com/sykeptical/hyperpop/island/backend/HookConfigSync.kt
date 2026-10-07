@@ -27,6 +27,8 @@ object HookConfigSync {
     const val KEY_EXPANDED_BLACK_BACKGROUND = "expanded_black_background"
     const val KEY_EXPANDED_ROUNDED_PILL = "expanded_rounded_pill"
     const val KEY_REGULAR_SHADE_BACKGROUND = "regular_shade_background"
+    const val KEY_FINGERPRINT_ISLAND_ENABLED = "fingerprint_island_enabled"
+    const val KEY_FINGERPRINT_LOCK_PILL = "fingerprint_lock_pill"
     private const val LEGACY_PERMANENT_ISLAND_ENABLED = "permanent_island_enabled"
 
     private fun local(context: Context) = context.getSharedPreferences(
@@ -60,6 +62,14 @@ object HookConfigSync {
             .putBoolean(
                 KEY_REGULAR_SHADE_BACKGROUND,
                 local(context).getBoolean(KEY_REGULAR_SHADE_BACKGROUND, true),
+            )
+            .putBoolean(
+                KEY_FINGERPRINT_ISLAND_ENABLED,
+                local(context).getBoolean(KEY_FINGERPRINT_ISLAND_ENABLED, false),
+            )
+            .putBoolean(
+                KEY_FINGERPRINT_LOCK_PILL,
+                local(context).getBoolean(KEY_FINGERPRINT_LOCK_PILL, true),
             )
             .remove("expanded_title_scroll_mode")
             .remove("expanded_title_scroll_speed")
@@ -187,6 +197,22 @@ object HookConfigSync {
 
     fun setRegularShadeBackground(context: Context, enabled: Boolean) {
         local(context).edit().putBoolean(KEY_REGULAR_SHADE_BACKGROUND, enabled).apply()
+        sync(context)
+    }
+
+    fun fingerprintIslandEnabled(context: Context): Boolean =
+        local(context).getBoolean(KEY_FINGERPRINT_ISLAND_ENABLED, false)
+
+    fun setFingerprintIslandEnabled(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_FINGERPRINT_ISLAND_ENABLED, enabled).apply()
+        sync(context)
+    }
+
+    fun fingerprintLockPill(context: Context): Boolean =
+        local(context).getBoolean(KEY_FINGERPRINT_LOCK_PILL, true)
+
+    fun setFingerprintLockPill(context: Context, enabled: Boolean) {
+        local(context).edit().putBoolean(KEY_FINGERPRINT_LOCK_PILL, enabled).apply()
         sync(context)
     }
 

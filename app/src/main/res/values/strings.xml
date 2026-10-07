@@ -911,6 +911,11 @@
     <string name="expanded_rounded_pill_desc">Expanded islands use a rounder, tighter shape that still fits their content.</string>
     <string name="regular_shade_background">Regular notification background</string>
     <string name="regular_shade_background_desc">Focus and media notifications use the same shade background as other notifications.</string>
+    <string name="fingerprint_island_section">Lock screen</string>
+    <string name="fingerprint_island">Fingerprint island</string>
+    <string name="fingerprint_island_desc">On the lock screen, the camera island shows your fingerprint while the sensor is touched. The highlight follows where your finger is. Unlocking is unchanged.</string>
+    <string name="fingerprint_lock_pill">Lock pill</string>
+    <string name="fingerprint_lock_pill_desc">Show a small lock beside the camera while the screen is locked and listening for a fingerprint.</string>
     <string name="onboarding_look_title">A little glow</string>
     <string name="onboarding_look_body">Choose how the island is lit. You can refine this later.</string>
     <string name="glow_off">Off</string>
