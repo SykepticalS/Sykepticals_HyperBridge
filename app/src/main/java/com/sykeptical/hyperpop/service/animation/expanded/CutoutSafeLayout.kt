@@ -40,6 +40,7 @@ object CutoutSafeLayout {
         profile: ExpandedContentProfile,
         pill: Boolean = false,
         rtl: Boolean = false,
+        contentLiftPx: Int = 0,
     ): Result {
         val safety = (SAFETY_DP * density).toInt()
         val edge = (EDGE_PAD_DP * density).toInt()
@@ -73,6 +74,13 @@ object CutoutSafeLayout {
         }
         if (band != null) {
             origin += titleCutoutDrop(leaves, contentLeft, origin, cutout, density)
+            if (contentLiftPx > 0) {
+                val lifted = (origin - contentLiftPx).coerceAtLeast(cardTop)
+                origin = lifted + titleCutoutDrop(
+                    leaves, contentLeft, lifted, cutout, density,
+                    gapDp = ExpandedVisualTokens.NO_ACTION_TITLE_GAP_DP,
+                )
+            }
         }
         val clips = if (band == null) {
             emptyList()
@@ -100,7 +108,7 @@ object CutoutSafeLayout {
 
     /**
      * Lowest extra drop that puts a crossing primary title under the camera
-     * hole. The pill then mirrors that new top gap below the content.
+     * hole. The pill then follows that new top gap below the content.
      */
     private fun titleCutoutDrop(
         leaves: List<ContentLeaf>,
@@ -108,8 +116,9 @@ object CutoutSafeLayout {
         origin: Int,
         cutout: IslandRect,
         density: Float,
+        gapDp: Float = ExpandedVisualTokens.CAMERA_VERTICAL_GAP_DP,
     ): Int {
-        val gap = ExpandedVisualTokens.px(ExpandedVisualTokens.CAMERA_VERTICAL_GAP_DP, density)
+        val gap = ExpandedVisualTokens.px(gapDp, density)
         var drop = 0
         for (leaf in leaves) {
             if (leaf.role != ContentLeafRole.PRIMARY_TITLE) continue

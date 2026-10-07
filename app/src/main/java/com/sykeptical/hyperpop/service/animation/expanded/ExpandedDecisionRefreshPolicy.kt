@@ -11,7 +11,8 @@ import kotlin.math.abs
  * no content profile, so it is provisional. The first reading that does have a
  * profile is Xiaomi's complete native state and always replaces it. After
  * that, only a real change of offset or height replaces the decision, which
- * keeps an unchanged island from being re-laid on every update.
+ * keeps an unchanged island from being re-laid on every update. A correction
+ * that removes a stuck offset counts the same as a taller template.
  */
 object ExpandedDecisionRefreshPolicy {
     const val OFFSET_SLACK_PX = 2
@@ -34,7 +35,7 @@ object ExpandedDecisionRefreshPolicy {
         provisional: Boolean,
     ): Boolean {
         if (provisional) return refreshed.tightLayout
-        return refreshed.bodyOffsetPx > current.bodyOffsetPx + OFFSET_SLACK_PX ||
+        return abs(refreshed.bodyOffsetPx - current.bodyOffsetPx) > OFFSET_SLACK_PX ||
             abs(refreshed.card.height - current.card.height) > HEIGHT_SLACK_PX
     }
 }

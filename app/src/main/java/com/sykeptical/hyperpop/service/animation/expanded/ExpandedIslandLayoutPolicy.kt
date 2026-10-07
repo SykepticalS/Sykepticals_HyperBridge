@@ -49,6 +49,7 @@ object ExpandedIslandLayoutPolicy {
                 cardLeft, cardRight, cardTop, request.cutout, request.density, radiusForPlacement, it,
                 pill = request.style.roundedPill,
                 rtl = request.rtl,
+                contentLiftPx = contentLiftPx(request, it),
             )
         }
         val legacyTop = maxOf(request.compact.bottom + gap, request.cutout.bottom + legacySafety)
@@ -146,6 +147,22 @@ object ExpandedIslandLayoutPolicy {
             textClips = placement?.textClips.orEmpty(),
             mediaBottomTrimPx = pill.bottomTrimPx,
         )
+    }
+
+    /**
+     * Reply and mute rows stay put. A notification without them, and without
+     * call or media controls, sits a little higher. The title floor still
+     * clears the camera hole.
+     */
+    private fun contentLiftPx(request: ExpandedLayoutRequest, profile: ExpandedContentProfile): Int {
+        if (!request.style.roundedPill) return 0
+        val blocked = profile.leaves.any {
+            it.role == ContentLeafRole.ACTION_PILL ||
+                it.role == ContentLeafRole.CALL_CONTROL ||
+                it.role == ContentLeafRole.PROGRESS
+        }
+        if (blocked) return 0
+        return ExpandedVisualTokens.px(ExpandedVisualTokens.NO_ACTION_CONTENT_LIFT_DP, request.density)
     }
 
     /**

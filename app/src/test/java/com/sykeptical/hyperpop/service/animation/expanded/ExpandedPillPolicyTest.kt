@@ -25,8 +25,9 @@ class ExpandedPillPolicyTest {
         val leafTop = 40
         val leafBottom = 180
         val pad = (ExpandedPillPolicy.BOTTOM_PAD_DP * density).toInt()
+        val slack = (ExpandedPillPolicy.MIRROR_SLACK_DP * density).toInt()
         val topGap = origin + leafTop - 36
-        val bottomGap = maxOf(pad, topGap)
+        val bottomGap = maxOf(pad, topGap - slack)
         assertTrue(result.cardBottom < 720)
         assertEquals(origin + leafBottom + bottomGap, result.cardBottom)
         assertTrue(result.radiusPx >= nativeRadius)

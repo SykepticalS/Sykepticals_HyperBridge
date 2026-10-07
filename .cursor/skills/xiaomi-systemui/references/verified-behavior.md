@@ -298,7 +298,59 @@ of extrapolating from an unrelated build.
   - Shade row backgrounds branch only on `StatusBarNotification.mIsFocusNotification`. Focus rows use `notification_focus_item_bg` (or the focus full-AOD / heads-up drawables) and the three-stop `focus_notification_element_blend_*` colors. Other rows use `notification_item_bg` / `notification_fullaod_item_bg` and the two-stop `notification_element_blend_shade_*` or `notification_element_blend_keyguard_*` colors. Keyguard is `statusBarState == 1`.
   - The shade media card does not read that flag. `updateMediaBackground` always paints `notification_media_item_bg`, `notification_media_fullaod_item_bg`, or the three-stop `media_notification_element_blend_*` colors on `MiuiMediaViewHolder.mediaBg`.
   - `miui_media_session_island` title and artist `TextView`s are `singleLine` with `ellipsize` end (`0x3`).
-- HyperPop implication: clearing `mIsFocusNotification` only for `updateBackground$1` selects the ordinary row background. The media card needs its own restyle onto those ordinary drawable and blend names. Island song titles should end-truncate the same way.
+- HyperPop implication: clearing `mIsFocusNotification` only for `updateBackground$1` selects the ordinary row background. The media card needs its own restyle onto those ordinary drawable and blend names. The expanded media `header_title` already end-truncates in that layout; the compact media title is a separate HyperPop view and is not that TextView.
+
+## Expanded content reset, background re-entry, and temp-hide
+
+### Finding
+
+- Date: 2026-10-06
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Same identity as the expanded-island geometry entry. No wireless target was online this session.
+- SystemUI/plugin version: `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256: `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED` (the pulled copy in `.agent-local/apks/`).
+- Class/method/event: `DynamicIslandBaseContentView.reset` / `calculateBigIslandY` / `updateExpandedSize` / `updateBackgroundBg`; `DynamicIslandWindowView.updateExpandedView` / `measureExpandedViewHeight` / `onConfigChanged`; `DynamicIslandWindowViewController.handleDynamicIsland` (`ACTION_SET_STATUS_BAR_VIEW_VISIBLE`, `ACTION_IMMERSIVE_STATUS_INSETS`); `DynamicIslandWindowStateExtKt.isTempHiddenExt` / `isTempHiddenPhoneExt`; `DynamicIslandAnimationDelegate.updateBigIslandPosition`.
+- Evidence source: JADX on the pulled plugin APK above. No phone trace.
+- Observation:
+  - `reset()` is private and has one caller, `calculateBigIslandY()`, which is reached from `updateBigIslandPosition`, `setCutoutY`, `updateView`, both `updateExpandedState` coordinators, and a window-refactor flow collector. It recomputes island heights; it does not change state. A hook that treats `reset()` as the end of an expansion leaves an island that is still `Expanded` without a takeover until something else arms it.
+  - `updateBackgroundBg(view, promoted)` with blur open and a parent: MiBlur mode 1, blend colors, `setBackgroundDrawable(null)`. With blur closed or no parent: mode 0, blend cleared, `dynamic_island_background` installed. Both replace whatever background the expanded view carried. `onConfigChanged` reaches it only when `getBackgroundBlurOpened` differs between the previous and new configuration; `updateExpandedView` reaches it on every content install.
+  - `onConfigChanged` also runs `measureExpandedViewHeight` for every content view: it measures the expanded view (margin included) and calls `updateExpandedSize(measuredWidth, measuredHeight)`, which stores that height in `expandedViewHeight` and writes it as the content view's explicit layout height. `updateExpandedSize` is the only writer of the field; nothing rewrites it on collapse.
+  - Temp-hide is `statusBarViewShowing == false` (sent with `ACTION_SET_STATUS_BAR_VIEW_VISIBLE`) or the window's `tempHidden`, combined with `properties != 0`, screen off, or bouncer. An island with `properties == 0` is not temp-hidden by a hidden status bar. `ACTION_IMMERSIVE_STATUS_INSETS` drives `statusBarWindowsInsetsShow`, read by `immersiveAlphaAnimation` (container alpha 0 when insets are hidden).
+- HyperPop implication: release on `reset()` must be remembered and re-armed after `calculateBigIslandY()` for an island that is still `Expanded`; the margin and ancestor heights have to come back before Xiaomi measures, because that measurement is what inflates `expandedViewHeight`, so the next arm must not adopt it. Which of these paths the fullscreen transition takes is not established; a device trace is still needed.
+
+## Lockscreen UDFPS signals and Dynamic Island window height
+
+### Finding
+
+- Date: 2026-10-06
+- Device/build: Xiaomi 2512BPNDAG (`nezha` / `nezha_tr`); Android 16 / API 36; fingerprint `Xiaomi/nezha_tr/nezha:16/BP2A.250605.031.A3/OS3.0.305.0.WPATRXM:user/release-keys`. Wireless serial `adb-45a36c27-5TjWL3._adb-tls-connect._tcp`.
+- SystemUI/plugin version: `com.android.systemui` `16.03.251211.r`; `miui.systemui.plugin` `17.1.4.71.0`.
+- APK SHA-256:
+  - `MiuiSystemUI.apk` `A423B9805823B93301A0094732274F4E5EA951F86F333C7B94D9730715576E06`
+  - `MIUISystemUIPlugin.apk` `AE6373D764375748F5BBE4BE9D766E22243B124E38DCE006BD086035DF9A2AED`
+  - `Settings.apk` `B7D1E50587927BA0428FCE2347B97C98AFF62F094A5087AC682330D12893C0A0` (local copy matches the pulled `/system_ext/priv-app/Settings/Settings.apk`)
+- Class/method/event:
+  - `com.android.keyguard.KeyguardUpdateMonitor.onFingerprintAuthenticated(int, boolean)`
+  - `com.android.keyguard.KeyguardUpdateMonitor.setFingerprintRunningState(int)`
+  - `com.android.keyguard.KeyguardUpdateMonitor.setKeyguardGoingAway(boolean)`
+  - `com.android.keyguard.KeyguardUpdateMonitor.isFingerprintLockedOut()`
+  - `com.android.keyguard.KeyguardUpdateMonitor$10` (`AnonymousClass10`): `onAuthenticationAcquired`, `onAuthenticationFailed`, `onAuthenticationHelp`, `onAuthenticationError`, `onAuthenticationSucceeded`
+  - `com.miui.keyguard.biometrics.fod.MiuiGxzwManager.dealCallback(int)`
+  - `com.miui.keyguard.biometrics.fod.MiuiGestureEventDispatcher.onInputEvent(InputEvent)`
+  - `miui.systemui.dynamicisland.event.DynamicIslandEventCoordinator.updateWindowHeight` / `_state`
+  - `miui.systemui.dynamicisland.window.DynamicIslandWindowView.getCutoutRect`
+  - `com.android.settings` raw `finger_enroll_dark.json` ("指纹填充Lottie D")
+  - plugin dimen `miui.systemui.plugin:dimen/island_height`
+- Evidence source: JADX on the three APKs above; `aapt dump resources` on the plugin APK; `getprop ro.build.fingerprint` and `dumpsys fingerprint` on the wireless serial above; lockscreen logcat/getevent captures in `.agent-local/evidence/fp-*.txt` from the same build earlier on 2026-10-06.
+- Observation:
+  - `dumpsys fingerprint` reports `FingerprintProvider/default`, sensor id 5, and no timed or permanent lockout for user 0 at the time of the dump. `persist.vendor.sys.fp.vendor=qcom_us`. The earlier AuthController dump on this build reported `sensorType 2` (ultrasonic) and `udfpsBounds=Rect(522, 1910 - 670, 2058)`, center `(596, 1984)`. No `showUdfpsOverlay` line appeared during those unlock attempts, so AOSP `UdfpsController.onFingerDown` was not the live path.
+  - `KeyguardUpdateMonitor$10.onAuthenticationAcquired` runs on the main thread. Code `100` calls `onFpsPointerDown` only while fingerprint detection is running. Code `101` calls `onFpsPointerUp`. It then forwards the same code through `onBiometricAcquired`.
+  - `onFingerprintAuthenticated` is the framework success path: it records the user, notifies callbacks, and updates fingerprint listening. It does not itself draw an island.
+  - `dealCallback` logs `cmd`. `101` and `112` start listening (`message 1001`). `102`, `106`, and `113` end it (`message 1002`). `103` unlocks only when keyguard auth and biometric policy allow, then also sends `1002`. `105` cancels (`1003`). `114` posts work onto `MiuiGxzwIconView` and restarts listening only when `shouldListenForFingerprintWhenUnlocked()` and `getKeyguardAuthen()` are both true. A held finger after failure is therefore not an unconditional second attempt.
+  - `MiuiGestureEventDispatcher.onInputEvent` is the `miui-touch-fod` input monitor. It forwards touch-source `MotionEvent`s to listeners and then `finishInputEvent(event, false)`. It does not expose touch major, minor, or orientation.
+  - The earlier getevent capture on `Xiaomi_Touch_Input_0` streamed X/Y through the sensor (a slide from about `(587, 1999)` to `(609, 1941)`). `ABS_MT_TOUCH_MAJOR` was not emitted. `TOUCH_MINOR` blipped to 14 or 16 and returned to 0. There is no orientation axis. Vendor acquire codes seen beside the callback were 22, 23, 24, 44, and 201. Failure (vendor 44, then `onAuthenticationFailed`, then `dealCallback` 2/114, then vendor 201) can arrive while the finger is still down. Success often follows finger-up by about 230 ms, then `keyguardGoingAway` within about 1 ms and `keyguardGone` about 320 ms later.
+  - `finger_enroll_dark.json` is 64,902 bytes, 600×600. Asset `comp_0` has 22 static stroke layers, white `[1,1,1,1]`, stroke width 8, layer position about `(308, 284)`, trim 0–100. Root layers named `路径*` use blue stroke `[0.278431, 0.533333, 1]` (`#4788FF`) and width 8. Layer `Union` is a white fill checkmark: layer position `(303.976, 301.819)`, layer scale 150%, group scale 200%. No per-ridge match or coverage channel exists in the auth callbacks.
+  - `updateWindowHeight` is the writer of `DynamicIslandEventCoordinator._state`. `getState()` returns the public flow. Expanded, window-anim, and collapse paths publish the screen height; with no island they publish 0. `getCutoutRect()` is a screen-centered rect from `cutoutY` and the cutout size. Plugin `dimen/island_height` exists (complex dimen `0x00002201`).
+- HyperPop implication: observe `onFingerprintAuthenticated`, `$10` acquired/failed/help/error, `setFingerprintRunningState`, `setKeyguardGoingAway`, `dealCallback`, and `MiuiGestureEventDispatcher.onInputEvent`. Do not call `UdfpsController` or start an auth. Map contact as the centroid plus a fixed nominal radius, and describe it as contact position. Parse `finger_enroll_dark` at runtime and disable the feature if the schema fails. Host a child of `DynamicIslandWindowView` and only raise `_state` after `updateWindowHeight`. Treat `dealCallback 114` as a log, not a new finger-down.
 
 ## Entry template
 

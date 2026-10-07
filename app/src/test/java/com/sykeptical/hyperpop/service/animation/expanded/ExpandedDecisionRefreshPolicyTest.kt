@@ -54,6 +54,15 @@ class ExpandedDecisionRefreshPolicyTest {
     }
 
     @Test
+    fun aStuckOffsetCanBeCorrected() {
+        val pill = ExpandedVisualStyle(roundedPill = true)
+        val high = takeover(content = profile(lowest = 312).copy(nativeTopMarginPx = 20), native = settledNative, style = pill)
+        val corrected = takeover(content = profile(lowest = 312).copy(nativeTopMarginPx = 80), native = settledNative, style = pill)
+        assertTrue(high.bodyOffsetPx > corrected.bodyOffsetPx + ExpandedDecisionRefreshPolicy.OFFSET_SLACK_PX)
+        assertTrue(ExpandedDecisionRefreshPolicy.adopt(high, corrected, provisional = false))
+    }
+
+    @Test
     fun theCompleteTemplateWithActionsGivesATallerCardThanTheEarlyReading() {
         val pill = ExpandedVisualStyle(roundedPill = true)
         val titleOnly = takeover(content = profile(lowest = 150, actions = false), native = staleNative, style = pill)

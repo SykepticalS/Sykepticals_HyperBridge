@@ -16,10 +16,14 @@ object ExpandedVisualTokens {
 
     const val CAMERA_SIDE_GAP_DP = 6f
     const val CAMERA_VERTICAL_GAP_DP = 4f
+    /** How far a notification with no reply/mute row sits above its normal seat. */
+    const val NO_ACTION_CONTENT_LIFT_DP = 2f
+    /** Closest a lifted title may sit under the camera hole. */
+    const val NO_ACTION_TITLE_GAP_DP = 2f
     const val CAMERA_TEXT_GAP_DP = 6f
     const val PILL_EDGE_INSET_DP = 2f
     const val OUTER_HORIZONTAL_DP = 12f
-    const val BELOW_BAND_GAP_DP = 6f
+    const val BELOW_BAND_GAP_DP = 10f
     const val ROW_GAP_DP = 4f
     const val MAJOR_CONTROL_GAP_DP = 10f
     const val SECONDARY_CONTROL_GAP_DP = 6f
@@ -47,8 +51,10 @@ object ExpandedVisualTokens {
     const val FADE_SPAN_FRACTION = 0.18f
     const val MIN_BAND_TEXT_DP = 64f
 
-    const val PILL_BOTTOM_PAD_DP = 10f
-    const val PILL_CAP_DP = 56f
+    const val PILL_BOTTOM_PAD_DP = 8f
+    /** How far the mirrored bottom gap sits inside the measured top gap. */
+    const val PILL_MIRROR_SLACK_DP = 6f
+    const val PILL_CAP_DP = 48f
     const val PILL_MIN_SCALE = 0.92f
 
     /**
@@ -56,7 +62,7 @@ object ExpandedVisualTokens {
      * Content leaves stay put. Xiaomi keeps the drag handle inset from this
      * new bottom by its own mini-bar margin.
      */
-    const val MEDIA_OUTER_BOTTOM_TRIM_DP = 20f
+    const val MEDIA_OUTER_BOTTOM_TRIM_DP = 14f
 
     fun px(dp: Float, density: Float): Int = (dp * density).toInt()
 }

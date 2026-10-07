@@ -17,6 +17,8 @@ import com.sykeptical.hyperpop.service.animation.expanded.ExpandedDecisionRefres
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedFakeMirrorPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedIslandLayoutPolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutDecision
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedMeasurementBaseline
+import com.sykeptical.hyperpop.service.animation.expanded.ExpandedReacquirePolicy
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedLayoutRequest
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedSurfaceStyle
 import com.sykeptical.hyperpop.service.animation.expanded.ExpandedTakeoverCoordinator
@@ -81,6 +83,16 @@ object ExpandedTakeoverHook {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val realSaved = SavedLayout()
     private val fakeSaved = SavedLayout()
+    /** Survives a media reset so the next arm does not adopt a ratcheted expanded height. */
+    private val baselineHeights = Collections.synchronizedMap(WeakHashMap<View, Int>())
+    /**
+     * Body offset an earlier session wrote into this island's content. Xiaomi measured
+     * after that margin, so its expanded-height field keeps the taller number until Xiaomi
+     * writes it again with no takeover armed.
+     */
+    private val carriedOffsets = Collections.synchronizedMap(WeakHashMap<View, Int>())
+    /** Islands whose takeover was released while Xiaomi still shows them expanded. */
+    private val releasedExpanded = Collections.synchronizedMap(WeakHashMap<View, Boolean>())
     private val fakeMarkers = Collections.synchronizedMap(
         WeakHashMap<View, ExpandedFakeMirrorPolicy.Marker>(),
     )
@@ -166,6 +178,10 @@ object ExpandedTakeoverHook {
                     val result = chain.proceed()
                     ExpandedSurfaceStyler.onBlurReapplied(chain.thisObject as View)
                     ExpandedSurfaceStyler.onFakeBlurReapplied(chain.thisObject as View)
+                    trace {
+                        val owner = chain.thisObject as View
+                        "updateBackgroundBg ${hex(System.identityHashCode(owner))} ${describeSession(owner)}"
+                    }
                     result
                 }
             }
@@ -189,10 +205,10 @@ object ExpandedTakeoverHook {
             hook(module, loader, updateSize) { chain ->
                 val result = chain.proceed()
                 val view = chain.thisObject as View
-                if (synchronized(lock) { session } == null &&
-                    view.call("getState")?.javaClass?.simpleName == "Expanded"
-                ) {
-                    beginOrContinue(view)
+                if (synchronized(lock) { session } == null) {
+                    // Xiaomi just wrote the field with no offset applied, so it is native again.
+                    carriedOffsets.remove(view)
+                    if (view.call("getState")?.javaClass?.simpleName == "Expanded") beginOrContinue(view)
                 } else {
                     reapplyOffset(view)
                 }
@@ -201,14 +217,26 @@ object ExpandedTakeoverHook {
             base.noArgOrNull("onDetachedFromWindow")?.let { method ->
                 hook(module, loader, method) { chain ->
                     val result = chain.proceed()
-                    abandon(chain.thisObject as View)
+                    val view = chain.thisObject as View
+                    releasedExpanded.remove(view)
+                    abandon(view)
                     result
                 }
             }
             base.noArgOrNull("reset")?.let { method ->
                 hook(module, loader, method) { chain ->
                     val result = chain.proceed()
-                    abandon(chain.thisObject as View)
+                    // reset() is Xiaomi's position recompute, not a collapse. The takeover has
+                    // to end here so Xiaomi measures native content, but an island that is
+                    // still Expanded has to get it back once the recompute is done.
+                    abandon(chain.thisObject as View, expectReacquire = true)
+                    result
+                }
+            }
+            base.noArgOrNull("calculateBigIslandY")?.let { method ->
+                hook(module, loader, method) { chain ->
+                    val result = chain.proceed()
+                    reacquire(chain.thisObject as View)
                     result
                 }
             }
@@ -279,6 +307,7 @@ object ExpandedTakeoverHook {
         val name = state?.javaClass?.simpleName ?: return
         val id = System.identityHashCode(view)
         if (name !in COLLAPSE_STATES) finishRetire(view)
+        if (name != "Expanded") releasedExpanded.remove(view)
         when {
             name == "Expanded" -> beginOrContinue(view)
             name in COLLAPSE_STATES && ownerIs(id) -> coordinator.beginCollapse(id, coordinator.generation)
@@ -298,15 +327,16 @@ object ExpandedTakeoverHook {
         ) {
             beginOrContinue(view)
         }
+        if (synchronized(lock) { session } == null) reacquire(view)
         val current = synchronized(lock) { session } ?: return
         if (!ownerIs(System.identityHashCode(view))) return
         if (blocked(view)) {
-            abandon(view)
+            abandon(view, expectReacquire = true)
             return
         }
         if (!HookConfig.expandOverStatusBarEnabled()) coordinator.requestDisable()
         if (tempHidden(view)) {
-            abandon(view)
+            abandon(view, expectReacquire = true)
             return
         }
         val live = liveRect(delegate) ?: return
@@ -463,7 +493,7 @@ object ExpandedTakeoverHook {
         val existing = synchronized(lock) { session }
         if (existing != null && coordinator.accepts(id, existing.generation)) {
             if (blocked(view) || tempHidden(view)) {
-                abandon(view)
+                abandon(view, expectReacquire = true)
                 return null
             }
             if (!HookConfig.expandOverStatusBarEnabled()) coordinator.requestDisable()
@@ -490,14 +520,54 @@ object ExpandedTakeoverHook {
         val fromSmallIsland = view.call("getState")?.javaClass?.simpleName == "SmallIsland"
         val content = realContent(view)
         val readVersion = nativeContentVersion.get()
-        val profile = content?.let {
-            runCatching { ExpandedContentProbe.capture(it, expandedWidthHint(view)) }.getOrNull()
+        val fieldHeight = view.intField("expandedViewHeight")?.takeIf { it > 0 } ?: 0
+        val savedHeight = baselineHeights[view] ?: 0
+        // A previous session that was not fully released leaves its margin and ancestor
+        // heights on the content. Put the saved native frame back first so the probe reads
+        // Xiaomi's baseline, and keep that saved margin as the native one.
+        content?.let { restoreNativeFrame(view, it, realSaved) }
+        val savedMargin = content?.let { realSaved.margins[it] }
+        val captured = content?.let {
+            runCatching {
+                ExpandedContentProbe.capture(
+                    it,
+                    expandedWidthHint(view),
+                    baselineHeightPx = savedHeight.takeIf { it > 0 } ?: fieldHeight,
+                )
+            }.getOrNull()
         }
+        val profile = if (captured != null && savedMargin != null && captured.nativeTopMarginPx != savedMargin) {
+            captured.copy(nativeTopMarginPx = savedMargin)
+        } else {
+            captured
+        }
+        val requiredHeight = profile?.let(ExpandedMeasurementBaseline::requiredHeight) ?: 0
+        // A zero expanded-height field is not Xiaomi's template yet. Do not
+        // lock the wrap-content guess in its place.
+        val trustHeight = fieldHeight > 0 || savedHeight > 0
+        val carriedOffset = carriedOffsets[view] ?: 0
+        val mergedHeight = if (trustHeight) {
+            ExpandedMeasurementBaseline.mergeHeight(
+                savedNativeHeightPx = savedHeight,
+                requiredHeightPx = requiredHeight,
+                xiaomiFieldHeightPx = fieldHeight,
+                appliedBodyOffsetPx = carriedOffset,
+            )
+        } else {
+            0
+        }
+        if (trustHeight && mergedHeight > 0) baselineHeights[view] = mergedHeight
         val style = ExpandedVisualStyle(
             blackBackground = HookConfig.expandedBlackBackground(),
             roundedPill = HookConfig.expandedRoundedPill(),
         )
-        val request = layoutRequest(view, fromSmallIsland, profile, style) ?: return rejectExpand(view)
+        val request = layoutRequest(
+            view,
+            fromSmallIsland,
+            profile,
+            style,
+            nativeHeightOverride = mergedHeight.takeIf { it > 0 },
+        ) ?: return rejectExpand(view)
         val resolved = resolveLayout(request)
         val decision = resolved.second
         if (decision !is ExpandedLayoutDecision.Takeover) return rejectExpand(view)
@@ -515,6 +585,7 @@ object ExpandedTakeoverHook {
         }
         if (generation < 0) return rejectExpand(view)
         expandRetryUntilMs = 0L
+        releasedExpanded.remove(view)
         val previous = synchronized(lock) {
             val old = session
             session = Session(
@@ -527,6 +598,7 @@ object ExpandedTakeoverHook {
                 style,
                 provisional = profile == null,
                 settledVersion = readVersion,
+                nativeContentHeight = mergedHeight,
             )
             old
         }
@@ -561,6 +633,20 @@ object ExpandedTakeoverHook {
             ExpandedSurfaceStyler.frame(view, 1f, radius)
         }
         scheduleWatchdog(view, generation)
+        trace {
+            "arm-layout ${hex(id)} gen=$generation provisional=${profile == null} " +
+                "preMargin=${captured?.nativeTopMarginPx} carriedIn=$carriedOffset " +
+                "fieldIn=$fieldHeight savedIn=$savedHeight merged=$mergedHeight ${describeSession(view)}"
+        }
+        trace {
+            val leaves = captured?.leaves.orEmpty().joinToString(" ") {
+                "${it.role.name.take(6)}:${it.bounds.left},${it.bounds.top},${it.bounds.right},${it.bounds.bottom}"
+            }
+            "arm-probe ${hex(id)} content=${content?.width}x${content?.height} " +
+                "layoutRequested=${content?.isLayoutRequested} contentH=${captured?.contentHeightPx} " +
+                "paramsH=${content?.layoutParams?.height} lifts=${decision.sideLifts.size} " +
+                "scale=${decision.contentScale} leaves=[$leaves]"
+        }
         return decision
     }
 
@@ -575,7 +661,12 @@ object ExpandedTakeoverHook {
         return current.decision
     }
 
-    private fun abandon(view: View) {
+    /**
+     * Ends the takeover. [expectReacquire] marks a release Xiaomi did not end the
+     * expansion with: the island is still Expanded, so [reacquire] gives the
+     * takeover back once Xiaomi's recompute or hide has finished.
+     */
+    private fun abandon(view: View, expectReacquire: Boolean = false) {
         val id = System.identityHashCode(view)
         if (retired.containsKey(id)) {
             finishRetire(view)
@@ -583,11 +674,48 @@ object ExpandedTakeoverHook {
         }
         val current = synchronized(lock) { session } ?: return
         if (current.owner.get() !== view && coordinator.ownerId != id) return
+        if (expectReacquire && view.call("getState")?.javaClass?.simpleName == "Expanded") {
+            releasedExpanded[view] = true
+        }
+        trace { "release ${hex(id)} reacquire=$expectReacquire ${describeSession(view)}" }
         coordinator.abandon(id, current.generation)
         synchronized(lock) {
             if (session === current) session = null
         }
         restore(view)
+        trace { "released ${hex(id)} ${describeSession(view)}" }
+    }
+
+    /**
+     * Gives the takeover back to an island that was released while Xiaomi kept it
+     * Expanded. Nothing else re-arms it: an idle island emits no Folme frames and
+     * no setState follows. The same arm path runs, then one synchronous frame
+     * establishes the phase and the surface for the bounds Xiaomi already shows.
+     */
+    private fun reacquire(view: View) {
+        if (releasedExpanded.isEmpty() || releasedExpanded[view] != true) return
+        val expanded = view.call("getState")?.javaClass?.simpleName == "Expanded"
+        if (!ExpandedReacquirePolicy.keepsRelease(expanded)) {
+            releasedExpanded.remove(view)
+            return
+        }
+        if (!ExpandedReacquirePolicy.shouldReacquire(
+                released = true,
+                stillExpanded = expanded,
+                hasSession = synchronized(lock) { session } != null,
+                blocked = blocked(view),
+                tempHidden = tempHidden(view),
+                enabled = HookConfig.expandOverStatusBarEnabled() && !selfCheckFailed,
+            )
+        ) {
+            return
+        }
+        releasedExpanded.remove(view)
+        val decision = beginOrContinue(view) ?: return
+        trace { "reacquire ${hex(System.identityHashCode(view))} card=${decision.card} ${describeSession(view)}" }
+        view.call("getAnimatorDelegate")?.let { delegate ->
+            if (synchronized(lock) { session } != null) onFrame(delegate)
+        }
     }
 
     private fun restore(view: View) {
@@ -643,6 +771,10 @@ object ExpandedTakeoverHook {
         }
         current.decision = refreshed.decision
         current.nativeTopMargin = refreshed.topMargin
+        current.nativeContentHeight = refreshed.nativeContentHeight
+        current.owner.get()?.let { owner ->
+            if (refreshed.nativeContentHeight > 0) baselineHeights[owner] = refreshed.nativeContentHeight
+        }
         current.provisional = false
         return true
     }
@@ -674,6 +806,7 @@ object ExpandedTakeoverHook {
         fromSmallIsland: Boolean,
         profile: ExpandedContentProfile?,
         style: ExpandedVisualStyle,
+        nativeHeightOverride: Int? = null,
     ): ExpandedLayoutRequest? {
         val metrics = view.resources.displayMetrics
         val compact = if (fromSmallIsland) {
@@ -685,7 +818,8 @@ object ExpandedTakeoverHook {
         // Right after an app exit the stored height is still 0, while the
         // maximum expanded height is already the value media will expand to.
         // Waiting for the field leaves the first second on Xiaomi's own card.
-        val nativeHeight = view.intField("expandedViewHeight")?.takeIf { it > 0 }
+        val nativeHeight = nativeHeightOverride?.takeIf { it > 0 }
+            ?: view.intField("expandedViewHeight")?.takeIf { it > 0 }
             ?: runCatching { (view.call("getExpandedViewMaxHeight") as? Number)?.toInt() }
                 .getOrNull()
                 ?.takeIf { it > 0 }
@@ -1086,24 +1220,48 @@ object ExpandedTakeoverHook {
         return request to ExpandedIslandLayoutPolicy.decide(request)
     }
 
-    private class Refreshed(val decision: ExpandedLayoutDecision.Takeover, val topMargin: Int)
+    private class Refreshed(
+        val decision: ExpandedLayoutDecision.Takeover,
+        val topMargin: Int,
+        val nativeContentHeight: Int,
+    )
 
     private fun refreshDecision(view: View, current: Session): Refreshed? {
         val content = realContent(view) ?: return null
-        val probed = runCatching { ExpandedContentProbe.capture(content, expandedWidthHint(view)) }
-            .getOrNull() ?: return null
+        val fieldHeight = view.intField("expandedViewHeight")?.takeIf { it > 0 } ?: 0
+        val cap = current.nativeContentHeight.takeIf { it > 0 } ?: fieldHeight
+        restoreNativeFrame(view, content, realSaved)
+        val probed = runCatching {
+            ExpandedContentProbe.capture(content, expandedWidthHint(view), baselineHeightPx = cap)
+        }.getOrNull() ?: return null
         // A session armed without a profile never recorded the content's own top
         // margin. The margin saved before any offset is the native one; a view
         // not offset yet still carries it.
-        val topMargin = if (current.provisional) {
-            realSaved.margins[content] ?: probed.nativeTopMarginPx
-        } else {
-            current.nativeTopMargin
-        }
+        val topMargin = ExpandedMeasurementBaseline.nativeMargin(
+            savedNativeMarginPx = if (current.provisional) {
+                realSaved.margins[content]
+            } else {
+                current.nativeTopMargin
+            },
+            liveMarginPx = probed.nativeTopMarginPx,
+            appliedBodyOffsetPx = if (current.provisional) 0 else current.decision.bodyOffsetPx,
+        )
+        val mergedHeight = ExpandedMeasurementBaseline.mergeHeight(
+            savedNativeHeightPx = current.nativeContentHeight,
+            requiredHeightPx = ExpandedMeasurementBaseline.requiredHeight(probed),
+            xiaomiFieldHeightPx = fieldHeight,
+            appliedBodyOffsetPx = if (current.provisional) 0 else current.decision.bodyOffsetPx,
+        )
         val profile = probed.copy(nativeTopMarginPx = topMargin)
-        val request = layoutRequest(view, current.fromSmallIsland, profile, current.style) ?: return null
+        val request = layoutRequest(
+            view,
+            current.fromSmallIsland,
+            profile,
+            current.style,
+            nativeHeightOverride = mergedHeight.takeIf { it > 0 },
+        ) ?: return null
         val decision = resolveLayout(request).second as? ExpandedLayoutDecision.Takeover ?: return null
-        return Refreshed(decision, topMargin)
+        return Refreshed(decision, topMargin, mergedHeight)
     }
 
     private fun expandedWidthHint(view: View): Int =
@@ -1310,18 +1468,105 @@ object ExpandedTakeoverHook {
     }
 
     private fun applyOffset(view: View, extra: Int) {
+        val current = synchronized(lock) { session }
+        val canonical = current?.nativeContentHeight ?: 0
         val real = realContent(view)
         val fake = fakeLeaf(view)
         listOf(real to realSaved, fake to fakeSaved).forEach { (child, saved) ->
             val target = child ?: return@forEach
             val params = target.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
-            val base = saved.margins.getOrPut(target) { params.topMargin }
+            val base = saved.margins.getOrPut(target) {
+                ExpandedMeasurementBaseline.nativeMargin(
+                    savedNativeMarginPx = current?.takeIf { !it.provisional }?.nativeTopMargin,
+                    liveMarginPx = params.topMargin,
+                    appliedBodyOffsetPx = if (current?.provisional == false) extra else 0,
+                )
+            }
             val desired = base + extra
             if (params.topMargin != desired) {
                 params.topMargin = desired
                 target.layoutParams = params
             }
-            growAncestors(view, target, extra.coerceAtLeast(0), saved)
+            val growth = applyCanonicalHeight(target, canonical, saved)
+            growAncestors(view, target, (extra + growth).coerceAtLeast(0), saved)
+        }
+        // Xiaomi's next measure includes this margin. Remember it until Xiaomi rewrites
+        // the expanded-height field with nothing applied.
+        if (extra > 0) carriedOffsets[view] = extra else carriedOffsets.remove(view)
+    }
+
+    /** Debug-only: the values that separate a native baseline from one HyperPop already moved. */
+    private fun describeSession(view: View): String =
+        runCatching { describeSessionUnsafe(view) }.getOrElse { "describe-failed:${it.message}" }
+
+    private fun describeSessionUnsafe(view: View): String {
+        val content = realContent(view)
+        val params = content?.layoutParams as? ViewGroup.MarginLayoutParams
+        val current = synchronized(lock) { session }
+        val parents = buildString {
+            var parent = content?.parent as? View
+            var depth = 0
+            while (parent != null && parent !== view && depth < 4) {
+                append(parent.javaClass.simpleName).append('=')
+                append(parent.layoutParams?.height).append('/').append(parent.height).append(' ')
+                parent = parent.parent as? View
+                depth += 1
+            }
+        }
+        val expanded = view.call("getExpandedView") as? View
+        val background = view.call("getBackgroundView") as? View
+        val delegate = view.call("getAnimatorDelegate")
+        return "root=${hex(content?.let(System::identityHashCode))} " +
+            "liveMargin=${params?.topMargin} savedMargin=${content?.let { realSaved.margins[it] }} " +
+            "sessionNative=${current?.nativeTopMargin} body=${current?.decision?.bodyOffsetPx} " +
+            "contentTop=${current?.decision?.bodyTop} cardTop=${current?.decision?.card?.top} " +
+            "cardBottom=${current?.decision?.card?.bottom} ty=${content?.translationY} " +
+            "field=${view.intField("expandedViewHeight")} baseline=${baselineHeights[view]} " +
+            "carried=${carriedOffsets[view]} parents=[$parents] " +
+            "expanded=${expanded?.measuredHeight}/${expanded?.height} " +
+            "clip=${delegate?.floatField("containerClipTopProgress")}/" +
+            "${delegate?.floatField("containerClipBottomProgress")} " +
+            "bg[${ExpandedSurfaceStyler.debugState(view)}] bgView=${background?.height} " +
+            "phase=${coordinator.phase}"
+    }
+
+    /**
+     * Writes the saved required height. The first pixel height stays the
+     * collapse restore value. Returns how far the canonical height grew past
+     * that original, so ancestors can clear the taller content once.
+     */
+    private fun applyCanonicalHeight(target: View, canonical: Int, saved: SavedLayout): Int {
+        if (canonical <= 0) return 0
+        val params = target.layoutParams ?: return 0
+        val original = saved.heights.getOrPut(target) { params.height }
+        if (params.height != canonical) {
+            params.height = canonical
+            target.layoutParams = params
+        }
+        if (original <= 0) return 0
+        return (canonical - original).coerceAtLeast(0)
+    }
+
+    /** Puts the content margin and ancestor heights back to the saved native values for a probe. */
+    private fun restoreNativeFrame(island: View, leaf: View, saved: SavedLayout) {
+        (leaf.layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
+            val base = saved.margins[leaf] ?: return@let
+            if (params.topMargin != base) {
+                params.topMargin = base
+                leaf.layoutParams = params
+            }
+        }
+        var parent = leaf.parent as? View
+        var depth = 0
+        while (parent != null && parent !== island && depth < 8) {
+            val base = saved.heights[parent]
+            val params = parent.layoutParams
+            if (base != null && params != null && params.height != base) {
+                params.height = base
+                parent.layoutParams = params
+            }
+            parent = parent.parent as? View
+            depth += 1
         }
     }
 
@@ -1627,6 +1872,8 @@ object ExpandedTakeoverHook {
         @Volatile var provisional: Boolean = false,
         /** [nativeContentVersion] when the session last read the content. */
         @Volatile var settledVersion: Int = 0,
+        /** Expanded height measured before HyperPop's margin was baked back in. */
+        @Volatile var nativeContentHeight: Int = 0,
     ) {
         val owner = java.lang.ref.WeakReference(view)
         @Volatile var selfCheckDone: Boolean = false

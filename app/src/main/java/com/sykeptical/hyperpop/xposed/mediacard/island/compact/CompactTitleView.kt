@@ -95,26 +95,11 @@ internal class CompactTitleView(context: Context) : View(context) {
         return (right - offsetRect.left).coerceIn(0, width)
     }
 
-    /**
-     * Text actually drawn. A line that fits is unchanged. A longer line is cut with an
-     * ellipsis before the camera-side fade, the same end-truncation Xiaomi's title uses.
-     */
-    fun displayedText(): String {
-        val room = visibleWidth() - insetPx - endPaddingPx
-        if (text.isEmpty() || room <= 0) return text
-        if (textWidth <= room) return text
-        val fade = endFadePx.coerceAtLeast(0)
-        return CompactTitleTruncation.ellipsize(
-            text,
-            (room - fade).coerceAtLeast(0).toFloat(),
-        ) { paint.measureText(it) }
-    }
-
-    /** Distance to scroll. An ellipsized line already fits, so it stays put. */
+    /** Distance to scroll so the last glyph lands just before the cutout shade. */
     fun overflowPx(): Float {
         if (text.isEmpty() || width <= 0) return 0f
         val room = visibleWidth() - insetPx - endPaddingPx
-        val overflow = paint.measureText(displayedText()) - room
+        val overflow = textWidth - room
         return if (overflow <= resources.displayMetrics.density) 0f else overflow
     }
 
@@ -134,7 +119,7 @@ internal class CompactTitleView(context: Context) : View(context) {
         val h = height.toFloat()
         val edge = visibleWidth().toFloat()
         val layer = canvas.saveLayer(0f, 0f, w, h, null)
-        canvas.drawText(displayedText(), insetPx - offset, baselinePx, paint)
+        canvas.drawText(text, insetPx - offset, baselinePx, paint)
         if (startFadePx > 0) {
             if (startShaderWidth != startFadePx) {
                 startShaderWidth = startFadePx

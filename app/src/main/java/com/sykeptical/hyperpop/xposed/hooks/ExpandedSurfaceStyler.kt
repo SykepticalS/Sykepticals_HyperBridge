@@ -140,6 +140,18 @@ object ExpandedSurfaceStyler {
 
     fun owns(view: View): Boolean = actives.containsKey(System.identityHashCode(view))
 
+    /** Ownership summary for the debug trace. Reads only. */
+    fun debugState(view: View): String {
+        val current = actives[System.identityHashCode(view)] ?: return "owned=false"
+        val expanded = invoke(view, "getExpandedView") as? View
+        val background = current.background.get() ?: backgroundView(view)
+        val plate = expanded?.background === current.expandedPlate && current.expandedPlate != null
+        return "owned=true black=${current.black} blurStripped=${current.blurStripped} " +
+            "plateInstalled=$plate radius=${current.radiusPx} " +
+            "bgActual=${background?.let { invoke(it, "getActualTop") }}/" +
+            "${background?.let { invoke(it, "getActualHeight") }}"
+    }
+
     private class FakeStyle(
         val expanded: java.lang.ref.WeakReference<View>,
         val background: Drawable?,

@@ -108,6 +108,7 @@ object FocusIslandLayoutApplier {
         }
         if (ExpandedVisualSession.pill) applyMediaBand(root, density)
         showFullTitles(root)
+        truncateExpandedSongTitle(root)
     }
 
     private fun applyMediaBand(root: View, density: Float) {
@@ -173,8 +174,24 @@ object FocusIslandLayoutApplier {
         }
     }
 
+    /**
+     * The expanded media song title stays on Xiaomi's single line and ends with an ellipsis.
+     * [showFullTitles] used to clear that, which let the title run past the card.
+     */
+    private fun truncateExpandedSongTitle(root: View) {
+        findAll(root, "header_title").forEach { view ->
+            val title = view as? TextView ?: return@forEach
+            val saved = synchronized(titleOriginals) { titleOriginals.remove(title) }
+            if (saved != null) {
+                runCatching { title.maxEms = saved.maxEms }
+            }
+            if (title.maxLines != 1) title.maxLines = 1
+            if (title.ellipsize != TruncateAt.END) title.ellipsize = TruncateAt.END
+        }
+    }
+
     private fun showFullTitles(root: View) {
-        listOf("focus_title", "header_title").forEach { name ->
+        listOf("focus_title").forEach { name ->
             findAll(root, name).forEach { view ->
                 val title = view as? TextView ?: return@forEach
                 synchronized(titleOriginals) {

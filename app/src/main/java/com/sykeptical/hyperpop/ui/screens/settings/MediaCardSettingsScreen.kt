@@ -275,6 +275,9 @@ private fun CompactIslandSettings() {
     }
 
     var showTitle by prefs.rememberBool(C.KEY_HOOK_ISLAND_COMPACT_SHOW_TITLE, C.DEFAULT_HOOK_ISLAND_COMPACT_SHOW_TITLE)
+    var scrollMode by prefs.rememberInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE, C.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE)
+    var scrollSpeed by prefs.rememberInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED, C.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED)
+    var scrollBounce by prefs.rememberBool(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE, C.DEFAULT_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE)
     var cycle by prefs.rememberBool(C.KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST, C.DEFAULT_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST)
     var width by prefs.rememberInt(C.KEY_HOOK_ISLAND_COMPACT_WIDTH, C.DEFAULT_HOOK_ISLAND_COMPACT_WIDTH)
 
@@ -300,12 +303,41 @@ private fun CompactIslandSettings() {
     Show(showTitle) {
         TogglePref(
             title = "Cycle title and artist",
-            subtitle = "Shows the title, then \"By: artist\", then stays on the title until the track changes. A line that does not fit is cut off. Each line moves on after 1.2 s.",
+            subtitle = "Shows the title, then \"By: artist\", then stays on the title until the track changes. A long line scrolls once (title up to 3 s, artist up to 5 s) and waits 1 s; a line that fits moves on after 1.2 s.",
             checked = cycle,
         ) {
             cycle = it
             saveBool(C.KEY_HOOK_ISLAND_COMPACT_CYCLE_TITLE_ARTIST, it)
         }
+    }
+    Show(showTitle) {
+        TogglePref(
+            title = "Scroll title",
+            subtitle = (if (cycle) "After the cycle, a" else "A") +
+                " long title scrolls to the end, waits 1 s, scrolls back and repeats.",
+            checked = scrollBounce,
+        ) {
+            scrollBounce = it
+            saveBool(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_BOUNCE, it)
+        }
+        Show(scrollBounce) {
+            ChoicePref("Repeat", scrollMode, compactRepeatChoices) {
+                scrollMode = it
+                saveInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_MODE, it)
+            }
+        }
+        SliderPref(
+            title = "Title scroll speed",
+            value = scrollSpeed,
+            min = C.MIN_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
+            max = C.MAX_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED,
+            format = { "$it px/s" },
+            onPreview = { scrollSpeed = it },
+            onCommit = {
+                scrollSpeed = it
+                saveInt(C.KEY_HOOK_ISLAND_COMPACT_TITLE_SCROLL_SPEED, it)
+            },
+        )
     }
     SliderPref(
         title = "Island length",
@@ -578,3 +610,9 @@ private val progressChoices = listOf(Choice(0, "Default"), Choice(1, "Wave"))
 private val thumbChoices = listOf(Choice(0, "Default"), Choice(1, "Vertical"), Choice(2, "Hidden"))
 private val actionOrderChoices = listOf(Choice(0, "Default"), Choice(1, "Custom button at far right"), Choice(2, "Play button at far left"))
 private val switcherChoices = listOf(Choice(0, "Single-card view"), Choice(1, "Multi-card view"))
+// Forever comes first so an older stored "off" shows as Forever, which is how the hook treats it.
+private val compactRepeatChoices = listOf(
+    Choice(C.COMPACT_TITLE_SCROLL_FOREVER, "Forever"),
+    Choice(C.COMPACT_TITLE_SCROLL_ONCE, "Once"),
+    Choice(C.COMPACT_TITLE_SCROLL_TWICE, "Twice"),
+)

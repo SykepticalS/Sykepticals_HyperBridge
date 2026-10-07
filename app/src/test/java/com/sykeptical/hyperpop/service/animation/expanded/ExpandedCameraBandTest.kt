@@ -112,7 +112,9 @@ class ExpandedCameraBandTest {
         assertTrue(decision.textClips.isEmpty())
         val topGap = decision.bodyTop + 48 - 30
         val bottomGap = decision.card.bottom - (decision.bodyTop + 203)
-        assertEquals(topGap, bottomGap)
+        val pad = ExpandedVisualTokens.px(ExpandedVisualTokens.PILL_BOTTOM_PAD_DP, density)
+        val slack = ExpandedVisualTokens.px(ExpandedVisualTokens.PILL_MIRROR_SLACK_DP, density)
+        assertEquals(maxOf(pad, topGap - slack), bottomGap)
         val buttonTop = decision.bodyTop + 48
         val button = IslandRect(56 + 884, buttonTop, 56 + 1039, buttonTop + 155)
         assertFalse(button.intersects(CameraBandGeometry.exclusion(cutout, density)))
@@ -148,6 +150,23 @@ class ExpandedCameraBandTest {
         ) as ExpandedLayoutDecision.Takeover
         assertTrue(decision.bodyTop + 60 >= cutout.bottom)
         assertTrue(decision.textClips.isEmpty())
+    }
+
+    @Test
+    fun aNotificationWithoutActionButtonsSitsSlightlyHigher() {
+        val titleTop = 48
+        val plain = seated(extra = null)
+        val actions = seated(ContentLeafRole.ACTION_PILL)
+        val call = seated(ContentLeafRole.CALL_CONTROL)
+        val media = seated(ContentLeafRole.PROGRESS)
+        val lift = ExpandedVisualTokens.px(ExpandedVisualTokens.NO_ACTION_CONTENT_LIFT_DP, density)
+        val floor = ExpandedVisualTokens.px(ExpandedVisualTokens.NO_ACTION_TITLE_GAP_DP, density)
+        val normal = ExpandedVisualTokens.px(ExpandedVisualTokens.CAMERA_VERTICAL_GAP_DP, density)
+        assertEquals(actions.bodyTop, call.bodyTop)
+        assertEquals(actions.bodyTop, media.bodyTop)
+        assertEquals(lift, actions.bodyTop - plain.bodyTop)
+        assertTrue(plain.bodyTop + titleTop >= cutout.bottom + floor)
+        assertTrue(actions.bodyTop + titleTop >= cutout.bottom + normal)
     }
 
     @Test
@@ -191,6 +210,39 @@ class ExpandedCameraBandTest {
         assertFalse(NavigationPolicy.specialTitleUsesBand())
         assertFalse(ContentLeaf(IslandRect(0, 0, 10, 10), ContentLeafKind.PLAIN, ProgressPolicy.role()).sharesCameraBand())
         assertTrue(ContentLeaf(IslandRect(0, 0, 10, 10), ContentLeafKind.TEXT, MessagePolicy.titleRole()).sharesCameraBand())
+    }
+
+    private fun seated(extra: ContentLeafRole?): ExpandedLayoutDecision.Takeover {
+        val titleTop = 48
+        val leaves = buildList {
+            add(ContentLeaf(IslandRect(80, titleTop, 900, titleTop + 48), ContentLeafKind.TEXT, ContentLeafRole.PRIMARY_TITLE))
+            if (extra != null) {
+                add(ContentLeaf(IslandRect(80, 180, 420, 250), ContentLeafKind.INTERACTIVE, extra))
+            }
+        }
+        return ExpandedIslandLayoutPolicy.decide(
+            ExpandedLayoutRequest(
+                enabled = true,
+                portrait = true,
+                keyguard = false,
+                tablet = false,
+                displayWidth = 1200,
+                displayHeight = 2608,
+                cutout = cutout,
+                compact = IslandRect(520, 30, 680, 132),
+                nativeExpanded = IslandRect(56, 156, 1143, 407),
+                statusBarHeight = 144,
+                density = density,
+                style = ExpandedVisualStyle(roundedPill = true),
+                nativeRadiusPx = 90f,
+                content = ExpandedContentProfile(
+                    nativeTopMarginPx = 0,
+                    contentWidthPx = 1087,
+                    contentHeightPx = 280,
+                    leaves = leaves,
+                ),
+            ),
+        ) as ExpandedLayoutDecision.Takeover
     }
 }
 

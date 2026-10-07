@@ -76,22 +76,40 @@ data class ContentLeaf(
     val role: ContentLeafRole = ContentLeafRole.UNKNOWN,
 ) {
     /**
-     * The part the content view can draw. A leaf mostly outside the content,
-     * such as a call button parked off the edge during a state change, is
-     * not on screen and returns null.
+     * The part of this leaf that belongs to the active layout.
+     *
+     * A leaf mostly past the side is parked and returns null. Text parked
+     * entirely below the root is the same. A call control or other action
+     * whose top is inside a short root, or that sits just below it, keeps its
+     * true bottom so the island can grow to fit it.
      */
     fun visibleWithin(contentWidth: Int, contentHeight: Int): ContentLeaf? {
-        val clipped = IslandRect(
-            left = bounds.left.coerceAtLeast(0),
-            top = bounds.top.coerceAtLeast(0),
-            right = bounds.right.coerceAtMost(contentWidth),
-            bottom = bounds.bottom.coerceAtMost(contentHeight),
-        )
-        if (clipped.isEmpty() || bounds.isEmpty()) return null
-        val shown = clipped.width.toLong() * clipped.height
-        val whole = bounds.width.toLong() * bounds.height
-        if (shown * 2 < whole) return null
+        if (bounds.isEmpty() || contentWidth <= 0 || contentHeight <= 0) return null
+        val left = bounds.left.coerceAtLeast(0)
+        val right = bounds.right.coerceAtMost(contentWidth)
+        if (right <= left) return null
+        if ((right - left).toLong() * 2 < bounds.width) return null
+        val actionPastRoot = bounds.top >= contentHeight && holdsBottomAction()
+        if (bounds.top >= contentHeight && !actionPastRoot) return null
+        val top = bounds.top.coerceAtLeast(0)
+        if (bounds.top < 0) {
+            val shownHeight = (bounds.bottom.coerceAtMost(contentHeight) - top).coerceAtLeast(0)
+            if (shownHeight.toLong() * 2 < bounds.height) return null
+        }
+        val bottom = if (bounds.bottom > contentHeight && (bounds.top < contentHeight || actionPastRoot)) {
+            bounds.bottom
+        } else {
+            bounds.bottom.coerceAtMost(contentHeight)
+        }
+        if (bottom <= top) return null
+        val clipped = IslandRect(left, top, right, bottom)
         return if (clipped == bounds) this else copy(bounds = clipped)
+    }
+
+    /** Call, pill, and other real controls. A short root must not throw these away. */
+    fun holdsBottomAction(): Boolean = when (role) {
+        ContentLeafRole.CALL_CONTROL, ContentLeafRole.ACTION_PILL -> true
+        else -> kind == ContentLeafKind.INTERACTIVE
     }
 }
 
